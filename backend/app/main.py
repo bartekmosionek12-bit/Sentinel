@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.routes import router
+from app.api.scans import router as scans_router
+from app.api.threats import router as threats_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -30,6 +32,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(threats_router)
+    app.include_router(scans_router)
     app.include_router(router)
     return app
 
