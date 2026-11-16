@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from app.core.scope_guard import ScopedNetwork, ScopedTarget
@@ -66,8 +66,8 @@ def discovery_xml(ips: Sequence[str]) -> str:
 class FakeLab:
     """Udaje sieć demo-lab: odpowiada na odkrywanie i skan usług z podanej mapy."""
 
-    def __init__(self, services: dict[str, Sequence[ServiceInfo]]) -> None:
-        self.services = dict(services)
+    def __init__(self, services: Mapping[str, Sequence[ServiceInfo]]) -> None:
+        self.services: dict[str, Sequence[ServiceInfo]] = dict(services)
         self.extra_ports: dict[str, Sequence[ServiceInfo]] = {}
         self.runner = FakeRunner(self._respond)
 

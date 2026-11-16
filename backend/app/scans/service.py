@@ -66,6 +66,10 @@ class ScanService:
         self._nmap = nmap or NmapAdapter()
         self._sender = sender
 
+    @property
+    def guard(self) -> ScopeGuard:
+        return self._guard
+
     # --- pełny przebieg -------------------------------------------------
 
     def run(self, *, trigger: str, actor: str) -> ScanRun:

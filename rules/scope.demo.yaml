@@ -1,0 +1,20 @@
+# Zakres dla demo: WYŁĄCZNIE izolowana sieć demo-lab (docker-compose.yml, `internal: true`).
+# Używany przez scripts/seed_demo.sh przez SCOPE_FILE=/app/rules/scope.demo.yaml.
+# Polecenie seed-demo odmawia pracy, jeśli zakres wykracza poza DEMO_LAB_CIDR.
+
+allow:
+  domains: []
+  cidrs:
+    - 172.30.99.0/24
+
+deny:
+  domains: []
+  cidrs:
+    - 172.30.99.1/32     # brama sieci Dockera (host)
+    - 172.30.99.250/32   # sam skaner (worker-scans)
+
+rate_limits:
+  default_per_minute: 30
+  per_target:
+    # przykład limitu per cel: sklep demo skanujemy rzadziej
+    172.30.99.13: 6

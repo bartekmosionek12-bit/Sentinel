@@ -35,6 +35,12 @@ celery_app.conf.update(
     result_expires=3600,
     broker_connection_retry_on_startup=True,
     imports=("app.workers.tasks",),
+    beat_schedule={
+        # Feedy co 6 godzin (offline: ponowne wczytanie snapshotu niczego nie zmienia).
+        "sync-feeds": {"task": "app.workers.tasks.feeds.sync_feeds", "schedule": 6 * 3600.0},
+        # Skan zakresu raz na dobę. Przy pustym zakresie nic się nie wykonuje.
+        "scheduled-scan": {"task": "app.workers.tasks.scans.run_scan", "schedule": 24 * 3600.0},
+    },
 )
 
 

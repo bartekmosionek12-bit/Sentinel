@@ -9,12 +9,23 @@ x-backend: &backend
   build:
     context: .
     dockerfile: backend/Dockerfile
+    target: runtime
   image: sentinel-asi/backend:dev
   env_file: .env
   environment:
     POSTGRES_HOST: db
     REDIS_URL: redis://redis:6379/0
-    SCOPE_FILE: /app/rules/scope.yaml
+    # Domyślnie pusty zakres. scripts/seed_demo.sh podaje zakres demo-lab.
+    SCOPE_FILE: ${SCOPE_FILE:-/app/rules/scope.yaml}
+    DEMO_APPROVAL_EXPIRES_AT: ${DEMO_APPROVAL_EXPIRES_AT:-}
+    FEEDS_DIR: /app/data/feeds
+    DEMO_FEEDS_DIR: /app/demo-feeds
+  volumes:
+    # Snapshoty feedów pobrane przez scripts/fetch_feeds.sh (poza Gitem).
+    - ./data/feeds:/app/data/feeds:ro
+    # Miniaturowy, ręcznie przygotowany zestaw demo oraz fikcyjny inwentarz demo-lab.
+    - ./backend/tests/fixtures/feeds:/app/demo-feeds:ro
+    - ./demo-lab:/app/demo-lab:ro
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -98,10 +109,17 @@ services:
   # Jedyny kontener z dostępem do sieci, w której są cele skanowania.
   worker-scans:
     <<: *backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: scanner
+    image: sentinel-asi/scanner:dev
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "scans", "-c", "2", "-n", "scans@%h", "--loglevel", "INFO"]
     networks:
-      - core
-      - demo-lab
+      core:
+      demo-lab:
+        # Stały adres skanera; jest na denyliście w rules/scope.demo.yaml.
+        ipv4_address: 172.30.99.250
     mem_limit: 768m
 
   # Inferencja zawsze po jednym zadaniu naraz.
@@ -135,6 +153,53 @@ services:
       - no-new-privileges:true
     networks:
       - core
+    mem_limit: 128m
+
+  # --- demo-lab: CELOWO PODATNE usługi, tylko z profilem `demo` (demo-lab/README.md).
+  # Bez portów na hoście i tylko w sieci `internal`, do której ma dostęp wyłącznie skaner.
+  lab-web:
+    image: httpd:2.4.49
+    profiles: ["demo"]
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.10
+    mem_limit: 128m
+
+  lab-proxy:
+    image: nginx:1.18.0
+    profiles: ["demo"]
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.11
+    mem_limit: 128m
+
+  lab-legacy:
+    image: vulnerables/web-dvwa:latest
+    profiles: ["demo"]
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.12
+    mem_limit: 512m
+
+  lab-shop:
+    image: bkimminich/juice-shop:v17.1.1
+    profiles: ["demo"]
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.13
+    mem_limit: 512m
+
+  lab-cache:
+    image: redis:5.0.7
+    profiles: ["demo"]
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.14
     mem_limit: 128m
 
 networks:

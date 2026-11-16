@@ -1,0 +1,6 @@
+name,type,address,exposure,criticality,owner,tags
+web-01,host,172.30.99.10,internet,5,Zespół WWW,prod;www
+proxy-01,host,172.30.99.11,internet,4,Zespół WWW,prod
+legacy-01,host,172.30.99.12,internal,3,Zespół Aplikacji,legacy
+shop-01,host,172.30.99.13,internet,4,Zespół E-commerce,prod;sklep
+old-db-01,host,172.30.99.20,internal,2,Zespół Baz Danych,do-wycofania

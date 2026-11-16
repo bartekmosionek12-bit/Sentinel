@@ -150,7 +150,7 @@ def test_duplicate_rule_names_are_rejected() -> None:
 
 
 def _settings(**values: Any) -> Settings:
-    return Settings(_env_file=None, **values)  # type: ignore[call-arg]
+    return Settings(_env_file=None, **values)
 
 
 def test_no_channel_is_configured_by_default() -> None:
