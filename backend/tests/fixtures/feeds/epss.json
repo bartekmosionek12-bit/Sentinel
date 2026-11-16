@@ -1,0 +1,52 @@
+{
+ "status": "OK",
+ "note": "Wartosci przykladowe, recznie przygotowane na potrzeby demo.",
+ "total": 9,
+ "data": [
+  {
+   "cve": "CVE-2021-41773",
+   "epss": "0.97000",
+   "percentile": "0.99900"
+  },
+  {
+   "cve": "CVE-2021-42013",
+   "epss": "0.97000",
+   "percentile": "0.99900"
+  },
+  {
+   "cve": "CVE-2021-40438",
+   "epss": "0.94000",
+   "percentile": "0.99800"
+  },
+  {
+   "cve": "CVE-2019-0211",
+   "epss": "0.86000",
+   "percentile": "0.99000"
+  },
+  {
+   "cve": "CVE-2017-9798",
+   "epss": "0.78000",
+   "percentile": "0.98000"
+  },
+  {
+   "cve": "CVE-2021-23017",
+   "epss": "0.31000",
+   "percentile": "0.96000"
+  },
+  {
+   "cve": "CVE-2022-24735",
+   "epss": "0.02000",
+   "percentile": "0.80000"
+  },
+  {
+   "cve": "CVE-2021-44228",
+   "epss": "0.97000",
+   "percentile": "0.99900"
+  },
+  {
+   "cve": "CVE-2022-22965",
+   "epss": "0.97000",
+   "percentile": "0.99900"
+  }
+ ]
+}
