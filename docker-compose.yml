@@ -1,0 +1,150 @@
+# Sentinel ASI: całość jednym poleceniem `docker compose up`.
+#
+# Sieci (docs/ARCHITECTURE.md, sekcja 3):
+#   core      API, baza, kolejka, workery. Bez dostępu do celów skanowania.
+#   demo-lab  celowo podatne środowisko testowe. `internal: true`, czyli bez wyjścia
+#             na zewnątrz i bez portów na hoście. Widzi ją wyłącznie worker `scans`.
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: sentinel-asi/backend:dev
+  env_file: .env
+  environment:
+    POSTGRES_HOST: db
+    REDIS_URL: redis://redis:6379/0
+    SCOPE_FILE: /app/rules/scope.yaml
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - core
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w pliku .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - core
+    mem_limit: 768m
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - core
+    mem_limit: 320m
+
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        # ProxyHandler({}) pomija ewentualne zmienne HTTP_PROXY z .env
+        - "import urllib.request as u,sys; sys.exit(0 if u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 512m
+
+  worker-core:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "default", "-c", "2", "-n", "core@%h", "--loglevel", "INFO"]
+    mem_limit: 512m
+
+  worker-feeds:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "feeds", "-c", "1", "-n", "feeds@%h", "--loglevel", "INFO"]
+    mem_limit: 384m
+
+  # Jedyny kontener z dostępem do sieci, w której są cele skanowania.
+  worker-scans:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "scans", "-c", "2", "-n", "scans@%h", "--loglevel", "INFO"]
+    networks:
+      - core
+      - demo-lab
+    mem_limit: 768m
+
+  # Inferencja zawsze po jednym zadaniu naraz.
+  worker-llm:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "llm", "-c", "1", "-n", "llm@%h", "--loglevel", "INFO"]
+    mem_limit: 384m
+
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--schedule", "/tmp/celerybeat-schedule", "--loglevel", "INFO"]
+    mem_limit: 256m
+
+  frontend:
+    build:
+      context: frontend
+    image: sentinel-asi/frontend:dev
+    ports:
+      # Tylko lokalnie: interfejs nie jest wystawiany do sieci.
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - core
+    mem_limit: 128m
+
+networks:
+  core:
+  demo-lab:
+    internal: true
+    ipam:
+      config:
+        # Musi zgadzać się z DEMO_LAB_CIDR w .env
+        - subnet: 172.30.99.0/24
+
+volumes:
+  db-data:
