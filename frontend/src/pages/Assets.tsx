@@ -20,9 +20,16 @@ const TYPE_LABELS: Record<AssetType, string> = {
 
 const STATUS_LABELS: Record<Asset["status"], string> = {
   active: "Aktywny",
-  missing: "Zniknął",
+  missing: "Nie odpowiada",
   retired: "Wycofany",
   shadow: "Shadow IT",
+};
+
+const STATUS_HINTS: Record<Asset["status"], string> = {
+  active: "Zasób jest w inwentarzu i odpowiada",
+  missing: "Zasób jest w inwentarzu, ale nie odpowiedział w ostatnim skanie",
+  retired: "Zasób wycofany z użycia",
+  shadow: "Host odpowiada w sieci, ale nikt nie dodał go do inwentarza",
 };
 
 const EMPTY: AssetInput = {
@@ -35,7 +42,10 @@ const EMPTY: AssetInput = {
 
 export function Assets() {
   const queryClient = useQueryClient();
-  const { data, isPending, error } = useQuery({ queryKey: ["assets"], queryFn: api.assets });
+  const { data, isPending, error } = useQuery({
+    queryKey: ["assets"],
+    queryFn: api.assets,
+  });
   const [form, setForm] = useState<AssetInput>(EMPTY);
   const create = useMutation({
     mutationFn: api.createAsset,
@@ -46,9 +56,18 @@ export function Assets() {
     },
   });
 
+  const importCsv = useMutation({
+    mutationFn: api.importAssets,
+    onSuccess: () => void queryClient.invalidateQueries(),
+  });
+
   function submit(event: FormEvent) {
     event.preventDefault();
-    create.mutate({ ...form, name: form.name.trim(), owner: form.owner?.trim() || null });
+    create.mutate({
+      ...form,
+      name: form.name.trim(),
+      owner: form.owner?.trim() || null,
+    });
   }
 
   return (
@@ -133,12 +152,55 @@ export function Assets() {
         </CardContent>
       </Card>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Import z pliku CSV</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Kolumny: name, type, address, exposure, criticality, owner, tags (tagi rozdzielone
+            średnikiem). Ponowny import aktualizuje istniejące zasoby zamiast je dublować.
+          </p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="Plik CSV z zasobami"
+            className="text-sm"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void file.text().then((text) => importCsv.mutate(text));
+              event.target.value = "";
+            }}
+          />
+          {importCsv.data && (
+            <div className="mt-3 text-sm" role="status">
+              <p>
+                Dodano: {importCsv.data.created}, zaktualizowano: {importCsv.data.updated}, bez
+                zmian: {importCsv.data.unchanged}.
+              </p>
+              {importCsv.data.errors.length > 0 && (
+                <ul className="mt-1 list-disc pl-5 text-red-700">
+                  {importCsv.data.errors.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {importCsv.error && (
+            <p className="mt-3 text-sm text-red-700" role="alert">
+              {importCsv.error.message}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <QueryState
           isPending={isPending}
           error={error}
           empty={data?.items.length === 0}
-          emptyText="Inwentarz jest pusty. Dodaj zasób powyżej albo uruchom odkrywanie."
+          emptyText="Inwentarz jest pusty. Dodaj zasób powyżej, zaimportuj CSV albo uruchom skan."
         />
         {data && data.items.length > 0 && (
           <Table>
@@ -166,7 +228,10 @@ export function Assets() {
                   <Td className="tabular-nums">{asset.criticality} / 5</Td>
                   <Td>{asset.owner ?? <span className="text-muted-foreground">brak</span>}</Td>
                   <Td>
-                    <Badge variant={asset.status === "active" ? "ok" : "warn"}>
+                    <Badge
+                      variant={asset.status === "active" ? "ok" : "warn"}
+                      title={STATUS_HINTS[asset.status]}
+                    >
                       {STATUS_LABELS[asset.status]}
                     </Badge>
                   </Td>

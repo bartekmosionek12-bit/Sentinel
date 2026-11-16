@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Network,
+  Radar,
   Rss,
   ScrollText,
   Server,
@@ -42,7 +43,6 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         path: "/zagrozenia",
         label: "Zagrożenia",
         icon: ShieldAlert,
-        stage: 2,
         summary:
           "Lista zagrożeń przypisanych do konkretnych zasobów, ze statusem, właścicielem i rozbiciem oceny ryzyka.",
       },
@@ -57,14 +57,13 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         path: "/feed",
         label: "Feed zagrożeń",
         icon: Rss,
-        stage: 2,
-        summary: "Nowe podatności z dzisiaj: te, które nas dotyczą, obok wszystkich opublikowanych.",
+        summary:
+          "Nowe podatności z dzisiaj: te, które nas dotyczą, obok wszystkich opublikowanych.",
       },
       {
         path: "/weryfikacja",
         label: "Kolejka weryfikacji",
         icon: ListChecks,
-        stage: 2,
         summary:
           "Dopasowania oprogramowania do bazy podatności o niskiej pewności, czekające na decyzję człowieka.",
       },
@@ -73,9 +72,9 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Kontrola",
     items: [
+      { path: "/skany", label: "Skany", icon: Radar },
       { path: "/zakres", label: "Zakres skanowania", icon: Crosshair },
       { path: "/audyt", label: "Dziennik audytu", icon: ScrollText },
     ],
   },
 ];
-
