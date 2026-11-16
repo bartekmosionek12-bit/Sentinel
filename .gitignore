@@ -9,10 +9,10 @@
 *.bin
 ollama/
 .ollama/
-models/
+/models/
 
 # --- snapshoty feedów (pobiera scripts/fetch_feeds.sh) ---
-data/
+/data/
 feeds-snapshots/
 snapshots/
 *.snapshot.json
