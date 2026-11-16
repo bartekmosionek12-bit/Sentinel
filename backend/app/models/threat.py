@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, UuidPk
+from app.models.base import Base, UuidPk, utcnow
 
 
 class Vulnerability(Base):
@@ -24,11 +24,16 @@ class Vulnerability(Base):
     epss_percentile: Mapped[float | None]
     in_kev: Mapped[bool] = mapped_column(default=False, index=True)
     kev_due_date: Mapped[date | None]
+    kev_date_added: Mapped[date | None]
+    kev_vendor_project: Mapped[str | None] = mapped_column(String(255))
+    kev_product: Mapped[str | None] = mapped_column(String(255))
+    kev_required_action: Mapped[str | None] = mapped_column(Text)
     has_public_exploit: Mapped[bool] = mapped_column(default=False)
     references: Mapped[list[Any]] = mapped_column(default=list)
     source: Mapped[str] = mapped_column(String(20), default="nvd")
     published: Mapped[datetime | None] = mapped_column(index=True)
     last_modified: Mapped[datetime | None]
+    first_ingested: Mapped[datetime] = mapped_column(default=utcnow, index=True)
 
     affected: Mapped[list[VulnAffected]] = relationship(
         back_populates="vulnerability", cascade="all, delete-orphan"

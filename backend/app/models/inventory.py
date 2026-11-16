@@ -85,7 +85,7 @@ class AssetHistory(Base):
 class Software(Base):
     __tablename__ = "software"
     __table_args__ = (
-        UniqueConstraint("asset_id", "vendor", "product", "version", "source"),
+        UniqueConstraint("asset_id", "product", "version", "port", "source"),
         CheckConstraint(_in("match_status", MATCH_STATUSES), name="match_status_valid"),
         CheckConstraint("match_confidence BETWEEN 0 AND 1", name="confidence_range"),
         Index("ix_software_cpe_vendor_product", "cpe_vendor", "cpe_product"),
@@ -103,6 +103,9 @@ class Software(Base):
     cpe_vendor: Mapped[str | None] = mapped_column(String(255))
     cpe_product: Mapped[str | None] = mapped_column(String(255))
     source: Mapped[str] = mapped_column(String(32))
+    port: Mapped[int | None]
+    protocol: Mapped[str | None] = mapped_column(String(8))
+    match_method: Mapped[str | None] = mapped_column(String(20))
     match_confidence: Mapped[float] = mapped_column(default=0.0)
     match_status: Mapped[str] = mapped_column(String(20), default="unmatched", index=True)
     first_seen: Mapped[datetime] = mapped_column(default=utcnow)
@@ -124,7 +127,20 @@ class MatchCandidate(Base):
     cpe: Mapped[str] = mapped_column(String(512))
     score: Mapped[float]
     method: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text, default="")
     decision: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     decided_by: Mapped[str | None] = mapped_column(String(255))
     decided_at: Mapped[datetime | None]
     created_at: Mapped[CreatedAt]
+
+
+class CpeProduct(Base):
+    """Słownik par producent i produkt z CPE, po którym szuka dopasowanie rozmyte."""
+
+    __tablename__ = "cpe_product"
+    __table_args__ = (UniqueConstraint("vendor", "product"),)
+
+    id: Mapped[UuidPk]
+    vendor: Mapped[str] = mapped_column(String(255))
+    product: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(512), default="")
