@@ -28,6 +28,7 @@ from app.api.schemas import (
 )
 from app.core import audit
 from app.core.scope_guard import Intrusiveness, ScopeError
+from app.inventory.service import asset_fingerprint
 from app.models import Asset, AuditLog
 
 logger = logging.getLogger("sentinel.api")
@@ -58,10 +59,6 @@ def health(session: SessionDep, settings: SettingsDep) -> HealthOut:
         redis=queue,
         demo_mode=settings.demo_mode,
     )
-
-
-def asset_fingerprint(asset_type: str, name: str) -> str:
-    return f"{asset_type}:{name.strip().lower().rstrip('.')}"
 
 
 @router.get("/assets", response_model=Page[AssetOut], tags=["inwentarz"])
