@@ -174,21 +174,25 @@ class DiscoveryResult:
     missing: list[Asset] = field(default_factory=list)
 
 
+def _inside(raw: object, network: ScopedNetwork) -> bool:
+    """Czy adres leży w autoryzowanej sieci i nie jest z niej wykluczony."""
+    try:
+        address = ip_address(str(raw))
+    except ValueError:
+        return False
+    if address.version != network.network.version or address not in network.network:
+        return False
+    return not any(
+        address.version == excluded.version and address in excluded for excluded in network.excluded
+    )
+
+
 def _host_assets_in(session: Session, network: ScopedNetwork) -> dict[str, Asset]:
     found: dict[str, Asset] = {}
     for asset in session.scalars(select(Asset).where(Asset.type == "host")):
         raw = (asset.attributes or {}).get("address")
-        if not raw:
-            continue
-        try:
-            address = ip_address(raw)
-        except ValueError:
-            continue
-        if address.version != network.network.version or address not in network.network:
-            continue
-        if any(address in excluded for excluded in network.excluded):
-            continue
-        found[str(address)] = asset
+        if raw and _inside(raw, network):
+            found[str(ip_address(raw))] = asset
     return found
 
 
@@ -202,7 +206,8 @@ def record_discovery(
     now = utcnow()
     known = _host_assets_in(session, network)
     result = DiscoveryResult()
-    up = {host.ip: host for host in hosts}
+    # Narzędzie mogło zwrócić adres spoza sieci albo z denylisty: taki wynik pomijamy.
+    up = {host.ip: host for host in hosts if _inside(host.ip, network)}
     for ip, host in sorted(up.items()):
         asset = known.get(ip)
         if asset is None:
@@ -287,9 +292,21 @@ def record_host_scan(
     asset: Asset,
     scan: HostScan,
     scan_run_id: uuid.UUID | None = None,
+    *,
+    full: bool = False,
 ) -> ServiceDiff:
-    """Zapisuje usługi wykryte na hoście i zwraca różnicę względem poprzedniego skanu."""
+    """Zapisuje usługi wykryte na hoście i zwraca różnicę względem poprzedniego skanu.
+
+    `full=True` oznacza skan wszystkich portów. Porty znalezione tylko przez pełny skan
+    są zapamiętywane, żeby późniejszy skan częściowy nie uznał ich za zamknięte.
+    """
     now = utcnow()
+    attributes = dict(asset.attributes or {})
+    scanned_ports = {s.port for s in scan.services}
+    beyond = set(attributes.get("full_scan_only_ports", []))
+    if full:
+        visible_to_partial = set(attributes.get("open_ports", [])) - beyond
+        beyond = scanned_ports - visible_to_partial if "open_ports" in attributes else set()
     existing = {
         (s.product, s.version, s.port): s
         for s in session.scalars(
@@ -324,13 +341,15 @@ def record_host_scan(
         session.add(software)
         diff.added.append(software)
     for old_key, software in existing.items():
-        if old_key not in seen:
-            diff.removed.append(_describe(software))
-            session.delete(software)
-    first_scan = "open_ports" not in (asset.attributes or {})
+        if old_key in seen or (not full and software.port in beyond):
+            continue
+        diff.removed.append(_describe(software))
+        session.delete(software)
+    first_scan = "open_ports" not in attributes
     asset.attributes = {
-        **(asset.attributes or {}),
-        "open_ports": sorted({s.port for s in scan.services}),
+        **attributes,
+        "open_ports": sorted(scanned_ports if full else scanned_ports | beyond),
+        "full_scan_only_ports": sorted(beyond),
         "last_service_scan": now.isoformat(),
     }
     asset.last_seen = now

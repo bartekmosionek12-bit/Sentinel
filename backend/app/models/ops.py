@@ -72,7 +72,13 @@ class ScanAction(Base):
     )
     approval_source: Mapped[str | None] = mapped_column(String(32))
     scope_decision: Mapped[str | None] = mapped_column(String(64))
+    # Tryb i porty: potrzebne, żeby wykonać akcję po zatwierdzeniu przez człowieka.
+    params: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # Dlaczego akcja powstała oraz, po wykonaniu, wynik albo błąd.
+    reason: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[CreatedAt]
+    finished_at: Mapped[datetime | None]
 
 
 class FeedSync(Base):

@@ -83,6 +83,7 @@ def resolve_products(
             tool_cpes=[software.cpe] if software.cpe else [],
         )
         best = resolution.best
+        evaluated_before = software.match_method is not None
         distro = is_distro_version(software.version, software.raw_banner)
         penalty = config.distro_penalty if distro else 1.0
         confidence = round(best.score * penalty, 3) if best else 0.0
@@ -121,6 +122,8 @@ def resolve_products(
                 )
         else:
             report.unmatched += 1
+            if evaluated_before:
+                continue  # ten sam wynik co poprzednio: bez kolejnego wpisu w dzienniku
         decisions.append(
             {
                 "software": f"{software.product} {software.version}".strip(),

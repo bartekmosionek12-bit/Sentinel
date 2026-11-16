@@ -1,0 +1,49 @@
+# Reguły Scan Plannera. Planner jest deterministyczny: te same fakty dają ten sam plan,
+# a przy każdej akcji zapisuje się nazwa reguły, która ją wywołała. Żaden LLM nie bierze
+# udziału w decyzji. Każda akcja i tak przechodzi przez scope_guard.
+#
+# trigger: sweep         raz na każdą dozwoloną sieć (allow.cidrs)
+#          host_seen     dla hosta, który odpowiedział w odkrywaniu
+#          finding_open  dla hosta z otwartym findingiem
+# intrusiveness: 1 = lekki aktywny, 2 = bardziej inwazyjny (wymaga zgody człowieka)
+# Dla hosta wygrywa pierwsza pasująca reguła danego wyzwalacza.
+
+rules:
+  - name: scope_sweep
+    description: Odkrywanie hostów w dozwolonej sieci
+    trigger: sweep
+    tool: nmap
+    mode: discover
+    intrusiveness: 1
+
+  - name: new_host_service_scan
+    description: Skan usług na hoście nowym albo takim, który wrócił do sieci
+    trigger: host_seen
+    when:
+      state: [new, reappeared]
+    tool: nmap
+    mode: services
+    ports: top-1000
+    intrusiveness: 1
+
+  - name: stale_host_service_rescan
+    description: Ponowny skan usług, gdy poprzedni jest starszy niż podany czas
+    trigger: host_seen
+    when:
+      state: [known]
+      service_scan_older_than_hours: 24
+    tool: nmap
+    mode: services
+    ports: top-1000
+    intrusiveness: 1
+
+  - name: kev_full_port_scan
+    description: Pełny skan portów hosta z otwartą podatnością z katalogu KEV
+    trigger: finding_open
+    when:
+      in_kev: true
+    tool: nmap
+    mode: services
+    ports: 1-65535
+    intrusiveness: 2
+    cooldown_hours: 168
