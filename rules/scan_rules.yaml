@@ -8,6 +8,10 @@
 # intrusiveness: 1 = lekki aktywny, 2 = bardziej inwazyjny (wymaga zgody człowieka)
 # Dla hosta wygrywa pierwsza pasująca reguła danego wyzwalacza.
 
+# Porty lekkiego skanu usług: porty systemowe oraz typowe porty baz danych, kolejek,
+# paneli i serwerów aplikacji. Domyślna lista nmap „top-1000” pomija m.in. Redisa (6379).
+service_ports: &service_ports "1-1024,1433,1521,2049,2181,2375-2376,3000,3306,3389,5000,5432,5601,5672,5900,5984,6379,7001,8000-8100,8443,8888,9000,9090-9093,9200,9300,11211,15672,27017,50000"
+
 rules:
   - name: scope_sweep
     description: Odkrywanie hostów w dozwolonej sieci
@@ -23,7 +27,7 @@ rules:
       state: [new, reappeared]
     tool: nmap
     mode: services
-    ports: top-1000
+    ports: *service_ports
     intrusiveness: 1
 
   - name: stale_host_service_rescan
@@ -34,7 +38,7 @@ rules:
       service_scan_older_than_hours: 24
     tool: nmap
     mode: services
-    ports: top-1000
+    ports: *service_ports
     intrusiveness: 1
 
   - name: kev_full_port_scan

@@ -27,8 +27,6 @@ from app.inventory.service import import_assets, parse_assets_csv
 from app.pipeline import analyze
 from app.runtime import channel_sender, feed_source, get_rulebook, scan_service
 
-DEMO_ASSETS = Path("/app/demo-lab/assets.csv")
-
 
 def _out(text: str) -> None:
     sys.stdout.write(text + "\n")
@@ -134,7 +132,7 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
             object_type="scope",
         ),
     )
-    assets = cmd_import_assets(session, DEMO_ASSETS)
+    assets = cmd_import_assets(session, settings.demo_assets_file)
     session.commit()
     has_snapshots = (settings.feeds_dir / "nvd.json").is_file()
     feeds_dir = settings.feeds_dir if has_snapshots else settings.demo_feeds_dir

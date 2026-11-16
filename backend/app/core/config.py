@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     feeds_dir: Path = Path("/app/data/feeds")
     # Miniaturowy zestaw demo używany przez seed-demo, gdy nie ma pobranych snapshotów.
     demo_feeds_dir: Path = Path("/app/demo-feeds")
+    # Fikcyjny inwentarz demo-lab importowany przez seed-demo.
+    demo_assets_file: Path = Path("/app/demo-lab/assets.csv")
     nvd_api_key: str = ""
 
     # Powiadomienia: puste wartości oznaczają kanał wyłączony.

@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import audit
@@ -321,12 +321,11 @@ class ScanService:
         now = utcnow()
         kev_by_asset: dict[uuid.UUID, bool] = {}
         for asset_id, in_kev in session.execute(
-            select(Finding.asset_id, func.max(func.coalesce(Vulnerability.in_kev, False)))
+            select(Finding.asset_id, Vulnerability.in_kev)
             .outerjoin(Vulnerability, Finding.vulnerability_id == Vulnerability.id)
             .where(Finding.status.in_(ACTIVE_STATUSES))
-            .group_by(Finding.asset_id)
         ):
-            kev_by_asset[asset_id] = bool(in_kev)
+            kev_by_asset[asset_id] = kev_by_asset.get(asset_id, False) or bool(in_kev)
         facts: list[FindingFact] = []
         for asset_id, in_kev in kev_by_asset.items():
             asset = session.get(Asset, asset_id)

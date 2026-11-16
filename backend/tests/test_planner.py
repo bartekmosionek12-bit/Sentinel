@@ -40,7 +40,7 @@ def test_host_rules_scan_new_reappeared_and_stale_hosts_only() -> None:
         ("172.30.99.13", "new_host_service_scan"),
         ("172.30.99.14", "stale_host_service_rescan"),
     ]
-    assert actions[0].ports == "top-1000"
+    assert "6379" in actions[0].ports.split(",")
     assert "30 h temu" in actions[1].reason
     assert "nie były jeszcze skanowane" in actions[3].reason
     assert PLANNER.host_actions(list(reversed(hosts))) == actions
