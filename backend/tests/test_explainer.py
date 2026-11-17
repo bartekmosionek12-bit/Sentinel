@@ -79,7 +79,7 @@ def test_fix_version_comes_from_feed_ranges(seeded: Session) -> None:
 @pytest.mark.parametrize("audience", AUDIENCES)
 def test_prompts_are_versioned_files(audience: str) -> None:
     template = load_template(f"explain_{audience}")
-    assert template.version == f"explain_{audience}.v1"
+    assert template.version == f"explain_{audience}.v2"
     assert FACTS_PLACEHOLDER in template.user
     assert "po polsku" in template.system
     assert template.render("- fakt").user.count("- fakt") == 1
@@ -147,6 +147,13 @@ def test_validator_rejects_facts_outside_the_context(
     )
     assert code in result.codes
     assert not result.retryable
+
+
+def test_validator_allows_names_copied_verbatim_from_facts(seeded: Session) -> None:
+    text = GOOD["operational"] + " Problem dotyczy `file disclosure` w serwerze."
+    assert check(seeded, "operational", text) == []
+    typo = GOOD["operational"] + " Wersję pokaże `httpd --verssion`."
+    assert check(seeded, "operational", typo) == ["unknown_command"]
 
 
 def test_validator_allows_version_prefix_and_known_command(seeded: Session) -> None:
@@ -290,7 +297,7 @@ def test_cache_key_depends_on_prompt_version(
     monkeypatch.setattr(
         module,
         "load_template",
-        lambda name: replace(original(name), version=f"{name}.v2"),
+        lambda name: replace(original(name), version=f"{name}.v99"),
     )
     explainer.generate(vulnerability(seeded), "executive", actor="test")
     assert len(provider.prompts) == 2
@@ -305,7 +312,7 @@ def test_audit_entry_says_what_why_and_on_what_data(seeded: Session) -> None:
     assert (entry.actor, entry.object_type, entry.object_id) == ("user:anna", "vulnerability", CVE)
     context = explainer.context(vulnerability(seeded))
     assert entry.inputs["context_sha256"] == context.digest
-    assert entry.inputs["prompt_version"] == "explain_operational.v1"
+    assert entry.inputs["prompt_version"] == "explain_operational.v2"
     assert entry.inputs["model"] == "fake-model"
     assert entry.inputs["external"] is False
 

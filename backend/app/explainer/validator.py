@@ -201,9 +201,11 @@ def validate(
     if _URL_RE.search(stripped):
         problems.append(Problem("url", "odpowiedź zawiera link spoza kontekstu", False))
     allowed_snippets = context.allowed_snippets()
+    facts_lower = " ".join(context.facts_text().split()).lower()
     for block, inline in _CODE_RE.findall(stripped):
         snippet = " ".join((block or inline).split()).lower()
-        if snippet and snippet not in allowed_snippets:
+        # Dozwolone: polecenia z listy i nazwy przepisane dosłownie z faktów (np. moduł z opisu).
+        if snippet and snippet not in allowed_snippets and snippet not in facts_lower:
             problems.append(
                 Problem(
                     "unknown_command", f"polecenie `{snippet[:60]}` nie pochodzi z kontekstu", False
