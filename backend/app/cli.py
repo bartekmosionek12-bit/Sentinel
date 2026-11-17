@@ -90,8 +90,12 @@ def cmd_fetch_feeds(session: Session, settings: Settings, out: Path) -> dict[str
     return {"directory": str(out), "bytes": sizes}
 
 
-def cmd_explain(session: Session, settings: Settings) -> dict[str, Any]:
-    """Generuje z góry brakujące wyjaśnienia dla CVE z aktywnych zagrożeń (kolejno, lokalnie)."""
+def cmd_explain(session: Session, settings: Settings, *, queue: bool = False) -> dict[str, Any]:
+    """Generuje z góry brakujące wyjaśnienia dla CVE z aktywnych zagrożeń.
+
+    `queue=True` zleca to workerowi `llm` z niskim priorytetem, więc żądania użytkownika
+    w interfejsie mają pierwszeństwo, a model nadal obsługuje jedno zadanie naraz.
+    """
     from app.matching.engine import ACTIVE_STATUSES
     from app.models import Finding, Vulnerability
     from app.models.ops import AUDIENCES
@@ -110,6 +114,19 @@ def cmd_explain(session: Session, settings: Settings) -> dict[str, Any]:
         .distinct()
         .order_by(Vulnerability.cve_id)
     ).all()
+    if queue:
+        from app.api.deps import CeleryDispatcher
+
+        dispatcher = CeleryDispatcher()
+        queued = 0
+        for vuln in vulns:
+            for audience in AUDIENCES:
+                if not service.get(vuln, audience).cached:
+                    dispatcher.generate_explanation(
+                        vuln.cve_id, audience, "cli:explain", None, background=True
+                    )
+                    queued += 1
+        return {"model": health.model, "vulnerabilities": len(vulns), "queued": queued}
     counts = {"cached": 0, "passed": 0, "rejected": 0, "unavailable": 0}
     for vuln in vulns:
         for audience in AUDIENCES:
@@ -191,7 +208,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands.add_parser("scan", help="skan zakresu według reguł plannera")
     commands.add_parser("analyze", help="ponowne dopasowanie i ocena ryzyka")
-    commands.add_parser("explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym")
+    commands.add_parser(
+        "explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym"
+    ).add_argument("--queue", action="store_true", help="zleć workerowi llm w tle")
     commands.add_parser("seed-demo", help="dane i skan demo-lab (tylko DEMO_MODE=true)")
     args = parser.parse_args(argv)
 
@@ -210,7 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif args.command == "analyze":
                 result = analyze(session, get_rulebook(), channel_sender()).summary()
             elif args.command == "explain":
-                result = cmd_explain(session, settings)
+                result = cmd_explain(session, settings, queue=args.queue)
             else:
                 result = cmd_seed_demo(session, settings)
             session.commit()
