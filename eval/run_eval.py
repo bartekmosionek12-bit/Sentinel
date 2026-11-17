@@ -135,6 +135,35 @@ def heuristics(text: str) -> dict[str, Any]:
     }
 
 
+def _unload_others(url: str, model: str) -> None:
+    """Zwalnia z pamięci pozostałe modele, żeby pomiar RAM dotyczył jednego modelu."""
+    import httpx
+
+    with httpx.Client(timeout=60, trust_env=False) as client:
+        for loaded in client.get(f"{url}/api/ps").json().get("models", []):
+            name = str(loaded.get("name", ""))
+            if name.split(":")[0] != model:
+                client.post(f"{url}/api/generate", json={"model": name, "keep_alive": 0})
+    time.sleep(3)
+
+
+def rescore(path: Path, config: ExplainerConfig, cases_path: Path) -> list[dict[str, Any]]:
+    """Ponowna ocena zapisanych odpowiedzi aktualnym walidatorem, bez wywoływania modelu."""
+    contexts = {c.cve_id: c for c, _ in load_cases(cases_path, config)}
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    for row in rows:
+        context = contexts[row["cve"]]
+        verdict = validate(
+            row["text"], limits=config.audiences[row["audience"]], context=context,
+            known_cves={context.cve_id},
+        )
+        row["passed"] = verdict.ok
+        row["passed_first"] = verdict.ok and row["attempts"] == 1
+        row["problems"] = verdict.codes
+        row["fact_problems"] = [p.code for p in verdict.problems if not p.retryable]
+    return rows
+
+
 def run_model(
     url: str, model: str, cases: list[tuple[ExplainContext, dict[str, Any]]], config: ExplainerConfig,
     out: Path, container: str | None,
@@ -143,6 +172,7 @@ def run_model(
     health = provider.health()
     if not health.available:
         raise SystemExit(f"{model}: {health.detail}")
+    _unload_others(url, model)
     # Rozgrzewka: pierwsze wczytanie modelu nie wchodzi do pomiarów czasu.
     generate(provider, load_template("explain_executive").render("- Identyfikator: CVE-0000-0000"), max_tokens=8)
     rows: list[dict[str, Any]] = []
@@ -244,6 +274,10 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0, help="tylko N pierwszych przypadków")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
     parser.add_argument("--docker-container", default=None, help="kontener Ollamy do pomiaru RAM")
+    parser.add_argument(
+        "--rescore", type=Path, default=None,
+        help="katalog z zapisanymi odpowiedziami: ocena aktualnym walidatorem bez modelu",
+    )
     args = parser.parse_args()
 
     config = ExplainerConfig.from_file(RULES)
@@ -252,6 +286,13 @@ def main() -> None:
         cases = cases[: args.limit]
     args.out.mkdir(parents=True, exist_ok=True)
     summary: dict[str, Any] = {}
+    if args.rescore:
+        for model in args.model:
+            summary[model] = summarize(rescore(args.rescore / f"{model}.jsonl", config, args.cases))
+        target = args.out / "summary-rescored.json"
+        target.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return
     for model in args.model:
         raw = args.out / f"{model}.jsonl"
         raw.unlink(missing_ok=True)
