@@ -79,6 +79,229 @@ export interface ScopeCheck {
   approval_source: string | null;
 }
 
+export type RiskLevel = "krytyczny" | "wysoki" | "średni" | "niski";
+export type FindingStatus =
+  | "open"
+  | "acknowledged"
+  | "in_progress"
+  | "resolved"
+  | "accepted_risk"
+  | "false_positive";
+
+export interface AssetRef {
+  id: string;
+  name: string;
+  type: AssetType;
+  exposure: Exposure;
+  criticality: number;
+  status: Asset["status"];
+}
+
+export interface VulnRef {
+  cve_id: string;
+  cvss_score: number | null;
+  epss: number | null;
+  in_kev: boolean;
+  kev_due_date: string | null;
+  has_public_exploit: boolean;
+}
+
+export interface Finding {
+  id: string;
+  type: string;
+  status: FindingStatus;
+  risk_score: number;
+  risk_level: RiskLevel;
+  summary: string;
+  asset: AssetRef;
+  vulnerability: VulnRef | null;
+  product: string | null;
+  version: string | null;
+  port: number | null;
+  fixed_version: string | null;
+  assignee: string | null;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface RiskComponent {
+  name: string;
+  label: string;
+  source: string;
+  value: number;
+  weight: number;
+  contribution: number;
+}
+
+export interface FindingEvent {
+  id: string;
+  kind: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  actor: string;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface FindingDetail extends Finding {
+  description: string;
+  references: string[];
+  kev_required_action: string | null;
+  risk_breakdown: {
+    components: RiskComponent[];
+    base_score: number;
+    premiums: { rule: string; points: number; description: string }[];
+    score: number;
+    level: RiskLevel;
+    summary: string;
+    config_version: string;
+  };
+  evidence: Record<string, string | number | null>;
+  events: FindingEvent[];
+}
+
+export interface FindingPatch {
+  status?: FindingStatus;
+  assignee?: string | null;
+  reason?: string;
+  actor?: string;
+}
+
+export interface Threat {
+  cve_id: string;
+  description: string;
+  cvss_score: number | null;
+  epss: number | null;
+  in_kev: boolean;
+  kev_date_added: string | null;
+  has_public_exploit: boolean;
+  published: string | null;
+  first_ingested: string;
+  is_new: boolean;
+  affected_assets: {
+    finding_id: string;
+    asset_id: string;
+    asset_name: string;
+    risk_score: number;
+    risk_level: RiskLevel;
+  }[];
+  max_risk: number | null;
+}
+
+export interface ThreatFeed {
+  items: Threat[];
+  total: number;
+  total_ours: number;
+  new_total: number;
+  new_ours: number;
+  new_since: string;
+}
+
+export interface FeedStatus {
+  feed: string;
+  mode: string | null;
+  status: string;
+  items_new: number;
+  items_updated: number;
+  error: string | null;
+  finished_at: string | null;
+}
+
+export interface Software {
+  id: string;
+  product: string;
+  version: string;
+  port: number | null;
+  protocol: string | null;
+  raw_banner: string | null;
+  cpe_vendor: string | null;
+  cpe_product: string | null;
+  match_status: string;
+  match_method: string | null;
+  match_confidence: number;
+  source: string;
+  last_seen: string;
+}
+
+export interface ReviewItem {
+  id: string;
+  cpe: string;
+  score: number;
+  method: string;
+  reason: string;
+  created_at: string;
+  software: Software;
+  asset: AssetRef;
+}
+
+export interface ScanAction {
+  id: string;
+  scan_run_id: string;
+  asset_id: string | null;
+  target: string;
+  tool: string;
+  rule_name: string;
+  intrusiveness: number;
+  status: string;
+  approval_source: string | null;
+  scope_decision: string | null;
+  params: Record<string, string>;
+  reason: string;
+  detail: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface ScanRun {
+  id: string;
+  trigger: string;
+  status: string;
+  summary: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+  actions: ScanAction[];
+}
+
+export interface Task {
+  task_id: string;
+  detail: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  finding_id: string | null;
+  rule_name: string;
+  channel: string;
+  status: string;
+  payload: {
+    title?: string;
+    lines?: string[];
+    asset_name?: string;
+    delivery?: string;
+  };
+  created_at: string;
+}
+
+export interface Stats {
+  assets_total: number;
+  assets_by_status: Record<string, number>;
+  findings_active: number;
+  findings_by_level: Partial<Record<RiskLevel, number>>;
+  kev_active: number;
+  review_queue: number;
+  awaiting_approval: number;
+  notifications_today: number;
+  last_scan: ScanRun | null;
+  feeds: FeedStatus[];
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -116,6 +339,45 @@ export const api = {
   auditLog: (limit: number, offset: number) =>
     request<Page<AuditEntry>>(`/audit-log?limit=${limit}&offset=${offset}`),
   auditChain: () => request<AuditChain>("/audit-log/verify"),
+  importAssets: (csv: string) =>
+    request<ImportResult>("/assets/import", {
+      method: "POST",
+      body: JSON.stringify({ csv }),
+    }),
+  stats: () => request<Stats>("/stats"),
+  findings: (status: string) => request<Page<Finding>>(`/findings?status=${status}&limit=500`),
+  finding: (id: string) => request<FindingDetail>(`/findings/${id}`),
+  updateFinding: (id: string, patch: FindingPatch) =>
+    request<FindingDetail>(`/findings/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  threatFeed: (scope: "ours" | "all") => request<ThreatFeed>(`/threat-feed?scope=${scope}`),
+  syncFeeds: () => request<Task>("/feeds/sync", { method: "POST" }),
+  reviewQueue: () => request<ReviewItem[]>("/review-queue"),
+  decideReview: (id: string, accept: boolean, decidedBy: string) =>
+    request<{ match_status: string; findings_created: number }>(`/review-queue/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ accept, decided_by: decidedBy }),
+    }),
+  scans: () => request<ScanRun[]>("/scans?limit=5"),
+  triggerScan: (actor: string) =>
+    request<Task>("/scans", {
+      method: "POST",
+      body: JSON.stringify({ actor }),
+    }),
+  scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
+  approveAction: (id: string, actor: string, reason: string) =>
+    request<Task>(`/scan-actions/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ actor, reason }),
+    }),
+  rejectAction: (id: string, actor: string, reason: string) =>
+    request<ScanAction>(`/scan-actions/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ actor, reason }),
+    }),
+  notifications: () => request<NotificationItem[]>("/notifications?limit=20"),
   scope: () => request<Scope>("/scope"),
   checkScope: (target: string, intrusiveness: 0 | 1 | 2) =>
     request<ScopeCheck>("/scope/check", {

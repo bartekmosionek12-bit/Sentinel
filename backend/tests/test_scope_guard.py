@@ -18,6 +18,7 @@ from app.core.scope_guard import (
     RateLimited,
     ScopeConfig,
     ScopeDenied,
+    ScopedNetwork,
     ScopedTarget,
     ScopeGuard,
     SeedDemoApproval,
@@ -403,3 +404,64 @@ def test_every_decision_is_audited_with_rule_name(audit_sink: MemoryAudit) -> No
         assert event.actor == "rule:test_rule"
         assert event.inputs["tool"] == "nmap"
         assert event.reason
+
+
+# --- sieci (odkrywanie hostów) ---------------------------------------------------------
+
+
+def sweep(
+    guard: ScopeGuard, cidr: str, level: Intrusiveness = Intrusiveness.LIGHT
+) -> ScopedNetwork:
+    return guard.authorize_network(
+        cidr, tool="nmap_discovery", intrusiveness=level, rule_name="scope_sweep"
+    )
+
+
+def test_network_inside_scope_with_denied_addresses_excluded(audit_sink: MemoryAudit) -> None:
+    scoped = sweep(make_guard(audit_sink), "10.10.0.0/24")
+    assert str(scoped.network) == "10.10.0.0/24"
+    assert [str(n) for n in scoped.excluded] == ["10.10.0.128/25"]
+    assert audit_sink.events[-1].action == "scope_allowed"
+    assert audit_sink.events[-1].inputs["excluded"] == ["10.10.0.128/25"]
+
+
+@pytest.mark.parametrize(
+    "cidr",
+    [
+        "10.10.0.0/23",  # szersza niż dozwolony zakres
+        "10.11.0.0/24",  # poza zakresem
+        "0.0.0.0/0",
+        "10.10.0.128/25",  # w całości na denyliście
+        "10.10.0.1/24",  # bity hosta
+        "nie-siec",
+        "fd00:98::/64",
+    ],
+)
+def test_network_outside_scope_is_denied(audit_sink: MemoryAudit, cidr: str) -> None:
+    with pytest.raises(ScopeDenied):
+        sweep(make_guard(audit_sink), cidr)
+    assert audit_sink.actions == ["scope_denied"]
+
+
+def test_network_sweep_size_limit(audit_sink: MemoryAudit) -> None:
+    guard = make_guard(audit_sink, scope={"allow": {"cidrs": ["10.0.0.0/8"]}})
+    with pytest.raises(ScopeDenied, match="większa"):
+        sweep(guard, "10.0.0.0/16")
+    assert sweep(guard, "10.1.2.0/24").excluded == ()
+
+
+def test_network_sweep_is_never_intrusive(audit_sink: MemoryAudit) -> None:
+    guard = make_guard(audit_sink, seed_demo=seed())
+    with pytest.raises(ScopeDenied, match="L0 i L1"):
+        sweep(guard, "172.30.99.0/24", Intrusiveness.INTRUSIVE)
+
+
+def test_scoped_network_cannot_be_forged() -> None:
+    with pytest.raises(TypeError, match="wyłącznie ScopeGuard"):
+        ScopedNetwork(
+            network=ip_network("8.8.8.0/24"),
+            excluded=(),
+            tool="nmap",
+            intrusiveness=Intrusiveness.LIGHT,
+            rule_name="forged",
+        )

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap" args="nmap -sn -n -PS22,80 -T4 -oX - 172.30.99.0/24" version="7.98" xmloutputversion="1.05">
+<host><status state="up" reason="conn-refused" reason_ttl="0"/>
+<address addr="172.30.99.10" addrtype="ipv4"/>
+<hostnames/>
+</host>
+<host><status state="up" reason="syn-ack" reason_ttl="0"/>
+<address addr="172.30.99.11" addrtype="ipv4"/>
+<address addr="BA:C1:C0:AE:C1:35" addrtype="mac"/>
+</host>
+<host><status state="down" reason="no-response" reason_ttl="0"/>
+<address addr="172.30.99.77" addrtype="ipv4"/>
+</host>
+<host><status state="up" reason="syn-ack" reason_ttl="0"/>
+<address addr="172.30.99.14" addrtype="ipv4"/>
+</host>
+<runstats><finished time="1794853948" elapsed="5.93" exit="success"/><hosts up="3" down="251" total="254"/></runstats>
+</nmaprun>

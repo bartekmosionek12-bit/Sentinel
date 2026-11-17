@@ -1,0 +1,8 @@
+# Progi decyzji Matching Engine (docs/ARCHITECTURE.md, sekcja 6).
+thresholds:
+  # pewność >= auto: dopasowanie automatyczne, powstają findingi
+  auto: 0.90
+  # pewność w przedziale [review, auto): kolejka weryfikacji, BEZ findingów
+  review: 0.60
+# Mnożnik pewności dla pakietów dystrybucji (możliwe backporty poprawek).
+distro_penalty: 0.7

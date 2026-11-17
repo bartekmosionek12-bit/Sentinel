@@ -1,0 +1,85 @@
+# Słownik aliasów: nazwa wykryta przez skaner → producent i produkt w notacji CPE (NVD).
+# To pierwsze i najpewniejsze źródło dopasowania (pewność 1.0). Dopasowanie rozmyte działa
+# dopiero wtedy, gdy nazwy tu nie ma, a jego wyniki o niskiej pewności trafiają do
+# kolejki weryfikacji.
+aliases:
+  - names: ["apache httpd", "apache http server", "apache", "httpd"]
+    vendor: apache
+    product: http_server
+    title: Apache HTTP Server
+  - names: ["nginx"]
+    vendor: f5
+    product: nginx
+    title: nginx
+  - names: ["redis key-value store", "redis"]
+    vendor: redis
+    product: redis
+    title: Redis
+  - names: ["openssh"]
+    vendor: openbsd
+    product: openssh
+    title: OpenSSH
+  - names: ["postgresql db", "postgresql"]
+    vendor: postgresql
+    product: postgresql
+    title: PostgreSQL
+  - names: ["mysql"]
+    vendor: oracle
+    product: mysql
+    title: MySQL
+  - names: ["mariadb"]
+    vendor: mariadb
+    product: mariadb
+    title: MariaDB
+  - names: ["openssl"]
+    vendor: openssl
+    product: openssl
+    title: OpenSSL
+  - names: ["php"]
+    vendor: php
+    product: php
+    title: PHP
+  - names: ["apache tomcat", "tomcat"]
+    vendor: apache
+    product: tomcat
+    title: Apache Tomcat
+  - names: ["microsoft iis httpd", "microsoft iis", "iis"]
+    vendor: microsoft
+    product: internet_information_services
+    title: Microsoft IIS
+  - names: ["wordpress"]
+    vendor: wordpress
+    product: wordpress
+    title: WordPress
+  - names: ["node.js", "nodejs", "node.js express framework"]
+    vendor: nodejs
+    product: node.js
+    title: Node.js
+  - names: ["vsftpd"]
+    vendor: vsftpd_project
+    product: vsftpd
+    title: vsftpd
+  - names: ["proftpd"]
+    vendor: proftpd
+    product: proftpd
+    title: ProFTPD
+  - names: ["exim smtpd", "exim"]
+    vendor: exim
+    product: exim
+    title: Exim
+  - names: ["postfix smtpd", "postfix"]
+    vendor: postfix
+    product: postfix
+    title: Postfix
+  - names: ["lighttpd"]
+    vendor: lighttpd
+    product: lighttpd
+    title: lighttpd
+  - names: ["mongodb"]
+    vendor: mongodb
+    product: mongodb
+    title: MongoDB
+  - names: ["elasticsearch", "elasticsearch rest api"]
+    vendor: elastic
+    product: elasticsearch
+    title: Elasticsearch

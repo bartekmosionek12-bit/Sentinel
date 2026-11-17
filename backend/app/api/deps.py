@@ -2,35 +2,65 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Annotated
+import uuid
+from typing import Annotated, Protocol
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.core.audit import DbAuditSink
 from app.core.config import Settings, get_settings
-from app.core.db import get_session, get_sessionmaker
-from app.core.scope_guard import ScopeConfig, ScopeGuard, SeedDemoApproval
+from app.core.db import get_session
+from app.core.scope_guard import ScopeGuard
+from app.pipeline import Rulebook
+from app.runtime import build_scope_guard, get_rulebook, get_scope_guard
+
+__all__ = [
+    "DispatcherDep",
+    "RulebookDep",
+    "ScopeGuardDep",
+    "SessionDep",
+    "SettingsDep",
+    "build_scope_guard",
+    "get_dispatcher",
+    "get_rulebook",
+    "get_scope_guard",
+]
 
 
-def build_scope_guard(settings: Settings) -> ScopeGuard:
-    return ScopeGuard(
-        ScopeConfig.from_file(settings.scope_file),
-        audit=DbAuditSink(get_sessionmaker()),
-        seed_demo=SeedDemoApproval(
-            demo_mode=settings.demo_mode,
-            lab_network=settings.demo_lab_network,
-            expires_at=settings.demo_approval_expires_at,
-        ),
-    )
+class Dispatcher(Protocol):
+    """Zleca pracę workerom. API samo nie skanuje i nie pobiera feedów."""
+
+    def run_scan(self, actor: str) -> str: ...
+
+    def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str: ...
+
+    def sync_feeds(self, actor: str) -> str: ...
 
 
-@lru_cache
-def get_scope_guard() -> ScopeGuard:
-    return build_scope_guard(get_settings())
+class CeleryDispatcher:
+    def _send(self, name: str, *args: str) -> str:
+        from app.workers.celery_app import celery_app
+
+        return str(celery_app.send_task(name, args=list(args)).id)
+
+    def run_scan(self, actor: str) -> str:
+        return self._send("app.workers.tasks.scans.run_scan", "manual", actor)
+
+    def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str:
+        return self._send(
+            "app.workers.tasks.scans.approve_action", str(action_id), approved_by, reason
+        )
+
+    def sync_feeds(self, actor: str) -> str:
+        return self._send("app.workers.tasks.feeds.sync_feeds", actor)
+
+
+def get_dispatcher() -> Dispatcher:
+    return CeleryDispatcher()
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 ScopeGuardDep = Annotated[ScopeGuard, Depends(get_scope_guard)]
+RulebookDep = Annotated[Rulebook, Depends(get_rulebook)]
+DispatcherDep = Annotated[Dispatcher, Depends(get_dispatcher)]

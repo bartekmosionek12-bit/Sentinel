@@ -32,6 +32,26 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
 
     scope_file: Path = Path("/app/rules/scope.yaml")
+    rules_dir: Path = Path("/app/rules")
+
+    # Feedy: offline = snapshoty z plików (domyślnie), online = pobieranie z sieci.
+    feeds_mode: str = "offline"
+    feeds_dir: Path = Path("/app/data/feeds")
+    # Miniaturowy zestaw demo używany przez seed-demo, gdy nie ma pobranych snapshotów.
+    demo_feeds_dir: Path = Path("/app/demo-feeds")
+    # Fikcyjny inwentarz demo-lab importowany przez seed-demo.
+    demo_assets_file: Path = Path("/app/demo-lab/assets.csv")
+    nvd_api_key: str = ""
+
+    # Powiadomienia: puste wartości oznaczają kanał wyłączony.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    notify_email_to: str = ""
+    slack_webhook_url: str = ""
+    teams_webhook_url: str = ""
 
     api_cors_origins: str = "http://localhost:8080,http://localhost:5173"
 

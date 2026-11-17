@@ -1,0 +1,38 @@
+# Reguły powiadomień. Dla każdego findingu wygrywa PIERWSZA pasująca reguła, więc jedno
+# zdarzenie daje najwyżej jedno powiadomienie. Powiadomienia są grupowane per zasób.
+#
+# when.events   zdarzenia findingu: created, reopened, rescored (tylko gdy poziom wzrósł)
+# when.in_kev   podatność w katalogu CISA KEV
+# when.exposure ekspozycja zasobu: internet albo internal
+# when.min_level najniższy poziom ryzyka: krytyczny, wysoki, średni, niski
+# delivery      immediate = od razu, digest = zbiorczo (wysyłka digestów: Etap 5)
+# channels      in_app zawsze działa; email, slack i teams tylko po skonfigurowaniu w .env
+
+# Ten sam finding nie wraca w tej samej regule przez tyle godzin.
+dedup_window_hours: 24
+
+rules:
+  - name: kev_na_zasobie_z_internetu
+    description: Aktywnie wykorzystywana podatność na zasobie dostępnym z internetu
+    when:
+      events: [created, reopened, rescored]
+      in_kev: true
+      exposure: internet
+    delivery: immediate
+    channels: [in_app, email, slack, teams]
+
+  - name: ryzyko_krytyczne
+    description: Finding o krytycznym poziomie ryzyka
+    when:
+      events: [created, reopened, rescored]
+      min_level: krytyczny
+    delivery: immediate
+    channels: [in_app, email, slack, teams]
+
+  - name: ryzyko_wysokie
+    description: Finding o wysokim poziomie ryzyka
+    when:
+      events: [created, reopened]
+      min_level: wysoki
+    delivery: digest
+    channels: [in_app]

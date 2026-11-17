@@ -109,6 +109,29 @@ class ScopedTarget:
         return str(self.ip)
 
 
+@dataclass(frozen=True)
+class ScopedNetwork:
+    """Sieć do odkrywania hostów, która przeszła przez `ScopeGuard`.
+
+    `excluded` to adresy z denylisty leżące wewnątrz sieci; narzędzie musi je pominąć.
+    """
+
+    network: IPNetwork
+    excluded: tuple[IPNetwork, ...]
+    tool: str
+    intrusiveness: Intrusiveness
+    rule_name: str
+    _seal: object = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._seal is not _SEAL:
+            raise TypeError("ScopedNetwork może wydać wyłącznie ScopeGuard.authorize_network()")
+
+    @property
+    def address(self) -> str:
+        return str(self.network)
+
+
 def require_scoped(target: object) -> ScopedTarget:
     """Strażnik dla adapterów: odrzuca wszystko, co nie jest `ScopedTarget`."""
     if not isinstance(target, ScopedTarget):
@@ -321,6 +344,89 @@ class ScopeGuard:
             )
         )
         return scoped
+
+    def authorize_network(
+        self,
+        cidr: str,
+        *,
+        tool: str,
+        intrusiveness: Intrusiveness,
+        rule_name: str,
+        max_addresses: int = 1024,
+    ) -> ScopedNetwork:
+        """Zgoda na odkrywanie hostów w sieci. Tylko poziomy L0 i L1.
+
+        Sieć musi w całości leżeć w jednym dozwolonym CIDR. Adresy z denylisty
+        wewnątrz sieci trafiają do `excluded` i narzędzie je pomija.
+        """
+        context: dict[str, Any] = {
+            "target": cidr,
+            "tool": tool,
+            "intrusiveness": int(intrusiveness),
+            "rule": rule_name,
+        }
+        try:
+            scoped = self._decide_network(cidr, tool, intrusiveness, rule_name, max_addresses)
+        except ScopeError as error:
+            self._audit(
+                AuditEvent(
+                    actor=f"rule:{rule_name}",
+                    action=error.code,
+                    reason=error.reason,
+                    inputs=context,
+                    object_type="network",
+                    object_id=cidr[:255],
+                )
+            )
+            raise
+        context["excluded"] = [str(n) for n in scoped.excluded]
+        self._audit(
+            AuditEvent(
+                actor=f"rule:{rule_name}",
+                action="scope_allowed",
+                reason="Sieć w zakresie, wykluczenia przekazane narzędziu",
+                inputs=context,
+                object_type="network",
+                object_id=cidr[:255],
+            )
+        )
+        return scoped
+
+    def _decide_network(
+        self, cidr: str, tool: str, intrusiveness: Intrusiveness, rule_name: str, max_addresses: int
+    ) -> ScopedNetwork:
+        if intrusiveness > Intrusiveness.LIGHT:
+            raise ScopeDenied(
+                cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomach L0 i L1"
+            )
+        try:
+            network = ip_network(cidr.strip(), strict=True)
+        except ValueError as error:
+            raise ScopeDenied(cidr, "Cel nie jest poprawnym zakresem CIDR") from error
+        if network.num_addresses > max_addresses:
+            raise ScopeDenied(cidr, f"Sieć większa niż {max_addresses} adresów")
+        if not any(
+            network.version == allowed.version and network.subnet_of(allowed)  # type: ignore[arg-type]
+            for allowed in self._config.allowed_cidrs
+        ):
+            raise ScopeDenied(cidr, "Sieć nie mieści się w żadnym dozwolonym zakresie CIDR")
+        excluded: list[IPNetwork] = []
+        for denied in self._config.denied_cidrs:
+            if denied.version != network.version or not denied.overlaps(network):
+                continue
+            if network.subnet_of(denied):  # type: ignore[arg-type]
+                raise ScopeDenied(cidr, "Cała sieć jest na denyliście")
+            excluded.append(denied)
+        if not self._rate_limiter.acquire(str(network), self._config.rate_for(str(network))):
+            raise RateLimited(cidr, "Przekroczony limit akcji na minutę dla sieci")
+        return ScopedNetwork(
+            network=network,
+            excluded=tuple(excluded),
+            tool=tool,
+            intrusiveness=intrusiveness,
+            rule_name=rule_name,
+            _seal=_SEAL,
+        )
 
     def _decide(
         self,
