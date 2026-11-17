@@ -57,7 +57,7 @@ Domyślnie (`FEEDS_MODE=offline`) system czyta feedy z plików w `data/feeds/`, 
 trafiają do Gita. Pobiera je `./scripts/fetch_feeds.sh` (wymaga internetu; uruchom po
 zaimportowaniu inwentarza, przed prezentacją bez sieci). Gdy `data/feeds/` jest puste,
 `seed_demo` używa miniaturowego, ręcznie przygotowanego zestawu z
-`backend/tests/fixtures/feeds/` (9 publicznie znanych CVE, wartości EPSS przykładowe).
+`backend/tests/fixtures/feeds/` (9 publicznie znanych CVE, wartości EPSS fikcyjne i tak oznaczone w pliku; interfejs pokazuje wtedy etykietę „Dane demonstracyjne”).
 
 ## Wymagania sprzętowe
 
