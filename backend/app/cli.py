@@ -90,6 +90,35 @@ def cmd_fetch_feeds(session: Session, settings: Settings, out: Path) -> dict[str
     return {"directory": str(out), "bytes": sizes}
 
 
+def cmd_explain(session: Session, settings: Settings) -> dict[str, Any]:
+    """Generuje z góry brakujące wyjaśnienia dla CVE z aktywnych zagrożeń (kolejno, lokalnie)."""
+    from app.matching.engine import ACTIVE_STATUSES
+    from app.models import Finding, Vulnerability
+    from app.models.ops import AUDIENCES
+    from app.runtime import explainer_service, local_provider
+
+    provider = local_provider(settings)
+    health = provider.health() if provider is not None else None
+    if health is None or not health.available:
+        detail = health.detail if health else "Model nie jest skonfigurowany (LLM_MODEL jest pusty)"
+        return {"generated": 0, "skipped": detail}
+    service = explainer_service(session)
+    vulns = session.scalars(
+        select(Vulnerability)
+        .join(Finding, Finding.vulnerability_id == Vulnerability.id)
+        .where(Finding.status.in_(ACTIVE_STATUSES))
+        .distinct()
+        .order_by(Vulnerability.cve_id)
+    ).all()
+    counts = {"cached": 0, "passed": 0, "rejected": 0, "unavailable": 0}
+    for vuln in vulns:
+        for audience in AUDIENCES:
+            explanation = service.generate(vuln, audience, actor="cli:explain")
+            counts["cached" if explanation.cached else explanation.validation] += 1
+            session.commit()
+    return {"model": health.model, "vulnerabilities": len(vulns), **counts}
+
+
 def check_demo_preconditions(settings: Settings, scope: ScopeConfig) -> None:
     """seed-demo działa wyłącznie w trybie demo i wyłącznie na sieci demo-lab."""
     if not settings.demo_mode:
@@ -162,6 +191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands.add_parser("scan", help="skan zakresu według reguł plannera")
     commands.add_parser("analyze", help="ponowne dopasowanie i ocena ryzyka")
+    commands.add_parser("explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym")
     commands.add_parser("seed-demo", help="dane i skan demo-lab (tylko DEMO_MODE=true)")
     args = parser.parse_args(argv)
 
@@ -179,6 +209,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = run.summary
             elif args.command == "analyze":
                 result = analyze(session, get_rulebook(), channel_sender()).summary()
+            elif args.command == "explain":
+                result = cmd_explain(session, settings)
             else:
                 result = cmd_seed_demo(session, settings)
             session.commit()

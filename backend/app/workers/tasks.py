@@ -5,11 +5,22 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from sqlalchemy import select
+
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
+from app.explainer.service import Listener
 from app.feeds.service import sync_all
+from app.models import Vulnerability
 from app.pipeline import analyze
-from app.runtime import channel_sender, feed_source, get_rulebook, scan_service
+from app.runtime import (
+    channel_sender,
+    explainer_service,
+    feed_source,
+    get_event_bus,
+    get_rulebook,
+    scan_service,
+)
 from app.workers.celery_app import celery_app
 
 
@@ -65,3 +76,55 @@ def run_analysis() -> dict[str, int]:
         report = analyze(session, get_rulebook(), channel_sender())
         session.commit()
         return report.summary()
+
+
+@celery_app.task(name="app.workers.tasks.llm.generate_explanation")
+def generate_explanation(
+    cve_id: str,
+    audience: str,
+    actor: str = "system",
+    job_id: str | None = None,
+    regenerate: bool = False,
+    use_external: bool = False,
+) -> dict[str, Any]:
+    """Generuje wyjaśnienie (albo bierze je z cache) i publikuje postęp dla interfejsu.
+
+    Kolejka `llm` ma concurrency=1, więc model obsługuje jedno zadanie naraz.
+    """
+    bus = get_event_bus() if job_id else None
+
+    def emit(event: dict[str, Any]) -> None:
+        if bus is not None and job_id is not None:
+            bus.publish(job_id, event)
+
+    try:
+        with get_sessionmaker()() as session:
+            vuln = session.scalar(select(Vulnerability).where(Vulnerability.cve_id == cve_id))
+            if vuln is None:
+                emit({"type": "error", "message": f"Nie znaleziono podatności {cve_id}"})
+                return {"status": "not_found"}
+            emit({"type": "start"})
+            explanation = explainer_service(session).generate(
+                vuln,
+                audience,
+                actor=actor,
+                regenerate=regenerate,
+                use_external=use_external,
+                listener=Listener(
+                    on_token=lambda token: emit({"type": "token", "text": token}),
+                    on_retry=lambda: emit({"type": "retry"}),
+                ),
+            )
+            session.commit()
+    except Exception as error:
+        emit({"type": "error", "message": "Generowanie nie powiodło się"})
+        raise error
+    emit(
+        {
+            "type": "done",
+            "source": explanation.source,
+            "validation": explanation.validation,
+            "problems": list(explanation.problems),
+        }
+    )
+    return {"status": explanation.validation, "source": explanation.source}
