@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Table, Td, Th } from "@/components/ui/table";
+import { ExplanationPanel } from "@/components/ExplanationPanel";
 import { api, type FindingDetail, type FindingStatus } from "@/lib/api";
 import { STATUS_LABELS } from "@/lib/labels";
 import { useOperator } from "@/lib/operator";
@@ -204,6 +205,8 @@ function Detail({ id }: { id: string }) {
             </p>
           )}
         </section>
+
+        {vuln && <ExplanationPanel key={data.id} findingId={data.id} />}
 
         <section>
           <h3 className="mb-2 text-sm font-semibold">Decyzja</h3>
