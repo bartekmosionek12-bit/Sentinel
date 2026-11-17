@@ -19,11 +19,30 @@ type Live =
   | { state: "running"; text: string; note: string }
   | { state: "error"; message: string };
 
+/** Tekst modelu jako zwykły tekst; jedynie fragmenty w `znakach kodu` dostają styl kodu. */
+function RichText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(`[^`\n]+`)/g).map((part, index) =>
+        part.length > 2 && part.startsWith("`") && part.endsWith("`") ? (
+          <code key={index} className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+            {part.slice(1, -1)}
+          </code>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function ExplanationText({ explanation }: { explanation: Explanation }) {
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium">{explanation.asset_context}</p>
-      <p className="text-sm whitespace-pre-line">{explanation.text}</p>
+      <p className="text-sm whitespace-pre-line">
+        <RichText text={explanation.text} />
+      </p>
     </div>
   );
 }
@@ -146,7 +165,7 @@ export function ExplanationPanel({ findingId }: { findingId: string }) {
           <div aria-live="polite" className="space-y-2">
             <p className="text-xs text-muted-foreground">{live.note}</p>
             <p className="text-sm whitespace-pre-line">
-              {live.text}
+              <RichText text={live.text} />
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground align-middle" />
             </p>
             <p className="text-xs text-muted-foreground">

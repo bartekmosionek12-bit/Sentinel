@@ -141,8 +141,8 @@ class ExplainContext:
                 )
             else:
                 lines.append(
-                    f"- Wersja naprawiająca ({product.title}): brak w danych; zalecana "
-                    "najnowsza wersja wskazana przez producenta"
+                    f"- Wersja naprawiająca ({product.title}): baza NVD jej nie podaje; "
+                    "zalecana najnowsza wersja wskazana przez producenta"
                 )
         if self.cvss_score is not None:
             lines.append(f"- Waga wg CVSS: {self.cvss_score:.1f} na 10 ({self.severity})")
