@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -97,3 +97,243 @@ class ScopeCheckOut(BaseModel):
     reason: str
     resolved_ip: str | None = None
     approval_source: str | None = None
+
+
+# --- Etap 2: inwentarz, findingi, feed zagrożeń, kolejka weryfikacji, skany ---
+
+RiskLevel = Literal["krytyczny", "wysoki", "średni", "niski"]
+FindingStatus = Literal[
+    "open", "acknowledged", "in_progress", "resolved", "accepted_risk", "false_positive"
+]
+
+
+class AssetRef(OrmModel):
+    id: uuid.UUID
+    name: str
+    type: AssetType
+    exposure: Exposure
+    criticality: int
+    status: AssetStatus
+
+
+class AssetImportIn(BaseModel):
+    csv: str = Field(min_length=1, max_length=2_000_000)
+
+
+class AssetImportOut(BaseModel):
+    created: int
+    updated: int
+    unchanged: int
+    errors: list[str]
+
+
+class SoftwareOut(OrmModel):
+    id: uuid.UUID
+    product: str
+    version: str
+    port: int | None
+    protocol: str | None
+    raw_banner: str | None
+    cpe_vendor: str | None
+    cpe_product: str | None
+    match_status: str
+    match_method: str | None
+    match_confidence: float
+    source: str
+    last_seen: datetime
+
+
+class AssetHistoryOut(OrmModel):
+    id: uuid.UUID
+    change: str
+    diff: dict[str, Any]
+    created_at: datetime
+
+
+class AssetDetailOut(BaseModel):
+    asset: AssetOut
+    attributes: dict[str, Any]
+    software: list[SoftwareOut]
+    history: list[AssetHistoryOut]
+    active_findings: int
+
+
+class VulnRef(OrmModel):
+    cve_id: str
+    cvss_score: float | None
+    epss: float | None
+    in_kev: bool
+    kev_due_date: date | None
+    has_public_exploit: bool
+
+
+class FindingOut(BaseModel):
+    id: uuid.UUID
+    type: str
+    status: FindingStatus
+    risk_score: float
+    risk_level: RiskLevel
+    summary: str
+    asset: AssetRef
+    vulnerability: VulnRef | None
+    product: str | None
+    version: str | None
+    port: int | None
+    fixed_version: str | None
+    assignee: str | None
+    first_seen: datetime
+    last_seen: datetime
+
+
+class FindingEventOut(OrmModel):
+    id: uuid.UUID
+    kind: str
+    before: dict[str, Any]
+    after: dict[str, Any]
+    actor: str
+    reason: str | None
+    created_at: datetime
+
+
+class FindingDetailOut(FindingOut):
+    description: str
+    references: list[str]
+    kev_required_action: str | None
+    risk_breakdown: dict[str, Any]
+    evidence: dict[str, Any]
+    events: list[FindingEventOut]
+
+
+class FindingPatchIn(BaseModel):
+    status: FindingStatus | None = None
+    assignee: str | None = Field(default=None, max_length=255)
+    reason: str = Field(default="", max_length=2000)
+    actor: str = Field(default="operator", min_length=1, max_length=255)
+
+
+class AffectedAssetOut(BaseModel):
+    finding_id: uuid.UUID
+    asset_id: uuid.UUID
+    asset_name: str
+    risk_score: float
+    risk_level: RiskLevel
+
+
+class ThreatOut(BaseModel):
+    cve_id: str
+    description: str
+    cvss_score: float | None
+    epss: float | None
+    in_kev: bool
+    kev_date_added: date | None
+    has_public_exploit: bool
+    published: datetime | None
+    first_ingested: datetime
+    is_new: bool
+    affected_assets: list[AffectedAssetOut]
+    max_risk: float | None
+
+
+class ThreatFeedOut(BaseModel):
+    items: list[ThreatOut]
+    total: int
+    total_ours: int
+    new_total: int
+    new_ours: int
+    new_since: datetime
+
+
+class FeedStatusOut(BaseModel):
+    feed: str
+    mode: str | None
+    status: str
+    items_new: int
+    items_updated: int
+    error: str | None
+    finished_at: datetime | None
+
+
+class TaskOut(BaseModel):
+    task_id: str
+    detail: str
+
+
+class ReviewItemOut(BaseModel):
+    id: uuid.UUID
+    cpe: str
+    score: float
+    method: str
+    reason: str
+    created_at: datetime
+    software: SoftwareOut
+    asset: AssetRef
+
+
+class ReviewDecisionIn(BaseModel):
+    accept: bool
+    decided_by: str = Field(default="operator", min_length=1, max_length=255)
+
+
+class ReviewDecisionOut(BaseModel):
+    match_status: str
+    findings_created: int
+
+
+class ScanActionOut(OrmModel):
+    id: uuid.UUID
+    scan_run_id: uuid.UUID
+    asset_id: uuid.UUID | None
+    target: str
+    tool: str
+    rule_name: str
+    intrusiveness: int
+    status: str
+    approval_source: str | None
+    scope_decision: str | None
+    params: dict[str, Any]
+    reason: str
+    detail: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class ScanRunOut(OrmModel):
+    id: uuid.UUID
+    trigger: str
+    status: str
+    summary: dict[str, Any]
+    started_at: datetime
+    finished_at: datetime | None
+    actions: list[ScanActionOut] = Field(default_factory=list)
+
+
+class ScanTriggerIn(BaseModel):
+    actor: str = Field(default="operator", min_length=1, max_length=255)
+
+
+class ApprovalIn(BaseModel):
+    actor: str = Field(min_length=1, max_length=255)
+    reason: str = Field(min_length=3, max_length=2000)
+
+
+class NotificationOut(OrmModel):
+    id: uuid.UUID
+    finding_id: uuid.UUID | None
+    rule_name: str
+    channel: str
+    status: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class StatsOut(BaseModel):
+    assets_total: int
+    assets_by_status: dict[str, int]
+    findings_active: int
+    findings_by_level: dict[str, int]
+    kev_active: int
+    review_queue: int
+    awaiting_approval: int
+    notifications_today: int
+    last_scan: ScanRunOut | None
+    feeds: list[FeedStatusOut]

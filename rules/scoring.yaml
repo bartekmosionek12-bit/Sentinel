@@ -1,0 +1,30 @@
+# Formuła oceny ryzyka (docs/ARCHITECTURE.md, sekcja 7).
+# wynik = suma(wartość składnika 0-100 × waga) + premie za łańcuchy ataku, maksymalnie 100.
+# Wagi muszą sumować się do 1. Zmiana tego pliku zmienia `version` w risk_breakdown.
+version: "2026-11-16"
+
+weights:
+  cvss: 0.30          # CVSS × 10
+  epss: 0.20          # EPSS × 100
+  kev: 0.20           # 100, jeśli podatność jest w katalogu CISA KEV
+  exposure: 0.15      # ekspozycja zasobu
+  criticality: 0.10   # (krytyczność − 1) / 4 × 100
+  exploit: 0.05       # 100, jeśli znany jest publiczny exploit
+
+exposure_values:
+  internet: 100
+  internal: 30
+
+# Dolne progi poziomów ryzyka.
+levels:
+  krytyczny: 80
+  wysoki: 60
+  średni: 40
+  niski: 0
+
+# Zastępnik CVSS dla findingów bez CVE (misconfig, compliance, EOL, exposure).
+severity_values:
+  critical: 95
+  high: 80
+  medium: 55
+  low: 25

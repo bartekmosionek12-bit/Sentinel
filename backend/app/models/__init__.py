@@ -8,7 +8,14 @@ from app.models.finding import (
     FindingEvent,
     UpdateRecommendation,
 )
-from app.models.inventory import Asset, AssetHistory, AssetRelation, MatchCandidate, Software
+from app.models.inventory import (
+    Asset,
+    AssetHistory,
+    AssetRelation,
+    CpeProduct,
+    MatchCandidate,
+    Software,
+)
 from app.models.ops import (
     AppUser,
     AuditLog,
@@ -29,6 +36,7 @@ __all__ = [
     "Base",
     "ComplianceResult",
     "ComplianceRule",
+    "CpeProduct",
     "FeedSync",
     "Finding",
     "FindingEvent",
