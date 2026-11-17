@@ -1,0 +1,64 @@
+{
+  "bielik-4.5b-q4km": {
+    "answers": 60,
+    "passed_pct": 70.0,
+    "passed_first_pct": 65.0,
+    "fact_rejections_pct": 26.7,
+    "expected_pct": 85.5,
+    "polish_pct": 100.0,
+    "english_leftovers": 0,
+    "median_ttft_s": 4.9,
+    "median_tokens_per_s": 6.7,
+    "median_duration_s": 31.0,
+    "peak_ram_mib": 4311,
+    "by_audience": {
+      "technical": {
+        "passed_pct": 40.0,
+        "passed_first_pct": 40.0
+      },
+      "operational": {
+        "passed_pct": 80.0,
+        "passed_first_pct": 75.0
+      },
+      "executive": {
+        "passed_pct": 90.0,
+        "passed_first_pct": 80.0
+      }
+    },
+    "problems": {
+      "sentences": 2,
+      "unknown_command": 11,
+      "unknown_version": 9
+    }
+  },
+  "qwen3-4b-q4km": {
+    "answers": 60,
+    "passed_pct": 93.3,
+    "passed_first_pct": 93.3,
+    "fact_rejections_pct": 6.7,
+    "expected_pct": 91.1,
+    "polish_pct": 100.0,
+    "english_leftovers": 2,
+    "median_ttft_s": 4.0,
+    "median_tokens_per_s": 6.5,
+    "median_duration_s": 28.6,
+    "peak_ram_mib": 3993,
+    "by_audience": {
+      "technical": {
+        "passed_pct": 95.0,
+        "passed_first_pct": 95.0
+      },
+      "operational": {
+        "passed_pct": 90.0,
+        "passed_first_pct": 90.0
+      },
+      "executive": {
+        "passed_pct": 95.0,
+        "passed_first_pct": 95.0
+      }
+    },
+    "problems": {
+      "unknown_version": 4
+    }
+  }
+}

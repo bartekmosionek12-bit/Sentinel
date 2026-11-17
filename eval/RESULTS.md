@@ -2,12 +2,12 @@
 
 Sprzęt: 4 rdzenie Intel Xeon 2,1 GHz (bez GPU), 16 GB RAM, Ollama 0.40.16, kontekst
 4096 tokenów, temperatura 0,2. 20 przypadków × 3 poziomy = 60 odpowiedzi na model.
-Szczegóły metodyki: [README.md](README.md). Surowe odpowiedzi: `results/v1/*.jsonl`.
+Szczegóły metodyki: [README.md](README.md). Surowe odpowiedzi: `results/v1/*.jsonl` i `results/v2/*.jsonl`.
 
 ## Rekomendacja
 
 **Domyślny model: `qwen3-4b-q4km` (Qwen3 4B, Q4_K_M).** Częściej przechodzi automatyczną
-kontrolę (80% wobec 62%), trzyma się limitów długości i formatu bez ponownych prób, a koszt na
+kontrolę (z promptami v2, których używa aplikacja: 93% wobec 70%; z v1: 80% wobec 62%), trzyma się limitów długości i formatu bez ponownych prób, a koszt na
 CPU jest praktycznie taki sam. Bielik pisze naturalniejszą polszczyzną, ale dopisuje treści
 spoza faktów (np. „w ciągu 7 dni”), formatowanie Markdown i dodatkowe akapity, myli się w
 poleceniach (`opensl version`, `redis-server --verssion`) i w poziomie zarządczym rzadko
@@ -71,4 +71,38 @@ sprawdza pochodzenie danych, nie sens zdania.
 
 Na podstawie powodów odrzucenia prompty v2 dodają zasadę „zakresy wersji przepisuj
 dokładnie, nie wyliczaj innych numerów” i zaostrzają zasady dla poleceń oraz liczby zdań.
-Przebieg v2 dla obu modeli: wyniki zostaną dopisane poniżej.
+Aplikacja używa promptów v2. Pełny przebieg na tym samym sprzęcie i tych samych 20 przypadkach,
+oceniony tym samym (poprawionym) walidatorem co v1:
+
+| Metryka | Bielik 4.5B v1 → v2 | Qwen3 4B v1 → v2 |
+|---|---:|---:|
+| Przechodzi walidator | 61,7% → 70,0% | 80,0% → **93,3%** |
+| – poziom zarządczy | 55% → 90% | 95% → **95%** |
+| – poziom operacyjny | 95% → 80% | 85% → **90%** |
+| – poziom techniczny | 35% → 40% | 60% → **95%** |
+| Odrzucenia za fakty | 25,0% → 26,7% | 20,0% → **6,7%** |
+| Oczekiwane elementy w odpowiedzi | 85,5% → 85,5% | 91,9% → **91,1%** |
+| Rozpoznany jako polski | 100% → **100%** | 96,7% → **100%** |
+| Mediana czasu do pierwszego tokenu | 5,5 s → 4,9 s | 5,1 s → **4,0 s** |
+| Mediana tokenów na sekundę | 7,1 → 6,7 | 7,1 → 6,5 |
+| Mediana czasu odpowiedzi | 27 s → 31 s | 29 s → **28,6 s** |
+| Szczyt pamięci w przebiegu (RSS) | 4311 MiB | **3993 MiB** |
+
+Szczyt pamięci w v2 to maksimum z całego przebiegu modelu (z buforami kontekstu), więc jest
+wyższy niż pomiar procesu w spoczynku z tabeli v1. Na maszynie z 16 GB zostaje zapas dla
+PostgreSQL, Redisa i workerów; limit kontenera `ollama` w Compose to 6 GB.
+
+Co dała zmiana promptów:
+
+- **Qwen3 4B** przestał wyliczać numery wersji w poziomie technicznym (60% → 95%). Zostały
+  4 odrzucenia, wszystkie za wersję spoza faktów, i wszystkie słuszne: model zamienił
+  „poniżej 2.4.56” na „do 2.4.55”, „poniżej 1.23.2” na „do 1.23.1”, „poniżej 7.4.3” na
+  „do 7.4.2”, a przy CVE-2017-9798 sam wymyślił wersję naprawiającą 2.4.28, której NVD nie
+  podaje. Dwie odpowiedzi przeszły walidator z angielskim słowem „attacker” w polskim zdaniu.
+- **Bielik 4.5B** poprawił poziom zarządczy (mieści się w 2 zdaniach), ale w poziomie
+  technicznym nadal przekręca polecenia (11 odrzuceń `unknown_command`) i wylicza wersje
+  (9 odrzuceń `unknown_version`).
+
+Wniosek: rekomendacja bez zmian, z większą przewagą. Każda odrzucona odpowiedź to dla
+użytkownika wersja z szablonu z faktami z bazy, więc błąd modelu nie trafia do interfejsu.
+
