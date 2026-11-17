@@ -1,0 +1,56 @@
+# --- sekrety i konfiguracja lokalna ---
+.env
+.env.*
+!.env.example
+
+# --- modele LLM (pobiera scripts/fetch_models.sh) ---
+*.gguf
+*.safetensors
+*.bin
+ollama/
+.ollama/
+/models/
+
+# --- snapshoty feedów (pobiera scripts/fetch_feeds.sh) ---
+/data/
+feeds-snapshots/
+snapshots/
+*.snapshot.json
+*.snapshot.json.gz
+
+# --- wyniki skanów i raporty: nigdy w repo ---
+scan-results/
+scans-output/
+reports/output/
+reports-out/
+*.nmap
+*.gnmap
+*.pdf
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Node ---
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.vite/
+
+# --- narzędzia i system ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.swp

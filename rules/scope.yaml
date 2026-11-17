@@ -1,0 +1,20 @@
+# Zakres skanowania (scope). Domyślnie PUSTY: żadne aktywne działanie nie jest dozwolone.
+# Każda akcja sieciowa przechodzi przez backend/app/core/scope_guard.py.
+#
+# - Denylista ma pierwszeństwo przed allowlistą.
+# - "example.lab" pasuje tylko dokładnie, "*.example.lab" tylko do subdomen.
+# - Domena musi dodatkowo rozwiązywać się wyłącznie na adresy z allow.cidrs.
+# - scripts/seed_demo ustawia zakres na sieć demo-lab (Etap 2).
+
+allow:
+  domains: []
+  cidrs: []
+
+deny:
+  domains: []
+  cidrs: []
+
+rate_limits:
+  # Maksymalna liczba akcji skanujących na minutę na jeden cel.
+  default_per_minute: 30
+  per_target: {}
