@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     slack_webhook_url: str = ""
     teams_webhook_url: str = ""
 
+    # LLM: inferencja lokalna przez Ollamę. Pusty LLM_MODEL = model wyłączony, system
+    # pokazuje wtedy wyjaśnienia z szablonu.
+    ollama_url: str = "http://ollama:11434"
+    llm_model: str = ""
+    llm_num_ctx: int = 4096
+    llm_num_thread: int = 0
+    ollama_keep_alive: str = "-1"
+    llm_timeout_seconds: float = 300.0
+    # Zewnętrzny LLM: domyślnie WYŁĄCZONY. Dostaje wyłącznie dane zanonimizowane.
+    external_llm_enabled: bool = False
+    external_llm_url: str = ""
+    external_llm_model: str = ""
+    external_llm_api_key: str = ""
+
     api_cors_origins: str = "http://localhost:8080,http://localhost:5173"
 
     @field_validator("demo_approval_expires_at", mode="before")
