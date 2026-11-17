@@ -18,11 +18,33 @@ function SystemStatus() {
   if (isError || !data) return <Badge variant="danger">Brak połączenia z API</Badge>;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {data.demo_mode && <Badge variant="warn">Tryb demo</Badge>}
+      {data.demo_mode && (
+        <Badge
+          variant="warn"
+          title="Tryb demo: zasoby pochodzą z demo-lab, a wartości EPSS mogą być przykładowe."
+        >
+          Dane demonstracyjne
+        </Badge>
+      )}
       <Badge variant={data.status === "ok" ? "ok" : "warn"}>
         {data.status === "ok" ? "System działa" : "System działa częściowo"}
       </Badge>
     </div>
+  );
+}
+
+function DemoDataNotice() {
+  const { data } = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 15_000 });
+  if (!data?.demo_mode) return null;
+  return (
+    <p
+      role="note"
+      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 md:px-8"
+    >
+      <strong className="font-semibold">Dane demonstracyjne.</strong> System działa w trybie demo
+      (DEMO_MODE=true): zasoby pochodzą z demo-lab, a wartości EPSS z wbudowanego zestawu są
+      przykładowe, nie rzeczywiste.
+    </p>
   );
 }
 
@@ -90,6 +112,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
           <SystemStatus />
         </header>
+        <DemoDataNotice />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
       </div>
     </div>
@@ -118,7 +141,9 @@ export function QueryState({
 }) {
   if (isPending) return <p className="p-5 text-sm text-muted-foreground">Wczytywanie…</p>;
   if (error)
-    return <p className="p-5 text-sm text-red-700">Nie udało się wczytać danych: {error.message}</p>;
+    return (
+      <p className="p-5 text-sm text-red-700">Nie udało się wczytać danych: {error.message}</p>
+    );
   if (empty) return <p className="p-5 text-sm text-muted-foreground">{emptyText}</p>;
   return null;
 }
