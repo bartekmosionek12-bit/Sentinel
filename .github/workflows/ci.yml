@@ -138,6 +138,9 @@ jobs:
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API
         run: python3 scripts/check_demo.py http://localhost:8080
+      - name: Zużycie pamięci przez kontenery (do budżetu RAM)
+        if: always()
+        run: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'
       - name: Logi przy błędzie
         if: failure()
         run: docker compose --profile demo logs --no-color --tail 200

@@ -269,7 +269,8 @@ OpenBao jest w osobnej sieci `vault`, widocznej tylko dla `mcp-scanner`.
 ## 4. Tożsamość i RBAC
 
 **Uwierzytelnianie: Keycloak (OIDC).** Realm `sentinel` importowany przy starcie z
-`infra/keycloak/realm.json` (bez sekretów: hasła demo i sekrety klientów z `.env`).
+`infra/keycloak/sentinel-realm.json` (bez sekretów: konta demo zakłada `scripts/demo_users.sh`
+z haseł w `.env` albo wygenerowanych).
 
 | Klient Keycloak | Typ | Kto | Token |
 |---|---|---|---|
@@ -278,12 +279,18 @@ OpenBao jest w osobnej sieci `vault`, widocznej tylko dla `mcp-scanner`.
 | `sentinel-agent` | poufny, client credentials | agent AI | 5 min, audience `mcp-scanner`, rola `agent` |
 | `sentinel-pipeline` | poufny, client credentials | deterministyczny pipeline | 5 min, audience `mcp-scanner`, rola `system` |
 
-- MFA admina wymuszone akcją `CONFIGURE_TOTP` i polityką uwierzytelniania; zatwierdzenie L2/L3
-  wymaga w tokenie `amr` z drugim składnikiem (sprawdza to backend, nie UI).
+- MFA admina wymuszone przepływem `sentinel-admin-mfa` klienta `sentinel-admin` (hasło, potem
+  warunkowo OTP dla roli `admin`). Backend ustala MFA **wyłącznie z claimu `amr`** (`otp`,
+  `hwk`, `webauthn`), który Keycloak wystawia przez mapper `oidc-amr-mapper`. Wnioskowanie z
+  `azp` odrzuciliśmy: sesja SSO z ciasteczka albo menedżer bez OTP na kliencie admina
+  dostałby wtedy „MFA” bez drugiego składnika. Uprawnienia oznaczone w `rules/roles.yaml`
+  jako `mfa: true` (m.in. `console:admin`, `scan:approve:l2`, `scan:approve:l3`) bez MFA
+  dają 403.
 - Krótkie tokeny dostępu (5 min) i odświeżanie; wylogowanie unieważnia sesję w Keycloak, a
   backend sprawdza `sid` na liście unieważnionych sesji w Redisie.
 - Blokada po nieudanych próbach (brute force detection Keycloak).
-- **Break-glass:** konto `breakglass-admin`, hasło tylko w OpenBao. Każde logowanie tym kontem
+- **Break-glass:** konto `breakglass-admin`, hasło tylko w OpenBao (do Etapu 5: generuje je
+  `scripts/breakglass.sh`, wypisuje raz i niczego nie zapisuje). Każde logowanie tym kontem
   wykrywa backend po `sub` w tokenie: alert natychmiast i wpis w audycie.
 - Gotowość pod federację z AD/Entra ID (User Federation / Identity Provider w Keycloak), w
   hackathonie niewłączona.
@@ -314,9 +321,15 @@ mapowanie rola → uprawnienia robi backend.
 - Menedżer dostaje dane z redakcją: adresy IP, banery i dowody techniczne są zastąpione
   opisem, dopóki rola nie ma `secrets:redacted:view`. Redakcja jest w warstwie serializacji
   odpowiedzi API, nie w UI.
-- **Fallback** (gdy Keycloak nie zmieści się w RAM albo w czasie): wbudowane logowanie FastAPI
-  (argon2 + TOTP), ten sam model ról i uprawnień, te same testy. Przełącza go
-  `AUTH_PROVIDER=keycloak|local`. Decyzję podejmujemy po pomiarze RAM w Etapie 4.
+- **Fallback** `AUTH_PROVIDER=local` (wbudowane logowanie FastAPI) **nie powstał**: Keycloak
+  26 zużywa po starcie około 500 MB przy limicie 900 MB, więc mieści się w budżecie.
+- Wejście do konsoli operacyjnej sprawdza endpoint `GET /api/console/admin`
+  (`console:admin`); odmowa trafia do audytu (scenariusz demo 5). Interfejs tylko pokazuje
+  stronę „brak dostępu”.
+- Każde żądanie dostaje `request_id` (nagłówek `X-Request-ID` od nginx albo nowy), a wpisy
+  audytu mają `actor_type`, `actor_id` i `request_id` uzupełniane z kontekstu żądania.
+- Keycloak używa schematu `keycloak` w tej samej bazie i z tym samym użytkownikiem co
+  aplikacja. Osobny użytkownik z minimalnymi uprawnieniami: [ROADMAP](ROADMAP.md).
 
 ---
 
@@ -1005,7 +1018,7 @@ tokenu 4 s, mediana odpowiedzi 29 s. Pozostałe wartości to szacunki do zmierze
 | Worker llm | 384 MB | 150–250 MB | |
 | Celery beat | 256 MB | 80–120 MB | |
 | nginx (dwie SPA) | 128 MB | 20–40 MB | |
-| **Keycloak** | 1024 MB | 500–750 MB | JVM z `-Xmx512m`; fallback: logowanie lokalne |
+| **Keycloak** | 900 MB | około 500 MB po starcie (zmierzone) | Keycloak 26.8; fallback lokalny niepotrzebny |
 | **OpenBao** | 256 MB | 60–120 MB | |
 | **mcp-scanner** | 1024 MB | 200–400 MB, chwilowo 700 MB | nmap, nuclei, testssl.sh, promptfoo (Node) |
 | Ollama (Qwen3 4B) | 6 GB | 3,5–4,0 GB | `OLLAMA_KEEP_ALIVE=-1` |

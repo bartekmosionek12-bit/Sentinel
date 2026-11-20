@@ -8,8 +8,8 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Stan:** Etapy 0–3 zrobione, Etap 3b (aktualizacja architektury pod pełną specyfikację)
-> czeka na akceptację. Ścieżka krytyczna działa od początku do końca, bez internetu: import
+> **Stan:** Etapy 0–3b zrobione, Etap 4 (Keycloak, MFA, RBAC, dwie konsole) w przeglądzie.
+> Ścieżka krytyczna działa od początku do końca, bez internetu: import
 > inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów, ocena ryzyka
 > z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia zagrożeń na trzech
 > poziomach z lokalnego modelu, sprawdzane przez kod. Architektura i plan Etapów 4–9:
@@ -19,12 +19,14 @@ wyników na ludzki język.
 ## Uruchomienie
 
 ```bash
-cp .env.example .env        # ustaw POSTGRES_PASSWORD
+cp .env.example .env        # ustaw POSTGRES_PASSWORD i KEYCLOAK_ADMIN_PASSWORD
 docker compose up --build
 ```
 
-Interfejs: <http://localhost:8080>. Dokumentacja API: <http://localhost:8080/api/docs>.
-Po takim starcie zakres skanowania jest pusty i system niczego nie skanuje.
+Konsola operacyjna (admin): <http://localhost:8080/admin/>. Dashboard menedżera:
+<http://localhost:8080/dashboard/>. Dokumentacja API: <http://localhost:8080/api/docs>.
+Po takim starcie zakres skanowania jest pusty, system niczego nie skanuje i nie ma kont
+użytkowników (patrz [Logowanie i role](#logowanie-i-role)).
 
 ## Demo w 3 minuty (bez internetu)
 
@@ -35,7 +37,17 @@ Po takim starcie zakres skanowania jest pusty i system niczego nie skanuje.
 
 Skrypt uruchamia stos razem z celowo podatnym [demo-lab](demo-lab/README.md), importuje
 fikcyjny inwentarz, wczytuje feedy ze snapshotów, skanuje sieć demo-lab i liczy ryzyko.
-Trwa około minuty po zbudowaniu obrazów. Co zobaczysz:
+Trwa około minuty po zbudowaniu obrazów. Na końcu zakłada w Keycloaku trzy fikcyjne konta
+demo i wypisuje ich hasła oraz sekret TOTP admina (zapisane też w
+`data/demo-credentials.env`, poza Gitem):
+
+| Konto | Gdzie | Logowanie |
+|---|---|---|
+| `admin` (Anna Demonstracyjna) | `/admin/` | hasło + kod TOTP: dodaj sekret z wypisanego `otpauth://` do aplikacji uwierzytelniającej |
+| `manager` (Marek Demonstracyjny) | `/dashboard/` | hasło; dane techniczne i osobowe zredagowane, `/admin/` kończy się odmową zapisaną w audycie |
+| `auditor` (Alicja Demonstracyjna) | `/dashboard/` | hasło; odczyt i dziennik audytu |
+
+W konsoli operacyjnej (`admin`) zobaczysz:
 
 | Widok | Co pokazuje |
 |---|---|
@@ -99,6 +111,40 @@ audytu.
 
 ![Wyjaśnienie generowane na żywo](docs/screenshots/etap3-strumien.png)
 
+## Logowanie i role
+
+Logowanie obsługuje Keycloak (OIDC, kod autoryzacji z PKCE), wystawiony przez ten sam nginx
+pod `/auth`. Realm `sentinel` jest importowany przy starcie z
+[`infra/keycloak/sentinel-realm.json`](infra/keycloak/sentinel-realm.json) i nie zawiera
+haseł ani sekretów.
+
+- **Role:** `admin`, `manager`, `auditor`, `agent`, `system`. Keycloak trzyma tylko
+  przynależność do ról; uprawnienia ról są w [`rules/roles.yaml`](rules/roles.yaml), a
+  sprawdza je backend na każdym endpoincie (deny-by-default). Test przegląda wszystkie
+  trasy i nie przechodzi, gdy któraś nie deklaruje uprawnienia; macierz rola × endpoint
+  sprawdza 2xx, 403 i 401.
+- **MFA:** admin loguje się do `/admin/` hasłem i kodem TOTP. Backend uznaje MFA wyłącznie
+  na podstawie claimu `amr` w tokenie, więc konsola operacyjna i zgody na skany L2/L3 bez
+  drugiego składnika kończą się odmową.
+- **Sesje:** token dostępu 5 minut z odświeżaniem, 30 minut bezczynności, maksymalnie 12 h.
+  Wylogowanie unieważnia sesję w Keycloaku i w backendzie (lista w Redisie; gdy Redis nie
+  odpowiada, backend odmawia). Po 5 nieudanych próbach konto jest blokowane na 1–15 minut.
+- **Redakcja dla menedżera:** adresy IP, banery, dowody i parametry techniczne są usuwane w
+  warstwie serializacji API, nie w interfejsie.
+- **Odmowy w audycie:** każda odpowiedź 403 trafia do dziennika audytu z aktorem i
+  identyfikatorem żądania (`X-Request-ID`).
+- **Break-glass:** `./scripts/breakglass.sh` ustawia hasło i TOTP konta `breakglass-admin` i
+  wypisuje je raz; skrypt niczego nie zapisuje. Każde logowanie tym kontem tworzy alert i
+  wpis w audycie. Do Etapu 5 hasło trzeba samodzielnie przechować w sejfie; od Etapu 5
+  trafi do OpenBao.
+
+**Dostęp spoza localhost.** Port interfejsu nasłuchuje domyślnie tylko na `127.0.0.1`
+(`SENTINEL_BIND` w `.env`). Żeby otworzyć go w sieci, ustaw `SENTINEL_BIND=0.0.0.0` i
+`PUBLIC_URL` na adres, pod którym użytkownicy widzą system, **i postaw przed nim HTTPS**.
+Bez HTTPS logowanie spoza localhost nie zadziała: przeglądarka udostępnia Web Crypto
+(potrzebne do PKCE) tylko w bezpiecznym kontekście, a ciasteczka Keycloaka mają flagę
+`Secure`.
+
 ## Wymagania sprzętowe
 
 4+ rdzenie CPU, 16 GB RAM, około 30 GB SSD, Docker z Compose. **GPU nie jest wymagane.**
@@ -118,7 +164,8 @@ audytu.
 | Powiadomienia | Reguły w [`rules/notifications.yaml`](rules/notifications.yaml): grupowanie per zasób, bez powtórek w ciągu doby. E-mail, Slack i Teams są wyłączone do czasu konfiguracji w `.env`. |
 | AI Explainer | Wyjaśnienia na trzech poziomach z lokalnego modelu (Ollama), generowane raz i trzymane w cache, z walidatorem faktów i wersją z szablonu, gdy model jest niedostępny albo się myli. Streaming przez SSE. Prompty wersjonowane w `backend/app/explainer/prompts/`, limity w [`rules/explainer.yaml`](rules/explainer.yaml). |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz). |
-| Interfejs | Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. |
+| Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
+| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Dashboard `/dashboard/`: strona główna i najważniejsze zagrożenia (pełna konsola menedżera w Etapie 6). |
 
 ## Zakres skanowania
 
@@ -142,7 +189,10 @@ uv run pytest                 # bez sieci, bez bazy, bez modelu
 cd frontend
 npm ci
 npm run lint && npm run typecheck && npm run build
-npm run dev                   # http://localhost:5173, proxy /api na :8000
+npm run dev:admin             # http://localhost:5173/admin/, proxy /api na :8000
+PORT=5174 npm run dev:dashboard  # http://localhost:5174/dashboard/
+# /auth trafia do Keycloaka z docker compose (SENTINEL_AUTH_URL, domyślnie :8080);
+# PUBLIC_URL w .env musi wtedy wskazywać adres serwera deweloperskiego
 ```
 
 Zmiany trafiają do `main` wyłącznie przez pull requesty z gałęzi etapowych
@@ -160,8 +210,13 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
 - System wykrywa i weryfikuje, **nie eksploatuje** podatności.
 - Nie „wykrywa zero-dayów”. Szybko łapie wczesne sygnały i odpowiada, czy i gdzie
   organizacja jest narażona.
-- API nie ma jeszcze logowania użytkowników, dlatego interfejs jest dostępny tylko z
-  `localhost`. Keycloak, MFA i RBAC to Etap 4.
+- Dostęp spoza localhost wymaga HTTPS przed systemem (sekcja
+  [Logowanie i role](#logowanie-i-role)); stos nie generuje jeszcze certyfikatu sam.
+- Keycloak korzysta z tej samej instancji PostgreSQL i tego samego użytkownika bazy co
+  aplikacja (osobny schemat `keycloak`). Osobny użytkownik z minimalnymi uprawnieniami jest w
+  [ROADMAP](docs/ROADMAP.md).
+- Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) nie powstało: Keycloak mieści się w
+  budżecie pamięci, więc fallback nie był potrzebny.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
   (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
 - Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 4b.

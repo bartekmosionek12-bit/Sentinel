@@ -34,6 +34,9 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 - Rola `auditor` z eksportem paczki dowodów (audit log, wyniki, raporty) podpisanej cyfrowo.
 - Formalna akceptacja ryzyka przez menedżera z terminem wygaśnięcia i przypomnieniami.
 - WebAuthn jako domyślne MFA dla adminów.
+- Osobny użytkownik bazy dla Keycloaka (dziś wspólny z aplikacją, osobny schemat).
+- Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) dla bardzo małych instalacji.
+- HTTPS w samym stosie (certyfikat z ACME albo firmowego CA) zamiast proxy przed systemem.
 
 ### Poświadczenia i skanowanie
 
