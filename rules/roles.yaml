@@ -37,6 +37,11 @@ permissions:
   agent:task: {description: "Zlecanie zadań agentowi", mfa: true}
   agent:configure: {description: "Nadawanie zdolności agentowi", mfa: true}
   agent:kill: {description: "Kill switch agenta", mfa: true}
+  agent:read: {description: "Odczyt zadań, planów, zdolności i poświadczeń JIT agenta (bez sekretów)"}
+  # Moduł 19: testy agenta. Rola `agent` nie ma żadnego z tych uprawnień.
+  agent_test:read: {description: "Odczyt wyników testu bezpieczeństwa agenta"}
+  agent_test:run: {description: "Uruchomienie testu bezpieczeństwa agenta", mfa: true}
+  agent_test:override: {description: "Wymuszenie konfiguracji agenta mimo niezaliczonego testu (z uzasadnieniem)", mfa: true}
   integrations:manage: {description: "Konfiguracja integracji", mfa: true}
   owners:manage: {description: "Przypisywanie właścicieli zasobów", mfa: true}
   iam:manage: {description: "Użytkownicy, role i uprawnienia", mfa: true}
@@ -75,6 +80,8 @@ roles:
       - scope:read
       - scan:read
       - review:read
+      - agent:read
+      - agent_test:read
   agent:
     description: "Agent AI (tożsamość nieludzka): wyłącznie zdolności nadane przez admina"
     kind: agent
