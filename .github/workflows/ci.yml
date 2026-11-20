@@ -36,6 +36,19 @@ jobs:
       - name: Pytest (bez sieci i bez modelu)
         run: uv run pytest
 
+  ai-tests-mock:
+    name: AI tests, atrapa
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: mock
+
+  ai-tests-qwen:
+    name: AI tests, Qwen3 4B
+    needs: ai-tests-mock
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: qwen
+
   migrations:
     name: Migracje na PostgreSQL 16
     runs-on: ubuntu-latest

@@ -62,6 +62,31 @@ W konsoli operacyjnej (`admin`) zobaczysz:
 `DEMO_APPROVAL_EXPIRES_AT=1970-01-01T00:00:00Z ./scripts/seed_demo.sh`. Skan L2 pojawi się
 wtedy w widoku Skany jako „Czeka na zgodę”.
 
+### Raport dla menedżera i scenariusz zero-day
+
+Po `seed_demo` w skrzynce menedżera (`/dashboard/`, konto `manager`) czeka raport o stanie
+z czerwonym światłem. Warstwa „W skrócie” odpowiada na pięć pytań (Co się stało? Czy jesteśmy
+zagrożeni? Co najgorszego może się stać? Co trzeba zrobić? Kto i do kiedy?) prostym językiem,
+z podpowiedzią przy każdym terminie ze słownika; „Szczegóły techniczne” są zwinięte. Światło i
+fakty liczy kod, a model tylko formułuje zdania w tle: raport jest w skrzynce od razu, z
+odpowiedziami z szablonu, i zostaje przy nich, jeśli tekst modelu nie przejdzie walidacji.
+
+Scenariusz zero-day na prezentacji (tylko `DEMO_MODE=true`):
+
+```bash
+./scripts/inject_kev.sh               # syntetyczny wpis KEV dla CVE-2021-23017 (nginx na proxy-01)
+```
+
+Wpis przechodzi tą samą ścieżką co prawdziwy feed KEV: dopasowanie, ocena ryzyka,
+powiadomienie i raport „zero-day” w skrzynce menedżera, bez modelu językowego. Skrypt wypisuje
+czasy kolejnych kroków (lokalnie około 50 ms, CI pilnuje progu 5 s). W konsoli menedżera
+pojawia się czerwony baner z linkiem do raportu i znika po jego przeczytaniu. W dzienniku
+audytu wpis jest oznaczony jako syntetyczny.
+
+![Skrzynka menedżera](docs/screenshots/etap4b-skrzynka.png)
+![Raport „W skrócie”](docs/screenshots/etap4b-raport.png)
+![Baner zero-day](docs/screenshots/etap4b-baner-zero-day.png)
+
 ![Zagrożenia](docs/screenshots/etap2-zagrozenia.png)
 ![Skany](docs/screenshots/etap2-skany.png)
 ![Kolejka weryfikacji](docs/screenshots/etap2-weryfikacja.png)
@@ -167,9 +192,12 @@ kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 | Ocena ryzyka | Jawna formuła z wagami w [`rules/scoring.yaml`](rules/scoring.yaml), rozbicie na składniki i zdanie „dlaczego” budowane przez kod. |
 | Powiadomienia | Reguły w [`rules/notifications.yaml`](rules/notifications.yaml): grupowanie per zasób, bez powtórek w ciągu doby. E-mail, Slack i Teams są wyłączone do czasu konfiguracji w `.env`. |
 | AI Explainer | Wyjaśnienia na trzech poziomach z lokalnego modelu (Ollama), generowane raz i trzymane w cache, z walidatorem faktów i wersją z szablonu, gdy model jest niedostępny albo się myli. Streaming przez SSE. Prompty wersjonowane w `backend/app/explainer/prompts/`, limity w [`rules/explainer.yaml`](rules/explainer.yaml). |
+| Raporty | Raport dwuwarstwowy: światło z reguł [`rules/reports.yaml`](rules/reports.yaml), „W skrócie” z modelu po walidacji (albo z szablonu), słownik terminów [`rules/glossary.yaml`](rules/glossary.yaml), szczegóły techniczne. Doręczenie do skrzynki ról z potwierdzeniem odczytu per osoba. Nazwy zasobów i osób model widzi tylko jako tokeny (`asset_1`, `person_1`). |
+| Scenariusz zero-day | `scripts/inject_kev.sh`: syntetyczny wpis KEV, raport w skrzynce i baner w konsoli menedżera w czasie poniżej 5 s, bez modelu. |
+| Testy własnego AI | [promptfoo w `ai-tests/`](ai-tests/README.md): pośrednie prompt injection przez opisy CVE na prawdziwej ścieżce aplikacji, z posłuszną atrapą (każdy PR) i z Qwen3 4B (9 przypadków w każdym PR, pełny zestaw nocą), wyniki osobno. |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz). |
 | Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
-| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Dashboard `/dashboard/`: strona główna i najważniejsze zagrożenia (pełna konsola menedżera w Etapie 6). |
+| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Konsola operacyjna ma też Raporty (nowy raport o stanie, ponowne zlecenie „W skrócie”). Dashboard `/dashboard/`: strona główna, najważniejsze zagrożenia, Skrzynka, Raporty i baner zero-day (pełna konsola menedżera w Etapie 6). |
 
 ## Zakres skanowania
 
@@ -193,6 +221,9 @@ uv run pytest                 # bez sieci, bez bazy, bez modelu
 cd frontend
 npm ci
 npm run lint && npm run typecheck && npm run build
+
+# testy własnego AI (promptfoo), szczegóły w ai-tests/README.md
+cd ../ai-tests && npm ci && ./run.sh mock
 npm run dev:admin             # http://localhost:5173/admin/, proxy /api na :8000
 PORT=5174 npm run dev:dashboard  # http://localhost:5174/dashboard/
 # /auth trafia do Keycloaka z docker compose (SENTINEL_AUTH_URL, domyślnie :8080);
@@ -224,7 +255,11 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
   budżecie pamięci, więc fallback nie był potrzebny.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
   (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
-- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 4b.
+- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka i PDF raportów są w
+  [ROADMAP](docs/ROADMAP.md) (nie weszły do Etapu 4b).
+- Reguły przeciw pośredniemu prompt injection (sprzeczności, prośby o hasła) są słownikowe i
+  nie złapią każdej parafrazy. Twarda gwarancja: ocenę ryzyka, światło i terminy liczy kod,
+  a model nie może ich zmienić (sprawdza to [`ai-tests/`](ai-tests/README.md)).
 - Walidator wyjaśnień sprawdza pochodzenie identyfikatorów, wersji, dat, poleceń i linków,
   ale nie sens zdań. Model może więc nieprecyzyjnie streścić fakt (przykłady w
   [eval/RESULTS.md](eval/RESULTS.md)). Dlatego decyzje i ocena ryzyka nigdy nie zależą od
