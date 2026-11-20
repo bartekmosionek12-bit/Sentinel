@@ -1,6 +1,7 @@
 import {
   ClipboardCheck,
   Crosshair,
+  FileText,
   LayoutDashboard,
   ListChecks,
   Network,
@@ -18,6 +19,12 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Przegląd",
     items: [
       { path: "/", label: "Pulpit", icon: LayoutDashboard },
+      {
+        path: "/raporty",
+        label: "Raporty",
+        icon: FileText,
+        summary: "Raporty dwuwarstwowe wysyłane do skrzynek menedżerów: ocena stanu i zero-day.",
+      },
       {
         path: "/mapa",
         label: "Mapa powierzchni ataku",
@@ -42,7 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
         path: "/zgodnosc",
         label: "Zgodność",
         icon: ClipboardCheck,
-        stage: 4,
+        stage: 7,
         summary: "Wynik zgodności dla CIS, NIS2 i ISO 27001 z listą luk i instrukcją naprawy.",
       },
       {

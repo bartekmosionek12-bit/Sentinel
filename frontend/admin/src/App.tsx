@@ -6,6 +6,7 @@ import { Assets } from "@/pages/Assets";
 import { AuditLog } from "@/pages/AuditLog";
 import { Dashboard } from "@/pages/Dashboard";
 import { Findings } from "@/pages/Findings";
+import { ReportDetail, Reports } from "@/pages/Reports";
 import { ReviewQueue } from "@/pages/ReviewQueue";
 import { Scans } from "@/pages/Scans";
 import { Scope } from "@/pages/Scope";
@@ -69,6 +70,8 @@ export function App() {
     >
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/raporty" element={<Reports />} />
+        <Route path="/raporty/:id" element={<ReportDetail />} />
         <Route path="/zasoby" element={<Assets />} />
         <Route path="/zagrozenia" element={<Findings />} />
         <Route path="/feed" element={<ThreatFeed />} />

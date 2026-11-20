@@ -439,6 +439,59 @@ function streamEvents<E extends { type: string }>(
   return () => controller.abort();
 }
 
+export type ReportLight = "red" | "yellow" | "green";
+
+export interface ReportListItem {
+  id: string;
+  kind: "assessment" | "zero_day";
+  title: string;
+  light: ReportLight;
+  light_reason: string;
+  summary_source: "model" | "template";
+  created_at: string;
+  read: boolean;
+}
+
+export interface Inbox {
+  unread: number;
+  items: ReportListItem[];
+}
+
+export interface ReportTechnicalRow {
+  asset: string;
+  cve_id: string | null;
+  product: string;
+  fixed_version: string | null;
+  risk_score: number;
+  risk_level: RiskLevel;
+  status: string;
+  in_kev: boolean;
+  cvss: number | null;
+  epss: number | null;
+  exposure: Exposure;
+  criticality: number;
+  deadline: string;
+  finding_id: string;
+}
+
+export interface Report extends ReportListItem {
+  scope: Record<string, unknown>;
+  summary: { key: string; question: string; answer: string }[];
+  summary_validation: "none" | "passed" | "rejected" | "unavailable";
+  summary_model: string | null;
+  summary_problems: string[];
+  summary_updated_at: string | null;
+  facts: Record<string, string[]>;
+  technical: ReportTechnicalRow[];
+  created_by: string;
+}
+
+export interface GlossaryTerm {
+  key: string;
+  name: string;
+  definition: string;
+}
+
 export interface Me {
   username: string;
   display_name: string;
@@ -518,6 +571,14 @@ export const api = {
       body: JSON.stringify({ reason }),
     }),
   notifications: () => request<NotificationItem[]>("/notifications?limit=20"),
+  reports: () => request<ReportListItem[]>("/reports"),
+  report: (id: string) => request<Report>(`/reports/${id}`),
+  inbox: () => request<Inbox>("/inbox"),
+  markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
+  createReport: () => request<Report>("/reports", { method: "POST" }),
+  requestReportSummary: (id: string) =>
+    request<{ task_id: string }>(`/reports/${id}/summary`, { method: "POST" }),
+  glossary: () => request<GlossaryTerm[]>("/glossary"),
   scope: () => request<Scope>("/scope"),
   checkScope: (target: string, intrusiveness: 1 | 2 | 3) =>
     request<ScopeCheck>("/scope/check", {

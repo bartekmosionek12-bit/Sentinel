@@ -67,11 +67,14 @@ export function AppShell({
   navGroups,
   subtitle,
   footer,
+  banner,
   children,
 }: {
   navGroups: NavGroup[];
   subtitle: string;
   footer: string;
+  /** Pilny komunikat nad treścią (np. raport zero-day w skrzynce). */
+  banner?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -138,6 +141,7 @@ export function AppShell({
             <UserMenu />
           </div>
         </header>
+        {banner}
         <DemoDataNotice />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
       </div>

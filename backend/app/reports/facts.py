@@ -377,13 +377,17 @@ def _template(
         answers["who"] = "Nie ma zadań do przypisania ani terminów do pilnowania."
     else:
         parts = []
-        for item in top[:2]:
+        # Pierwsze (najwyższe ryzyko, najkrótszy termin) zagrożenie każdego zasobu.
+        per_asset: dict[object, Item] = {}
+        for item in top:
+            per_asset.setdefault(item.asset.id, item)
+        for item in list(per_asset.values())[:2]:
             owner = tokens.person(item.asset.owner) if item.asset.owner else "osoba do wskazania"
             parts.append(
                 f"Za {tokens.asset(item.asset)} odpowiada {owner}, termin "
                 f"{deadline(item, config, today).isoformat()}."
             )
-        if len(items) > 2:
+        if len({item.asset.id for item in items}) > 2:
             parts.append("Pozostałe terminy są w szczegółach technicznych.")
         answers["who"] = " ".join(parts)
     return answers
