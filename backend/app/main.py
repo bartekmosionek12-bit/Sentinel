@@ -6,12 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api.auth import router as auth_router
 from app.api.explain import router as explain_router
 from app.api.routes import router
 from app.api.scans import router as scans_router
 from app.api.threats import router as threats_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.request_context import RequestContextMiddleware
 
 
 def create_app() -> FastAPI:
@@ -32,7 +34,11 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
+    # Ostatni dodany działa jako pierwszy: identyfikator żądania obejmuje też odpowiedzi CORS.
+    app.add_middleware(RequestContextMiddleware)
+    app.include_router(auth_router)
     app.include_router(threats_router)
     app.include_router(explain_router)
     app.include_router(scans_router)

@@ -18,7 +18,12 @@ ALLOWED: dict[str, set[str]] = {
     "socket": {"core/scope_guard.py"},
     "subprocess": {"scanners/runner.py"},
     "asyncio.subprocess": {"scanners/runner.py"},
-    "httpx": {"feeds/http.py", "notifications/channels.py", "explainer/providers.py"},
+    "httpx": {
+        "feeds/http.py",
+        "notifications/channels.py",
+        "explainer/providers.py",
+        "iam/jwks.py",
+    },
     "requests": set(),
     "aiohttp": set(),
     "urllib.request": set(),

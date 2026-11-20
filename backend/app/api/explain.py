@@ -13,19 +13,22 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import DispatcherDep, SessionDep, SettingsDep
 from app.explainer.providers import ProviderHealth
 from app.explainer.service import ExplainerService, Explanation, asset_header
 from app.explainer.stream import START_ID, TERMINAL, EventBus
+from app.iam.deps import AuditSinkDep, ensure, require
+from app.iam.redaction import RedactingRoute
+from app.iam.tokens import Principal
 from app.models import Finding, Vulnerability
 from app.runtime import explainer_service, get_event_bus, local_provider
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", route_class=RedactingRoute)
 
 Audience = Literal["technical", "operational", "executive"]
 STREAM_TIMEOUT_SECONDS = 600
@@ -58,7 +61,6 @@ class ExplanationOut(BaseModel):
 
 class ExplanationRequestIn(BaseModel):
     audience: Audience
-    actor: str = Field(default="operator", min_length=1, max_length=255)
     regenerate: bool = False
     provider: Literal["local", "external"] = "local"
 
@@ -117,7 +119,12 @@ def _out(session: Session, finding: Finding, explanation: Explanation) -> Explan
     )
 
 
-@router.get("/llm/status", response_model=LlmStatusOut, tags=["wyjaśnienia"])
+@router.get(
+    "/llm/status",
+    response_model=LlmStatusOut,
+    tags=["wyjaśnienia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def llm_status(settings: SettingsDep, health: HealthDep) -> LlmStatusOut:
     return LlmStatusOut(
         enabled=bool(settings.llm_model.strip()),
@@ -129,7 +136,10 @@ def llm_status(settings: SettingsDep, health: HealthDep) -> LlmStatusOut:
 
 
 @router.get(
-    "/findings/{finding_id}/explanation", response_model=ExplanationOut, tags=["wyjaśnienia"]
+    "/findings/{finding_id}/explanation",
+    response_model=ExplanationOut,
+    tags=["wyjaśnienia"],
+    dependencies=[Depends(require("findings:read"))],
 )
 def get_explanation(
     finding_id: uuid.UUID,
@@ -157,6 +167,9 @@ def request_explanation(
     bus: EventBusDep,
     health: HealthDep,
     explainer: ExplainerDep,
+    principal: Annotated[Principal, Depends(require("explanations:generate"))],
+    request: Request,
+    audit: AuditSinkDep,
 ) -> ExplanationJobOut:
     """Zleca wygenerowanie wyjaśnienia. Gotowy tekst z cache wraca od razu, bez modelu."""
     finding, vuln = _finding_with_cve(session, finding_id)
@@ -168,6 +181,8 @@ def request_explanation(
             explanation=_out(session, finding, current),
         )
     use_external = payload.provider == "external"
+    if use_external:
+        ensure(principal, "llm:external:use", request, audit)
     if use_external and not settings.external_llm_enabled:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -185,7 +200,7 @@ def request_explanation(
     dispatcher.generate_explanation(
         vuln.cve_id,
         payload.audience,
-        f"user:{payload.actor}",
+        principal.actor,
         job_id,
         regenerate=payload.regenerate,
         use_external=use_external,
@@ -209,7 +224,11 @@ def _sse(bus: EventBus, job_id: str, timeout: float, block_ms: int) -> Iterator[
     yield 'data: {"type": "error", "message": "Przekroczono czas oczekiwania na model"}\n\n'
 
 
-@router.get("/explanations/jobs/{job_id}/events", tags=["wyjaśnienia"])
+@router.get(
+    "/explanations/jobs/{job_id}/events",
+    tags=["wyjaśnienia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def explanation_events(
     job_id: str,
     bus: EventBusDep,

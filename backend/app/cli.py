@@ -23,6 +23,8 @@ from app.core.db import get_sessionmaker
 from app.core.scope_guard import ScopeConfig
 from app.feeds.base import FeedError, OfflineSource, as_utc
 from app.feeds.service import FEEDS, sync_all
+from app.iam.rbac import RoleCatalog
+from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
 from app.pipeline import analyze
 from app.runtime import channel_sender, feed_source, get_rulebook, scan_service
@@ -212,6 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym"
     ).add_argument("--queue", action="store_true", help="zleć workerowi llm w tle")
     commands.add_parser("seed-demo", help="dane i skan demo-lab (tylko DEMO_MODE=true)")
+    commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -230,6 +233,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = analyze(session, get_rulebook(), channel_sender()).summary()
             elif args.command == "explain":
                 result = cmd_explain(session, settings, queue=args.queue)
+            elif args.command == "sync-roles":
+                result = sync_catalog(
+                    session, RoleCatalog.from_file(settings.rules_dir / "roles.yaml")
+                )
             else:
                 result = cmd_seed_demo(session, settings)
             session.commit()

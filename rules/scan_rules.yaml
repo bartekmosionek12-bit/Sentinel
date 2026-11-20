@@ -5,7 +5,8 @@
 # trigger: sweep         raz na każdą dozwoloną sieć (allow.cidrs)
 #          host_seen     dla hosta, który odpowiedział w odkrywaniu
 #          finding_open  dla hosta z otwartym findingiem
-# intrusiveness: 1 = lekki aktywny, 2 = bardziej inwazyjny (wymaga zgody człowieka)
+# intrusiveness: 1 = L1 pasywne i lekkie, 2 = L2 inwazyjne (zgoda admina), 3 = L3 red team AI
+# (zgoda admina z uprawnieniem scan:approve:l3). Poziom 4 i wyżej: zabronione.
 # Dla hosta wygrywa pierwsza pasująca reguła danego wyzwalacza.
 
 # Porty lekkiego skanu usług: SUMA listy nmap „top 1000” i portów dodatkowych poniżej.

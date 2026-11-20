@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,9 @@ from app.api.schemas import (
 )
 from app.core import audit
 from app.feeds.service import FEEDS
+from app.iam.deps import AuditSinkDep, ensure, require
+from app.iam.redaction import RedactingRoute
+from app.iam.tokens import Principal
 from app.inventory.service import import_assets, parse_assets_csv
 from app.matching.engine import ACTIVE_STATUSES, CandidateError, decide_candidate
 from app.models import (
@@ -58,7 +61,7 @@ from app.models import (
 from app.pipeline import analyze
 from app.runtime import channel_sender
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", route_class=RedactingRoute)
 
 Limit = Annotated[int, Query(ge=1, le=500)]
 Offset = Annotated[int, Query(ge=0)]
@@ -87,7 +90,12 @@ def _finding_out(finding: Finding, asset: Asset, vuln: Vulnerability | None) -> 
     )
 
 
-@router.get("/findings", response_model=Page[FindingOut], tags=["zagrożenia"])
+@router.get(
+    "/findings",
+    response_model=Page[FindingOut],
+    tags=["zagrożenia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def list_findings(
     session: SessionDep,
     status_filter: Annotated[str, Query(alias="status")] = "active",
@@ -149,19 +157,32 @@ def _finding_detail(session: Session, finding_id: uuid.UUID) -> FindingDetailOut
     )
 
 
-@router.get("/findings/{finding_id}", response_model=FindingDetailOut, tags=["zagrożenia"])
+@router.get(
+    "/findings/{finding_id}",
+    response_model=FindingDetailOut,
+    tags=["zagrożenia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def get_finding(finding_id: uuid.UUID, session: SessionDep) -> FindingDetailOut:
     return _finding_detail(session, finding_id)
 
 
 @router.patch("/findings/{finding_id}", response_model=FindingDetailOut, tags=["zagrożenia"])
 def update_finding(
-    finding_id: uuid.UUID, payload: FindingPatchIn, session: SessionDep
+    finding_id: uuid.UUID,
+    payload: FindingPatchIn,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require("findings:update"))],
+    request: Request,
+    audit_sink: AuditSinkDep,
 ) -> FindingDetailOut:
-    """Zmiana statusu albo osoby odpowiedzialnej. Ocena ryzyka nie jest edytowalna."""
+    """Zmiana statusu albo osoby odpowiedzialnej. Ocena ryzyka nie jest edytowalna.
+    Akceptacja ryzyka wymaga dodatkowo uprawnienia `risk:accept`."""
     finding = session.get(Finding, finding_id)
     if finding is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono findingu")
+    if payload.status == "accepted_risk":
+        ensure(principal, "risk:accept", request, audit_sink)
     before = {"status": finding.status, "assignee": finding.assignee}
     if payload.status in NEEDS_REASON and len(payload.reason.strip()) < 3:
         raise HTTPException(
@@ -181,14 +202,14 @@ def update_finding(
                 kind="status_changed" if before["status"] != after["status"] else "assigned",
                 before=before,
                 after=after,
-                actor=f"user:{payload.actor}",
+                actor=principal.actor,
                 reason=reason,
             )
         )
         audit.record(
             session,
             audit.AuditEvent(
-                actor=f"user:{payload.actor}",
+                actor=principal.actor,
                 action="finding_updated",
                 reason=reason,
                 inputs={"before": before, "after": after},
@@ -200,7 +221,12 @@ def update_finding(
     return _finding_detail(session, finding_id)
 
 
-@router.get("/threat-feed", response_model=ThreatFeedOut, tags=["zagrożenia"])
+@router.get(
+    "/threat-feed",
+    response_model=ThreatFeedOut,
+    tags=["zagrożenia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def threat_feed(
     session: SessionDep,
     scope: Literal["ours", "all"] = "ours",
@@ -306,7 +332,12 @@ def _feed_status(session: Session) -> list[FeedStatusOut]:
     return result
 
 
-@router.get("/feeds", response_model=list[FeedStatusOut], tags=["zagrożenia"])
+@router.get(
+    "/feeds",
+    response_model=list[FeedStatusOut],
+    tags=["zagrożenia"],
+    dependencies=[Depends(require("findings:read"))],
+)
 def feeds_status(session: SessionDep) -> list[FeedStatusOut]:
     return _feed_status(session)
 
@@ -317,13 +348,22 @@ def feeds_status(session: SessionDep) -> list[FeedStatusOut]:
     status_code=status.HTTP_202_ACCEPTED,
     tags=["zagrożenia"],
 )
-def sync_feeds(dispatcher: DispatcherDep) -> TaskOut:
+def sync_feeds(
+    dispatcher: DispatcherDep,
+    principal: Annotated[Principal, Depends(require("feeds:sync"))],
+) -> TaskOut:
     return TaskOut(
-        task_id=dispatcher.sync_feeds("api"), detail="Synchronizacja feedów zlecona workerowi"
+        task_id=dispatcher.sync_feeds(principal.actor),
+        detail="Synchronizacja feedów zlecona workerowi",
     )
 
 
-@router.get("/review-queue", response_model=list[ReviewItemOut], tags=["weryfikacja"])
+@router.get(
+    "/review-queue",
+    response_model=list[ReviewItemOut],
+    tags=["weryfikacja"],
+    dependencies=[Depends(require("review:read"))],
+)
 def review_queue(session: SessionDep) -> list[ReviewItemOut]:
     rows = session.execute(
         select(MatchCandidate, Software, Asset)
@@ -357,11 +397,12 @@ def decide_review(
     payload: ReviewDecisionIn,
     session: SessionDep,
     rulebook: RulebookDep,
+    principal: Annotated[Principal, Depends(require("review:decide"))],
 ) -> ReviewDecisionOut:
     """Decyzja człowieka. Dopiero po akceptacji powstają findingi dla tego produktu."""
     try:
         software = decide_candidate(
-            session, candidate_id, accept=payload.accept, decided_by=payload.decided_by
+            session, candidate_id, accept=payload.accept, decided_by=principal.username
         )
     except CandidateError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
@@ -372,7 +413,12 @@ def decide_review(
     )
 
 
-@router.get("/notifications", response_model=list[NotificationOut], tags=["powiadomienia"])
+@router.get(
+    "/notifications",
+    response_model=list[NotificationOut],
+    tags=["powiadomienia"],
+    dependencies=[Depends(require("notifications:read"))],
+)
 def list_notifications(session: SessionDep, limit: Limit = 50) -> list[NotificationOut]:
     rows = session.scalars(
         select(Notification).order_by(Notification.created_at.desc()).limit(limit)
@@ -381,16 +427,25 @@ def list_notifications(session: SessionDep, limit: Limit = 50) -> list[Notificat
 
 
 @router.post("/assets/import", response_model=AssetImportOut, tags=["inwentarz"])
-def import_assets_csv(payload: AssetImportIn, session: SessionDep) -> AssetImportOut:
+def import_assets_csv(
+    payload: AssetImportIn,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require("inventory:write"))],
+) -> AssetImportOut:
     """Import CSV (kolumny: name,type,address,exposure,criticality,owner,tags)."""
     rows, errors = parse_assets_csv(payload.csv)
-    result = import_assets(session, rows, source="api-csv", actor="api")
+    result = import_assets(session, rows, source="api-csv", actor=principal.actor)
     return AssetImportOut(
         created=result.created, updated=result.updated, unchanged=result.unchanged, errors=errors
     )
 
 
-@router.get("/assets/{asset_id}/details", response_model=AssetDetailOut, tags=["inwentarz"])
+@router.get(
+    "/assets/{asset_id}/details",
+    response_model=AssetDetailOut,
+    tags=["inwentarz"],
+    dependencies=[Depends(require("inventory:read"))],
+)
 def asset_details(asset_id: uuid.UUID, session: SessionDep) -> AssetDetailOut:
     asset = session.get(Asset, asset_id)
     if asset is None:
@@ -418,7 +473,12 @@ def asset_details(asset_id: uuid.UUID, session: SessionDep) -> AssetDetailOut:
     )
 
 
-@router.get("/stats", response_model=StatsOut, tags=["system"])
+@router.get(
+    "/stats",
+    response_model=StatsOut,
+    tags=["system"],
+    dependencies=[Depends(require("inventory:read"))],
+)
 def stats(session: SessionDep) -> StatsOut:
     by_status = {
         str(k): int(v)

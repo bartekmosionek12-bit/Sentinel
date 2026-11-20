@@ -8,6 +8,7 @@ from app.models.finding import (
     FindingEvent,
     UpdateRecommendation,
 )
+from app.models.iam import Permission, Role, RolePermission, User
 from app.models.inventory import (
     Asset,
     AssetHistory,
@@ -17,7 +18,6 @@ from app.models.inventory import (
     Software,
 )
 from app.models.ops import (
-    AppUser,
     AuditLog,
     FeedSync,
     LLMCache,
@@ -28,7 +28,6 @@ from app.models.ops import (
 from app.models.threat import VulnAffected, Vulnerability
 
 __all__ = [
-    "AppUser",
     "Asset",
     "AssetHistory",
     "AssetRelation",
@@ -43,10 +42,14 @@ __all__ = [
     "LLMCache",
     "MatchCandidate",
     "Notification",
+    "Permission",
+    "Role",
+    "RolePermission",
     "ScanAction",
     "ScanRun",
     "Software",
     "UpdateRecommendation",
+    "User",
     "VulnAffected",
     "Vulnerability",
 ]

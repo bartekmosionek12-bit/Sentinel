@@ -81,7 +81,7 @@ def _seed(api: TestClient) -> None:
     assert imported.status_code == 200
     assert imported.json()["created"] == 3
     assert api.post("/api/feeds/sync").status_code == 202
-    assert api.post("/api/scans", json={"actor": "anna"}).status_code == 202
+    assert api.post("/api/scans").status_code == 202
 
 
 def _json(api: TestClient, url: str) -> Any:
@@ -157,9 +157,7 @@ def test_review_queue_decision_creates_findings_only_after_acceptance(api: TestC
     assert "pakiet dystrybucji" in item["reason"]
     assert _json(api, f"/api/findings?asset_id={item['asset']['id']}")["total"] == 0
 
-    decided = api.post(
-        f"/api/review-queue/{item['id']}/decision", json={"accept": True, "decided_by": "anna"}
-    )
+    decided = api.post(f"/api/review-queue/{item['id']}/decision", json={"accept": True})
     assert decided.status_code == 200
     assert decided.json() == {"match_status": "confirmed", "findings_created": 3}
     assert _json(api, f"/api/findings?asset_id={item['asset']['id']}")["total"] == 3
@@ -176,13 +174,13 @@ def test_finding_status_change_needs_reason_for_risk_acceptance(api: TestClient)
     assert api.patch(url, json={"status": "nonsense"}).status_code == 422
     done = api.patch(
         url,
-        json={"status": "accepted_risk", "reason": "System wyłączany w grudniu", "actor": "anna"},
+        json={"status": "accepted_risk", "reason": "System wyłączany w grudniu"},
     )
     assert done.status_code == 200
     body = done.json()
     assert body["status"] == "accepted_risk"
     assert body["events"][0]["kind"] == "status_changed"
-    assert body["events"][0]["actor"] == "user:anna"
+    assert body["events"][0]["actor"] == "user:admin"
     assert _json(api, "/api/findings")["total"] == 2
     assert _json(api, "/api/findings?status=all")["total"] == 3
     assert _json(api, "/api/findings?status=accepted_risk")["total"] == 1
@@ -199,19 +197,17 @@ def test_intrusive_action_waits_for_approval_then_runs(api: TestClient, lab: Fak
     assert (action["rule_name"], action["intrusiveness"]) == ("kev_full_port_scan", 2)
     assert not any("1-65535" in call for call in lab.runner.calls)
     url = f"/api/scan-actions/{action['id']}"
-    assert api.post(f"{url}/approve", json={"actor": "anna", "reason": ""}).status_code == 422
+    assert api.post(f"{url}/approve", json={"reason": ""}).status_code == 422
 
-    approved = api.post(f"{url}/approve", json={"actor": "anna", "reason": "Okno serwisowe"})
+    approved = api.post(f"{url}/approve", json={"reason": "Okno serwisowe"})
     assert approved.status_code == 202
     assert any("1-65535" in call for call in lab.runner.calls)
     (done,) = [a for a in _json(api, "/api/scan-actions") if a["id"] == action["id"]]
-    assert (done["status"], done["approval_source"]) == ("done", "human:anna")
+    assert (done["status"], done["approval_source"]) == ("done", "human:admin")
     assert _json(api, "/api/findings")["total"] == 4
-    assert api.post(f"{url}/approve", json={"actor": "a", "reason": "abc"}).status_code == 409
+    assert api.post(f"{url}/approve", json={"reason": "abc"}).status_code == 409
     assert (
-        api.post(
-            f"/api/scan-actions/{uuid.uuid4()}/reject", json={"actor": "a", "reason": "abc"}
-        ).status_code
+        api.post(f"/api/scan-actions/{uuid.uuid4()}/reject", json={"reason": "abc"}).status_code
         == 404
     )
 
@@ -219,9 +215,7 @@ def test_intrusive_action_waits_for_approval_then_runs(api: TestClient, lab: Fak
 def test_rejected_intrusive_action_is_never_executed(api: TestClient, lab: FakeLab) -> None:
     _seed(api)
     (action,) = _json(api, "/api/scan-actions?status=awaiting_approval")
-    rejected = api.post(
-        f"/api/scan-actions/{action['id']}/reject", json={"actor": "anna", "reason": "Nie teraz"}
-    )
+    rejected = api.post(f"/api/scan-actions/{action['id']}/reject", json={"reason": "Nie teraz"})
     assert rejected.status_code == 200
     assert rejected.json()["status"] == "denied"
     assert not any("1-65535" in call for call in lab.runner.calls)

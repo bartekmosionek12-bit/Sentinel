@@ -11,13 +11,14 @@ import hashlib
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core import request_context
 from app.models.base import utcnow
 from app.models.ops import AuditLog
 
@@ -35,6 +36,14 @@ class AuditEvent:
     inputs: dict[str, Any] = field(default_factory=dict)
     object_type: str | None = None
     object_id: str | None = None
+    # Format 2 (Etap 4): kto dokładnie działał. `actor` zostaje czytelnym skrótem.
+    actor_type: str | None = None  # human, agent, system, seed_demo
+    actor_id: str | None = None  # identyfikator konta (sub z tokenu)
+    on_behalf_of: str | None = None  # dla agenta: aktor, który zlecił zadanie
+    request_id: str | None = None
+
+
+HASH_VERSION = 2
 
 
 class AuditSink(Protocol):
@@ -62,18 +71,33 @@ def compute_hash(
     object_id: str | None,
     reason: str,
     inputs: dict[str, Any],
+    *,
+    version: int = 1,
+    actor_type: str | None = None,
+    actor_id: str | None = None,
+    on_behalf_of: str | None = None,
+    request_id: str | None = None,
 ) -> str:
+    payload: dict[str, Any] = {
+        "prev": prev_hash,
+        "ts": _canonical_ts(ts),
+        "actor": actor,
+        "action": action,
+        "object_type": object_type,
+        "object_id": object_id,
+        "reason": reason,
+        "inputs": inputs,
+    }
+    if version >= 2:
+        payload |= {
+            "v": version,
+            "actor_type": actor_type,
+            "actor_id": actor_id,
+            "on_behalf_of": on_behalf_of,
+            "request_id": request_id,
+        }
     body = json.dumps(
-        {
-            "prev": prev_hash,
-            "ts": _canonical_ts(ts),
-            "actor": actor,
-            "action": action,
-            "object_type": object_type,
-            "object_id": object_id,
-            "reason": reason,
-            "inputs": inputs,
-        },
+        payload,
         sort_keys=True,
         ensure_ascii=False,
         separators=(",", ":"),
@@ -82,7 +106,18 @@ def compute_hash(
 
 
 def record(session: Session, event: AuditEvent, *, now: datetime | None = None) -> AuditLog:
-    """Dopisuje wpis do dziennika w bieżącej transakcji."""
+    """Dopisuje wpis do dziennika w bieżącej transakcji.
+
+    Pola tożsamości, których zdarzenie nie podaje, pochodzą z kontekstu bieżącego żądania API.
+    """
+    context = request_context.current()
+    if context is not None:
+        event = replace(
+            event,
+            actor_type=event.actor_type or context.actor_type,
+            actor_id=event.actor_id or context.actor_id,
+            request_id=event.request_id or context.request_id,
+        )
     if session.get_bind().dialect.name == "postgresql":
         # Serializuje dopisywanie, żeby dwa procesy nie użyły tego samego prev_hash.
         session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADVISORY_LOCK_KEY})
@@ -98,6 +133,11 @@ def record(session: Session, event: AuditEvent, *, now: datetime | None = None) 
         object_id=event.object_id,
         reason=event.reason,
         inputs=inputs,
+        actor_type=event.actor_type,
+        actor_id=event.actor_id,
+        on_behalf_of=event.on_behalf_of,
+        request_id=event.request_id,
+        hash_version=HASH_VERSION,
         prev_hash=prev_hash,
         hash=compute_hash(
             prev_hash,
@@ -108,6 +148,11 @@ def record(session: Session, event: AuditEvent, *, now: datetime | None = None) 
             event.object_id,
             event.reason,
             inputs,
+            version=HASH_VERSION,
+            actor_type=event.actor_type,
+            actor_id=event.actor_id,
+            on_behalf_of=event.on_behalf_of,
+            request_id=event.request_id,
         ),
     )
     session.add(entry)
@@ -151,6 +196,11 @@ def verify_chain(session: Session) -> ChainStatus:
             entry.object_id,
             entry.reason,
             entry.inputs,
+            version=entry.hash_version or 1,
+            actor_type=entry.actor_type,
+            actor_id=entry.actor_id,
+            on_behalf_of=entry.on_behalf_of,
+            request_id=entry.request_id,
         )
         if expected != entry.hash:
             return ChainStatus(False, count, entry.id, "treść wpisu została zmieniona")

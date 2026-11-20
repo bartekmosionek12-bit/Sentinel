@@ -69,6 +69,16 @@ class Settings(BaseSettings):
 
     api_cors_origins: str = "http://localhost:8080,http://localhost:5173"
 
+    # Tożsamość (Keycloak, OIDC). Wydawca to adres widziany przez przeglądarkę (wartość
+    # `iss` w tokenach), a klucze backend pobiera z wewnętrznego adresu Keycloaka.
+    oidc_issuer: str = "http://localhost:8080/auth/realms/sentinel"
+    oidc_jwks_url: str = "http://keycloak:8080/auth/realms/sentinel/protocol/openid-connect/certs"
+    oidc_audience: str = "sentinel-api"
+    # Klienci, których logowanie zawsze wymaga drugiego składnika (konsola /admin).
+    oidc_mfa_clients: str = "sentinel-admin"
+    # Konto awaryjne: każde użycie = wpis w audycie i alert.
+    breakglass_username: str = "breakglass-admin"
+
     @field_validator("demo_approval_expires_at", mode="before")
     @classmethod
     def _empty_as_none(cls, value: object) -> object:
@@ -86,6 +96,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
+
+    @property
+    def mfa_clients(self) -> frozenset[str]:
+        return frozenset(c.strip() for c in self.oidc_mfa_clients.split(",") if c.strip())
 
     @property
     def demo_lab_network(self) -> IPv4Network | IPv6Network:

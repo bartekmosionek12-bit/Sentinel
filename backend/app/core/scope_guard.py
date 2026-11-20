@@ -49,10 +49,10 @@ SEED_DEMO_SOURCE: Final = "seed_demo"
 
 
 class Intrusiveness(IntEnum):
-    PASSIVE = 0  # L0: źródła pasywne, bez kontaktu z celem
-    LIGHT = 1  # L1: lekki aktywny (dnsx, httpx, nmap -sV, szablony info)
-    INTRUSIVE = 2  # L2: weryfikacja podatności; wymaga zgody człowieka
-    FORBIDDEN = 3  # eksploatacja, DoS, brute force: nigdy
+    LIGHT = 1  # L1: pasywne i lekkie (feedy, dnsx, httpx, nmap -sV, szablony info)
+    INTRUSIVE = 2  # L2: pełny skan, weryfikacja podatności, skan uwierzytelniony; zgoda admina
+    REDTEAM = 3  # L3: aktywny red team systemów AI; zgoda admina z osobnym uprawnieniem
+    FORBIDDEN = 4  # eksploatacja, DoS, brute force: nigdy
 
 
 class ScopeError(Exception):
@@ -464,7 +464,9 @@ class ScopeGuard:
                 approval_source = SEED_DEMO_SOURCE
                 context["approval_expires_at"] = self._seed_demo.expires_at
             else:
-                raise ApprovalRequired(target, "Akcja L2 wymaga zatwierdzenia przez człowieka")
+                raise ApprovalRequired(
+                    target, f"Akcja L{int(intrusiveness)} wymaga zatwierdzenia przez człowieka"
+                )
             context["approval_source"] = approval_source
 
         pinned = addresses[0]

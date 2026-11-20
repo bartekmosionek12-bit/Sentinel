@@ -87,7 +87,7 @@ class ScopeOut(BaseModel):
 
 class ScopeCheckIn(BaseModel):
     target: str = Field(min_length=1, max_length=255)
-    intrusiveness: Literal[0, 1, 2] = 1
+    intrusiveness: Literal[1, 2, 3] = 1
 
 
 class ScopeCheckOut(BaseModel):
@@ -208,7 +208,6 @@ class FindingPatchIn(BaseModel):
     status: FindingStatus | None = None
     assignee: str | None = Field(default=None, max_length=255)
     reason: str = Field(default="", max_length=2000)
-    actor: str = Field(default="operator", min_length=1, max_length=255)
 
 
 class AffectedAssetOut(BaseModel):
@@ -271,7 +270,6 @@ class ReviewItemOut(BaseModel):
 
 class ReviewDecisionIn(BaseModel):
     accept: bool
-    decided_by: str = Field(default="operator", min_length=1, max_length=255)
 
 
 class ReviewDecisionOut(BaseModel):
@@ -307,12 +305,9 @@ class ScanRunOut(OrmModel):
     actions: list[ScanActionOut] = Field(default_factory=list)
 
 
-class ScanTriggerIn(BaseModel):
-    actor: str = Field(default="operator", min_length=1, max_length=255)
-
-
 class ApprovalIn(BaseModel):
-    actor: str = Field(min_length=1, max_length=255)
+    """Kto zatwierdza, wynika z tokenu; klient podaje tylko uzasadnienie."""
+
     reason: str = Field(min_length=3, max_length=2000)
 
 

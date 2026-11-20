@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import time
+import uuid
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
 from ipaddress import ip_address
+from typing import Any
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_scope_guard
+from app.api.deps import get_dispatcher, get_scope_guard
 from app.core.audit import AuditEvent, DbAuditSink
 from app.core.db import get_session
 from app.core.scope_guard import IPAddress, ScopeConfig, ScopeGuard
+from app.iam.deps import (
+    MemorySessionRegistry,
+    get_audit_sink,
+    get_role_catalog,
+    get_session_registry,
+    get_token_verifier,
+)
+from app.iam.tokens import StaticKeyProvider, TokenPolicy, TokenVerifier
 from app.main import create_app
 from app.models import Base
 
@@ -43,6 +57,112 @@ class MemoryAudit:
         return [e.action for e in self.events]
 
 
+TEST_ISSUER = "http://keycloak.test/auth/realms/sentinel"
+TEST_AUDIENCE = "sentinel-api"
+ADMIN_CLIENT = "sentinel-admin"
+DASHBOARD_CLIENT = "sentinel-dashboard"
+TEST_POLICY = TokenPolicy(
+    issuer=TEST_ISSUER, audience=TEST_AUDIENCE, mfa_clients=frozenset({ADMIN_CLIENT})
+)
+
+
+@pytest.fixture(scope="session")
+def signing_key() -> rsa.RSAPrivateKey:
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+@dataclass
+class TokenFactory:
+    """Wystawia tokeny jak Keycloak realmu `sentinel`, podpisane kluczem testowym."""
+
+    key: rsa.RSAPrivateKey
+    issued: list[dict[str, Any]] = field(default_factory=list)
+
+    def claims(
+        self,
+        roles: Iterable[str],
+        *,
+        client: str | None = None,
+        username: str | None = None,
+        sid: str | None = None,
+        amr: list[str] | None = None,
+        lifetime: int = 300,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        roles = list(roles)
+        # Jak w realmie: admin loguje się do konsoli operacyjnej (z MFA), reszta do dashboardu.
+        client = client or (ADMIN_CLIENT if "admin" in roles else DASHBOARD_CLIENT)
+        name = username or (roles[0] if roles else "anonim")
+        now = int(time.time())
+        claims: dict[str, Any] = {
+            "iss": TEST_ISSUER,
+            "aud": TEST_AUDIENCE,
+            "sub": f"sub-{name}",
+            "azp": client,
+            "iat": now,
+            "exp": now + lifetime,
+            "preferred_username": name,
+            "name": name.title(),
+            "email": f"{name}@sentinel.example",
+            "sid": sid or uuid.uuid4().hex,
+            "realm_access": {"roles": roles},
+        }
+        if amr is not None:
+            claims["amr"] = amr
+        claims.update(extra)
+        return claims
+
+    def encode(self, claims: dict[str, Any], key: rsa.RSAPrivateKey | None = None) -> str:
+        self.issued.append(claims)
+        return jwt.encode(claims, key or self.key, algorithm="RS256", headers={"kid": "test"})
+
+    def token(self, roles: Iterable[str], **kwargs: Any) -> str:
+        return self.encode(self.claims(roles, **kwargs))
+
+    def headers(self, roles: Iterable[str], **kwargs: Any) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token(roles, **kwargs)}"}
+
+
+@pytest.fixture
+def tokens(signing_key: rsa.RSAPrivateKey) -> TokenFactory:
+    return TokenFactory(signing_key)
+
+
+@pytest.fixture
+def session_registry() -> MemorySessionRegistry:
+    return MemorySessionRegistry()
+
+
+class RecordingDispatcher:
+    """Zamiast Celery zapisuje zlecenia (testy nie mają brokera)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[Any, ...]]] = []
+
+    def _record(self, name: str, *args: Any) -> str:
+        self.calls.append((name, args))
+        return f"task-{name}"
+
+    def run_scan(self, actor: str) -> str:
+        return self._record("run_scan", actor)
+
+    def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str:
+        return self._record("approve_action", action_id, approved_by, reason)
+
+    def sync_feeds(self, actor: str) -> str:
+        return self._record("sync_feeds", actor)
+
+    def generate_explanation(
+        self, cve_id: str, audience: str, actor: str, *args: Any, **kwargs: Any
+    ) -> str:
+        return self._record("generate_explanation", cve_id, audience, actor)
+
+
+@pytest.fixture
+def dispatcher() -> RecordingDispatcher:
+    return RecordingDispatcher()
+
+
 @pytest.fixture
 def session_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(
@@ -67,7 +187,13 @@ def audit_sink() -> MemoryAudit:
 
 
 @pytest.fixture
-def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
+def anon_client(
+    session_factory: sessionmaker[Session],
+    signing_key: rsa.RSAPrivateKey,
+    session_registry: MemorySessionRegistry,
+    dispatcher: RecordingDispatcher,
+) -> Iterator[TestClient]:
+    """Klient API bez tokenu. Weryfikacja tokenów kluczem testowym zamiast JWKS Keycloaka."""
     app = create_app()
 
     def _session() -> Iterator[Session]:
@@ -82,5 +208,19 @@ def client(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     )
     app.dependency_overrides[get_session] = _session
     app.dependency_overrides[get_scope_guard] = lambda: guard
+    verifier = TokenVerifier(
+        StaticKeyProvider(signing_key.public_key()), TEST_POLICY, get_role_catalog
+    )
+    app.dependency_overrides[get_token_verifier] = lambda: verifier
+    app.dependency_overrides[get_session_registry] = lambda: session_registry
+    app.dependency_overrides[get_audit_sink] = lambda: DbAuditSink(session_factory)
+    app.dependency_overrides[get_dispatcher] = lambda: dispatcher
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(anon_client: TestClient, tokens: TokenFactory) -> TestClient:
+    """Klient API zalogowany jako administrator z MFA (konsola operacyjna)."""
+    anon_client.headers.update(tokens.headers(["admin"], username="admin"))
+    return anon_client
