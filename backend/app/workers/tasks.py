@@ -11,14 +11,17 @@ from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.explainer.service import Listener
 from app.feeds.service import sync_all
-from app.models import Vulnerability
+from app.models import Report, Vulnerability
 from app.pipeline import analyze
+from app.reports.service import generate_summary
 from app.runtime import (
     channel_sender,
     explainer_service,
     feed_source,
     get_event_bus,
+    get_reports_config,
     get_rulebook,
+    local_provider,
     scan_service,
 )
 from app.workers.celery_app import celery_app
@@ -128,3 +131,21 @@ def generate_explanation(
         }
     )
     return {"status": explanation.validation, "source": explanation.source}
+
+
+@celery_app.task(name="app.workers.tasks.llm.generate_report_summary")
+def generate_report_summary(report_id: str, actor: str = "system") -> dict[str, Any]:
+    """Warstwa „W skrócie” od modelu dla raportu, który już jest w skrzynce (z szablonem)."""
+    with get_sessionmaker()() as session:
+        report = session.get(Report, uuid.UUID(report_id))
+        if report is None:
+            return {"status": "not_found"}
+        outcome = generate_summary(
+            session,
+            report,
+            get_reports_config(),
+            local_provider(get_settings()),
+            actor=actor,
+        )
+        session.commit()
+        return {"status": outcome.validation, "attempts": outcome.attempts}

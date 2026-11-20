@@ -123,6 +123,7 @@ def _url(path: str) -> str:
         .replace("{finding_id}", str(uuid.uuid4()))
         .replace("{candidate_id}", str(uuid.uuid4()))
         .replace("{action_id}", str(uuid.uuid4()))
+        .replace("{report_id}", str(uuid.uuid4()))
     )
 
 

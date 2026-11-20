@@ -48,6 +48,8 @@ class Dispatcher(Protocol):
         background: bool = False,
     ) -> str: ...
 
+    def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str: ...
+
 
 class CeleryDispatcher:
     def _send(self, name: str, *args: str) -> str:
@@ -84,6 +86,16 @@ class CeleryDispatcher:
             args=[cve_id, audience, actor, job_id, regenerate, use_external],
             # Żądanie użytkownika wyprzedza generowanie w tle.
             priority=5 if background else 0,
+        )
+        return str(result.id)
+
+    def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str:
+        from app.workers.celery_app import celery_app
+
+        result = celery_app.send_task(
+            "app.workers.tasks.llm.generate_report_summary",
+            args=[str(report_id), actor],
+            priority=5,
         )
         return str(result.id)
 

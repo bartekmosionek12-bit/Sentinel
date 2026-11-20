@@ -1,0 +1,27 @@
+# Słownik terminów dla warstwy „W skrócie”. Skróty spoza słownika są odrzucane przez rubrykę
+# prostego języka; każdy termin dostaje w interfejsie podpowiedź z definicją.
+terms:
+  CVE:
+    name: CVE
+    definition: Numer, pod którym podatność jest zapisana w publicznym rejestrze. Pozwala sprawdzić, o którą lukę chodzi.
+  KEV:
+    name: Katalog KEV
+    definition: Lista amerykańskiej agencji CISA z podatnościami, które przestępcy już wykorzystują w atakach.
+  CISA:
+    name: CISA
+    definition: Amerykańska agencja do spraw cyberbezpieczeństwa, prowadzi katalog KEV.
+  EPSS:
+    name: EPSS
+    definition: Prawdopodobieństwo, że podatność zostanie wykorzystana w ciągu najbliższych 30 dni.
+  CVSS:
+    name: CVSS
+    definition: Ocena powagi podatności w skali od 0 do 10, nadana przez jej odkrywców lub rejestr.
+  IT:
+    name: IT
+    definition: Dział informatyki.
+  WWW:
+    name: WWW
+    definition: Strony i usługi internetowe.
+  zero-day:
+    name: zero-day
+    definition: Podatność, którą przestępcy wykorzystują, zanim większość firm zdążyła ją załatać.

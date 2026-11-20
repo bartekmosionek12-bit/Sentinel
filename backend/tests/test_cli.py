@@ -94,3 +94,27 @@ def test_explain_without_model_skips_and_keeps_working(session: Session) -> None
     result = cmd_explain(session, _settings())
     assert result["generated"] == 0
     assert "LLM_MODEL" in result["skipped"]
+
+
+def test_inject_kev_refuses_without_demo_mode(session: Session) -> None:
+    from app.cli import cmd_inject_kev
+
+    with pytest.raises(CliError, match="DEMO_MODE=true"):
+        cmd_inject_kev(session, _settings(), "CVE-2021-23017")
+
+
+def test_inject_kev_in_demo_mode_reports_timings(session: Session) -> None:
+    from app.cli import cmd_inject_kev
+    from app.pipeline import analyze
+    from app.runtime import get_rulebook
+    from tests.pipeline_helpers import seed_feeds, seed_inventory
+
+    seed_feeds(session)
+    seed_inventory(session)
+    analyze(session, get_rulebook())
+    result = cmd_inject_kev(session, _settings(DEMO_MODE="true"), "cve-2021-23017")
+    assert result["report"]["title"] == "Zero-day: CVE-2021-23017"
+    assert result["timings_ms"]["total"] < 5000
+    assert result["model_summary_queued"] is False
+    with pytest.raises(CliError, match="już jest"):
+        cmd_inject_kev(session, _settings(DEMO_MODE="true"), "CVE-2021-23017")

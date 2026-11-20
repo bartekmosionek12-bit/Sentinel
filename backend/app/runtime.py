@@ -19,6 +19,7 @@ from app.feeds.base import FeedSource, OfflineSource
 from app.models import Software
 from app.notifications.channels import ChannelSender
 from app.pipeline import Rulebook
+from app.reports.config import ReportsConfig
 from app.scans.service import ScanService
 
 
@@ -67,6 +68,11 @@ def feed_source(session: Session, settings: Settings) -> FeedSource:
         )
     ]
     return OnlineSource(nvd_api_key=settings.nvd_api_key, products=products)
+
+
+@lru_cache
+def get_reports_config() -> ReportsConfig:
+    return ReportsConfig.from_dir(get_settings().rules_dir)
 
 
 @lru_cache

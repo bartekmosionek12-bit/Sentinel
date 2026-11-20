@@ -16,6 +16,7 @@ permissions:
   compliance:read: {description: "Odczyt wyników zgodności"}
   reports:read: {description: "Odczyt raportów"}
   reports:export: {description: "Eksport raportów (PDF, CSV, JSON)"}
+  reports:generate: {description: "Tworzenie raportów i zlecanie warstwy „W skrócie” modelowi", mfa: true}
   notifications:read: {description: "Odczyt powiadomień"}
   personal_data:view: {description: "Podgląd danych osobowych (każdy podgląd w audycie)"}
   secrets:redacted:view: {description: "Pełne dane techniczne (adresy, banery, dowody) poza sekretami"}

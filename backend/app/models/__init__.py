@@ -25,6 +25,7 @@ from app.models.ops import (
     ScanAction,
     ScanRun,
 )
+from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
 
 __all__ = [
@@ -43,6 +44,9 @@ __all__ = [
     "MatchCandidate",
     "Notification",
     "Permission",
+    "Report",
+    "ReportDelivery",
+    "ReportRead",
     "Role",
     "RolePermission",
     "ScanAction",

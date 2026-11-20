@@ -154,6 +154,17 @@ jobs:
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API
         run: python3 scripts/check_demo.py http://localhost:8080
+      - name: Scenariusz zero-day (syntetyczny wpis KEV, raport w skrzynce poniżej 5 s)
+        run: |
+          ./scripts/inject_kev.sh | tee zero-day.json
+          python3 - <<'PY'
+          import json, sys
+          text = open("zero-day.json", encoding="utf-8").read()
+          total = json.loads(text[text.index("\n{") + 1 if not text.startswith("{") else 0:])["timings_ms"]["total"]
+          print("czas od wpisu KEV do raportu w skrzynce:", total, "ms")
+          sys.exit(total >= 5000)
+          PY
+          python3 scripts/check_demo.py http://localhost:8080 --zero-day
       - name: Zużycie pamięci przez kontenery (do budżetu RAM)
         if: always()
         run: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'

@@ -2,6 +2,7 @@
 """Sprawdza przez API, czy seed_demo przeszedł całą ścieżkę krytyczną na demo-lab.
 
 Użycie: python3 scripts/check_demo.py http://localhost:8080
+        python3 scripts/check_demo.py http://localhost:8080 --zero-day   (po inject_kev.sh)
 Loguje się jak przeglądarka (Keycloak, PKCE, hasło i TOTP) kontami demo z pliku
 data/demo-credentials.env, który tworzy scripts/seed_demo.sh. Tylko biblioteka standardowa.
 Kod wyjścia 1, gdy którykolwiek warunek nie jest spełniony.
@@ -51,9 +52,42 @@ def get(base: str, path: str) -> object:
     return body
 
 
+def report_checks(base: str, manager: str, *, zero_day: bool) -> dict[str, bool]:
+    """Skrzynka menedżera: raport po seed_demo albo raport zero-day po inject_kev."""
+    inbox_status, inbox = call(base, "/inbox", manager)
+    items = inbox["items"] if isinstance(inbox, dict) else []  # type: ignore[index]
+    kind = "zero_day" if zero_day else "assessment"
+    report = next((r for r in items if r["kind"] == kind), None)
+    detail: object = None
+    if report is not None:
+        _, detail = call(base, f"/reports/{report['id']}", manager)
+    summary = detail.get("summary", []) if isinstance(detail, dict) else []
+    label = "zero-day" if zero_day else "po seed_demo"
+    checks = {
+        f"raport {label} w skrzynce menedżera, nieprzeczytany": inbox_status == 200
+        and report is not None
+        and report["read"] is False,
+        f"raport {label}: czerwone światło policzone przez kod": report is not None
+        and report["light"] == "red",
+        f"raport {label}: pięć odpowiedzi „W skrócie”, bez adresów IP": len(summary) == 5
+        and all(item["answer"] for item in summary)
+        and "172.30.99." not in json.dumps(detail),
+    }
+    if zero_day:
+        checks["raport zero-day dotyczy CVE-2021-23017 na proxy-01"] = (
+            isinstance(detail, dict)
+            and detail.get("title") == "Zero-day: CVE-2021-23017"
+            and any(row.get("asset") == "proxy-01" for row in detail.get("technical", []))
+        )
+    return checks
+
+
 def main() -> int:
     base = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:8080"
     demo = credentials()
+    if "--zero-day" in sys.argv:
+        manager = login(base, "sentinel-dashboard", "manager", demo["DEMO_MANAGER_PASSWORD"])
+        return report(report_checks(base, manager, zero_day=True))
     TOKEN["value"] = login(
         base, "sentinel-admin", "admin", demo["DEMO_ADMIN_PASSWORD"], demo["DEMO_ADMIN_TOTP_SECRET"]
     )
@@ -133,7 +167,12 @@ def main() -> int:
         "powiadomienie o KEV na zasobie z internetu": stats["notifications_today"] >= 1,  # type: ignore[index]
         "wyjaśnienie dostępne także bez modelu (szablon z faktami z bazy)": explained,
         "łańcuch dziennika audytu jest spójny": audit["ok"] is True,  # type: ignore[index]
+        **report_checks(base, manager, zero_day=False),
     }
+    return report(checks)
+
+
+def report(checks: dict[str, bool]) -> int:
     failed = [name for name, ok in checks.items() if not ok]
     for name, ok in checks.items():
         sys.stdout.write(f"{'OK  ' if ok else 'BŁĄD'} {name}\n")
