@@ -18,6 +18,10 @@ x-backend: &backend
   env_file: .env
   environment:
     POSTGRES_HOST: db
+    # Aplikacja łączy się własnym użytkownikiem (właściciel schematu public), nie
+    # administratorem bazy; zakłada go usługa db-init.
+    POSTGRES_USER: ${APP_DB_USER:-sentinel_app}
+    POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?Ustaw APP_DB_PASSWORD w pliku .env}
     REDIS_URL: redis://redis:6379/0
     # Domyślnie pusty zakres. scripts/seed_demo.sh podaje zakres demo-lab.
     SCOPE_FILE: ${SCOPE_FILE:-/app/rules/scope.yaml}
@@ -82,14 +86,44 @@ services:
       - core
     mem_limit: 320m
 
+  # Osobni użytkownicy bazy dla aplikacji i Keycloaka, każdy z dostępem tylko do własnego
+  # schematu. Jedyna usługa, która zna hasło administratora bazy.
+  db-init:
+    image: postgres:16-alpine
+    command:
+      - sh
+      - -c
+      - >-
+        psql -q -v app_user="$$APP_DB_USER" -v app_password="$$APP_DB_PASSWORD"
+        -v keycloak_user="$$KEYCLOAK_DB_USER" -v keycloak_password="$$KEYCLOAK_DB_PASSWORD"
+        -v db_name="$$PGDATABASE" -f /init/init_roles.sql
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-sentinel}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w pliku .env}
+      PGDATABASE: ${POSTGRES_DB:-sentinel}
+      APP_DB_USER: ${APP_DB_USER:-sentinel_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Ustaw APP_DB_PASSWORD w pliku .env}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Ustaw KEYCLOAK_DB_PASSWORD w pliku .env}
+    volumes:
+      - ./infra/postgres:/init:ro
+    restart: "no"
+    networks:
+      - core
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 64m
+
   migrate:
     <<: *backend
     # Migracje (w tym schemat `keycloak`) i kopia rules/roles.yaml w tabelach iam_*.
     command: ["sh", "-c", "alembic upgrade head && python -m app.cli sync-roles"]
     restart: "no"
     depends_on:
-      db:
-        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
 
   # Logowanie OIDC, MFA (TOTP), blokada po nieudanych próbach. Realm z infra/keycloak.
   keycloak:
@@ -98,8 +132,8 @@ services:
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-sentinel}
-      KC_DB_USERNAME: ${POSTGRES_USER:-sentinel}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w pliku .env}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Ustaw KEYCLOAK_DB_PASSWORD w pliku .env}
       KC_DB_SCHEMA: keycloak
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /auth

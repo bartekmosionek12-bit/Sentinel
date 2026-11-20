@@ -328,8 +328,11 @@ mapowanie rola → uprawnienia robi backend.
   stronę „brak dostępu”.
 - Każde żądanie dostaje `request_id` (nagłówek `X-Request-ID` od nginx albo nowy), a wpisy
   audytu mają `actor_type`, `actor_id` i `request_id` uzupełniane z kontekstu żądania.
-- Keycloak używa schematu `keycloak` w tej samej bazie i z tym samym użytkownikiem co
-  aplikacja. Osobny użytkownik z minimalnymi uprawnieniami: [ROADMAP](ROADMAP.md).
+- Keycloak używa schematu `keycloak` w tej samej instancji PostgreSQL, ale własnego
+  użytkownika bazy (decyzja z 2026-11-20). `infra/postgres/init_roles.sql` (usługa `db-init`)
+  zakłada użytkownika aplikacji (właściciel `public`) i Keycloaka (właściciel `keycloak`), bez
+  uprawnień do cudzego schematu i bez prawa tworzenia schematów; `tests/test_db_roles.py`
+  sprawdza to na PostgreSQL w CI. Osobna instancja bazy: [ROADMAP](ROADMAP.md).
 
 ---
 

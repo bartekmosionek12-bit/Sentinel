@@ -138,12 +138,11 @@ haseł ani sekretów.
   wpis w audycie. Do Etapu 5 hasło trzeba samodzielnie przechować w sejfie; od Etapu 5
   trafi do OpenBao.
 
-**Dostęp spoza localhost.** Port interfejsu nasłuchuje domyślnie tylko na `127.0.0.1`
-(`SENTINEL_BIND` w `.env`). Żeby otworzyć go w sieci, ustaw `SENTINEL_BIND=0.0.0.0` i
-`PUBLIC_URL` na adres, pod którym użytkownicy widzą system, **i postaw przed nim HTTPS**.
-Bez HTTPS logowanie spoza localhost nie zadziała: przeglądarka udostępnia Web Crypto
-(potrzebne do PKCE) tylko w bezpiecznym kontekście, a ciasteczka Keycloaka mają flagę
-`Secure`.
+**Dostęp spoza localhost.** Na razie interfejs nasłuchuje tylko na `127.0.0.1`. Dostęp z
+sieci powstanie w Etapie 9 jako profil Compose `tls`: Caddy z certyfikatem lokalnym jako
+reverse proxy dla obu konsol, API i Keycloaka. Bez HTTPS logowanie spoza localhost i tak by
+nie zadziałało: przeglądarka udostępnia Web Crypto (potrzebne do PKCE) tylko w bezpiecznym
+kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 
 ![Drugi składnik logowania admina](docs/screenshots/etap4-totp.png)
 ![Odmowy w dzienniku audytu](docs/screenshots/etap4-audyt-odmowy.png)
@@ -215,11 +214,12 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
 - System wykrywa i weryfikuje, **nie eksploatuje** podatności.
 - Nie „wykrywa zero-dayów”. Szybko łapie wczesne sygnały i odpowiada, czy i gdzie
   organizacja jest narażona.
-- Dostęp spoza localhost wymaga HTTPS przed systemem (sekcja
-  [Logowanie i role](#logowanie-i-role)); stos nie generuje jeszcze certyfikatu sam.
-- Keycloak korzysta z tej samej instancji PostgreSQL i tego samego użytkownika bazy co
-  aplikacja (osobny schemat `keycloak`). Osobny użytkownik z minimalnymi uprawnieniami jest w
-  [ROADMAP](docs/ROADMAP.md).
+- Dostęp spoza localhost dopiero w Etapie 9 (profil `tls`, sekcja
+  [Logowanie i role](#logowanie-i-role)).
+- Keycloak i aplikacja korzystają z jednej instancji PostgreSQL, ale z osobnymi
+  użytkownikami: każdy jest właścicielem tylko własnego schematu (`public` albo `keycloak`) i
+  nie ma dostępu do drugiego, co sprawdza test w CI. Hasło administratora bazy zna tylko
+  jednorazowa usługa `db-init`. Osobna instancja bazy jest w [ROADMAP](docs/ROADMAP.md).
 - Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) nie powstało: Keycloak mieści się w
   budżecie pamięci, więc fallback nie był potrzebny.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
