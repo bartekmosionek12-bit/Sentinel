@@ -322,7 +322,7 @@ mapowanie rola → uprawnienia robi backend.
   opisem, dopóki rola nie ma `secrets:redacted:view`. Redakcja jest w warstwie serializacji
   odpowiedzi API, nie w UI.
 - **Fallback** `AUTH_PROVIDER=local` (wbudowane logowanie FastAPI) **nie powstał**: Keycloak
-  26 zużywa po starcie około 500 MB przy limicie 900 MB, więc mieści się w budżecie.
+  26 zużywa po starcie 577 MiB przy limicie 900 MB (pomiar w e2e w CI), więc mieści się w budżecie.
 - Wejście do konsoli operacyjnej sprawdza endpoint `GET /api/console/admin`
   (`console:admin`); odmowa trafia do audytu (scenariusz demo 5). Interfejs tylko pokazuje
   stronę „brak dostępu”.
@@ -1003,6 +1003,10 @@ Dwie osobne aplikacje Vite w workspace npm, ze wspólną biblioteką `frontend/s
 
 ## 16. Budżet zasobów (CPU-only, 16 GB)
 
+Pomiar z Etapu 4 (e2e w CI po `seed_demo`, bez załadowanego modelu): cały stos z demo-lab
+zajmuje około 1,6 GB, z czego Keycloak 577 MiB, API 85 MiB, workery 90–135 MiB każdy,
+PostgreSQL 59 MiB, nginx 5 MiB.
+
 Pomiary z Etapu 3 (4 rdzenie Xeon 2,1 GHz, bez GPU, Ollama 0.40.16): Qwen3 4B Q4_K_M ma
 szczyt RSS 3993 MiB w przebiegu ewaluacji, **6,5–7 tokenów/s**, mediana czasu do pierwszego
 tokenu 4 s, mediana odpowiedzi 29 s. Pozostałe wartości to szacunki do zmierzenia w Etapie 4.
@@ -1018,7 +1022,7 @@ tokenu 4 s, mediana odpowiedzi 29 s. Pozostałe wartości to szacunki do zmierze
 | Worker llm | 384 MB | 150–250 MB | |
 | Celery beat | 256 MB | 80–120 MB | |
 | nginx (dwie SPA) | 128 MB | 20–40 MB | |
-| **Keycloak** | 900 MB | około 500 MB po starcie (zmierzone) | Keycloak 26.8; fallback lokalny niepotrzebny |
+| **Keycloak** | 900 MB | 577 MiB po seed_demo (CI) | Keycloak 26.8; fallback lokalny niepotrzebny |
 | **OpenBao** | 256 MB | 60–120 MB | |
 | **mcp-scanner** | 1024 MB | 200–400 MB, chwilowo 700 MB | nmap, nuclei, testssl.sh, promptfoo (Node) |
 | Ollama (Qwen3 4B) | 6 GB | 3,5–4,0 GB | `OLLAMA_KEEP_ALIVE=-1` |
