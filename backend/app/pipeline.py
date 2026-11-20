@@ -19,6 +19,7 @@ from app.matching.engine import (
     evaluate_findings,
     resolve_products,
 )
+from app.matching.signals import SignalReport, match_signals
 from app.models import Notification
 from app.notifications.channels import Sender
 from app.notifications.engine import NotificationConfig, notify
@@ -50,6 +51,7 @@ class AnalysisReport:
     products: ProductReport = field(default_factory=ProductReport)
     findings: MatchReport = field(default_factory=MatchReport)
     notifications: list[Notification] = field(default_factory=list)
+    signals: SignalReport = field(default_factory=SignalReport)
 
     def summary(self) -> dict[str, int]:
         return {
@@ -62,13 +64,14 @@ class AnalysisReport:
             "findings_resolved": len(self.findings.of_kind("resolved")),
             "versions_undetermined": self.findings.undetermined,
             "notifications": len(self.notifications),
+            "signals_created": self.signals.created,
         }
 
 
 def analyze(session: Session, rulebook: Rulebook, sender: Sender | None = None) -> AnalysisReport:
-    products = resolve_products(
-        session, build_normalizer(session, rulebook.aliases), rulebook.matching
-    )
+    normalizer = build_normalizer(session, rulebook.aliases)
+    products = resolve_products(session, normalizer, rulebook.matching)
     findings = evaluate_findings(session, rulebook.scoring)
+    signals = match_signals(session, normalizer, rulebook.matching)
     notifications = notify(session, findings.changes, rulebook.notifications, sender)
-    return AnalysisReport(products, findings, notifications)
+    return AnalysisReport(products, findings, notifications, signals)

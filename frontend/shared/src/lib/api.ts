@@ -233,6 +233,21 @@ export interface ReviewItem {
   asset: AssetRef;
 }
 
+export interface SignalItem {
+  id: string;
+  cve_id: string;
+  source: string;
+  vendor: string;
+  product: string;
+  score: number;
+  method: string;
+  reason: string;
+  kev_due_date: string | null;
+  created_at: string;
+  software: Software;
+  asset: AssetRef;
+}
+
 export interface ScanAction {
   id: string;
   scan_run_id: string;
@@ -700,6 +715,12 @@ export const api = {
   reviewQueue: () => request<ReviewItem[]>("/review-queue"),
   decideReview: (id: string, accept: boolean) =>
     request<{ match_status: string; findings_created: number }>(`/review-queue/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ accept }),
+    }),
+  signalQueue: () => request<SignalItem[]>("/signal-queue"),
+  decideSignal: (id: string, accept: boolean) =>
+    request<{ decision: string; findings_created: number }>(`/signal-queue/${id}/decision`, {
       method: "POST",
       body: JSON.stringify({ accept }),
     }),

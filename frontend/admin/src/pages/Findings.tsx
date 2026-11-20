@@ -155,6 +155,11 @@ function Detail({ id }: { id: string }) {
           <CardTitle className="text-base">{vuln?.cve_id ?? data.type}</CardTitle>
           <RiskBadge level={data.risk_level} score={data.risk_score} />
           {vuln?.in_kev && <KevBadge />}
+          {data.type === "signal" && (
+            <Badge variant="warn" title="Źródło nie podało wersji; dopasowanie potwierdził człowiek">
+              sygnał bez wersji
+            </Badge>
+          )}
           <Badge variant="neutral">{STATUS_LABELS[data.status]}</Badge>
         </div>
         <CardDescription>
@@ -311,6 +316,11 @@ export function Findings() {
                         <span className="ml-2">
                           <KevBadge />
                         </span>
+                      )}
+                      {finding.type === "signal" && (
+                        <Badge className="ml-2" variant="warn">
+                          sygnał bez wersji
+                        </Badge>
                       )}
                     </Td>
                     <Td>

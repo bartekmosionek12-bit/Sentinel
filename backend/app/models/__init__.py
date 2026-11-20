@@ -25,6 +25,7 @@ from app.models.inventory import (
     AssetRelation,
     CpeProduct,
     MatchCandidate,
+    SignalMatch,
     Software,
 )
 from app.models.ops import (
@@ -69,6 +70,7 @@ __all__ = [
     "RolePermission",
     "ScanAction",
     "ScanRun",
+    "SignalMatch",
     "Software",
     "UpdateRecommendation",
     "User",
