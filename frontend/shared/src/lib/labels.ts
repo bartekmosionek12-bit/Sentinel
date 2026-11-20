@@ -1,4 +1,4 @@
-import type { FindingStatus } from "@/lib/api";
+import type { FindingStatus } from "@shared/lib/api";
 
 export const STATUS_LABELS: Record<FindingStatus, string> = {
   open: "Otwarte",

@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
-import { PageHeader } from "@/components/Layout";
-import { KevBadge, RiskBadge } from "@/components/risk";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, type RiskLevel } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
+import { PageHeader } from "@shared/components/page";
+import { KevBadge, RiskBadge } from "@shared/components/risk";
+import { Badge } from "@shared/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import { api, type RiskLevel } from "@shared/lib/api";
+import { formatDateTime } from "@shared/lib/utils";
 
 const LEVELS: RiskLevel[] = ["krytyczny", "wysoki", "średni", "niski"];
 

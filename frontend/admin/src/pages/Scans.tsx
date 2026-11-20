@@ -1,16 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { PageHeader, QueryState } from "@/components/Layout";
-import { OperatorField } from "@/components/OperatorField";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, Td, Th } from "@/components/ui/table";
-import { api, type ScanAction } from "@/lib/api";
-import { useOperator } from "@/lib/operator";
-import { formatDateTime } from "@/lib/utils";
+import { PageHeader, QueryState } from "@shared/components/page";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import { Input } from "@shared/components/ui/input";
+import { Table, Td, Th } from "@shared/components/ui/table";
+import { api, type ScanAction } from "@shared/lib/api";
+import { SignedBy } from "@shared/lib/auth";
+import { formatDateTime } from "@shared/lib/utils";
 
 const STATUS: Record<
   string,
@@ -24,7 +23,7 @@ const STATUS: Record<
   failed: { label: "Błąd narzędzia", variant: "danger" },
 };
 
-const LEVELS = ["L0 pasywna", "L1 lekka", "L2 inwazyjna"];
+const LEVELS: Record<number, string> = { 1: "L1 lekka", 2: "L2 inwazyjna", 3: "L3 red team" };
 const TRIGGERS: Record<string, string> = {
   manual: "ręcznie",
   scheduled: "harmonogram",
@@ -38,7 +37,6 @@ function StatusBadge({ status }: { status: string }) {
 
 function Approvals({ actions }: { actions: ScanAction[] }) {
   const queryClient = useQueryClient();
-  const [operator, setOperator] = useOperator();
   const [reason, setReason] = useState("");
   const refresh = () => {
     setReason("");
@@ -46,14 +44,14 @@ function Approvals({ actions }: { actions: ScanAction[] }) {
     window.setTimeout(() => void queryClient.invalidateQueries(), 5000);
   };
   const approve = useMutation({
-    mutationFn: (id: string) => api.approveAction(id, operator.trim(), reason.trim()),
+    mutationFn: (id: string) => api.approveAction(id, reason.trim()),
     onSuccess: refresh,
   });
   const reject = useMutation({
-    mutationFn: (id: string) => api.rejectAction(id, operator.trim(), reason.trim()),
+    mutationFn: (id: string) => api.rejectAction(id, reason.trim()),
     onSuccess: refresh,
   });
-  const ready = operator.trim().length > 0 && reason.trim().length >= 3;
+  const ready = reason.trim().length >= 3;
   const busy = approve.isPending || reject.isPending;
   const failure = approve.error ?? reject.error;
 
@@ -68,7 +66,7 @@ function Approvals({ actions }: { actions: ScanAction[] }) {
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex flex-wrap items-end gap-3">
-          <OperatorField value={operator} onChange={setOperator} />
+          <SignedBy />
           <label className="min-w-64 flex-1 text-xs font-medium">
             Uzasadnienie decyzji (wymagane)
             <Input
@@ -149,7 +147,7 @@ export function Scans() {
     refetchInterval: 10_000,
   });
   const trigger = useMutation({
-    mutationFn: () => api.triggerScan("operator"),
+    mutationFn: () => api.triggerScan(),
     onSuccess: () => {
       window.setTimeout(() => void queryClient.invalidateQueries(), 4000);
     },

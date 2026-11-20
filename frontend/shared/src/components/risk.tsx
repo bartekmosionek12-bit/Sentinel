@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import type { RiskLevel } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { Badge } from "@shared/components/ui/badge";
+import type { RiskLevel } from "@shared/lib/api";
+import { cn } from "@shared/lib/utils";
 
 const LEVEL_STYLE: Record<RiskLevel, string> = {
   krytyczny: "border-red-200 bg-red-50 text-risk-critical",

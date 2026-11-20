@@ -164,7 +164,6 @@ export interface FindingPatch {
   status?: FindingStatus;
   assignee?: string | null;
   reason?: string;
-  actor?: string;
 }
 
 export interface Threat {
@@ -349,11 +348,25 @@ export class ApiError extends Error {
   }
 }
 
+/** Dostawca tokenu dostępu; ustawia go `AuthProvider` po zalogowaniu. */
+type TokenSource = { token: () => string | null; onUnauthorized: () => void };
+let tokenSource: TokenSource = { token: () => null, onUnauthorized: () => undefined };
+
+export function setTokenSource(source: TokenSource): void {
+  tokenSource = source;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = tokenSource.token();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
+  if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) {
     let message = `Błąd serwera (${response.status})`;
     try {
@@ -366,11 +379,82 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, message);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/** Strumień SSE przez fetch: EventSource nie potrafi wysłać nagłówka Authorization. */
+function streamEvents<E extends { type: string }>(
+  path: string,
+  onEvent: (event: E) => void,
+  isTerminal: (event: E) => boolean,
+): () => void {
+  const controller = new AbortController();
+  const lost = () =>
+    onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" } as unknown as E);
+  void (async () => {
+    try {
+      const response = await fetch(`/api${path}`, {
+        headers: { Accept: "text/event-stream", ...authHeaders() },
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        if (response.status === 401) tokenSource.onUnauthorized();
+        lost();
+        return;
+      }
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary >= 0) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const data = chunk
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trimStart())
+            .join("\n");
+          if (data) {
+            const event = JSON.parse(data) as E;
+            onEvent(event);
+            if (isTerminal(event)) {
+              controller.abort();
+              return;
+            }
+          }
+          boundary = buffer.indexOf("\n\n");
+        }
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.warn("SSE", error);
+        lost();
+      }
+    }
+  })();
+  return () => controller.abort();
+}
+
+export interface Me {
+  username: string;
+  display_name: string;
+  email: string;
+  kind: "human" | "agent" | "system";
+  roles: string[];
+  permissions: string[];
+  mfa: boolean;
+  client_id: string;
 }
 
 export const api = {
   health: () => request<Health>("/health"),
+  me: () => request<Me>("/me"),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  adminConsoleAccess: () => request<void>("/console/admin").then(() => true),
   assets: () => request<Page<Asset>>("/assets?limit=500"),
   createAsset: (input: AssetInput) =>
     request<Asset>("/assets", { method: "POST", body: JSON.stringify(input) }),
@@ -397,7 +481,6 @@ export const api = {
     findingId: string,
     body: {
       audience: Audience;
-      actor: string;
       regenerate?: boolean;
       provider?: "local" | "external";
     },
@@ -407,47 +490,36 @@ export const api = {
       body: JSON.stringify(body),
     }),
   /** Strumień zdarzeń generowania (SSE). Zwraca funkcję zamykającą połączenie. */
-  explanationEvents: (jobId: string, onEvent: (event: ExplanationEvent) => void) => {
-    const source = new EventSource(`/api/explanations/jobs/${jobId}/events`);
-    source.onmessage = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as ExplanationEvent;
-      onEvent(event);
-      if (event.type === "done" || event.type === "error") source.close();
-    };
-    source.onerror = () => {
-      source.close();
-      onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" });
-    };
-    return () => source.close();
-  },
+  explanationEvents: (jobId: string, onEvent: (event: ExplanationEvent) => void) =>
+    streamEvents<ExplanationEvent>(
+      `/explanations/jobs/${jobId}/events`,
+      onEvent,
+      (event) => event.type === "done" || event.type === "error",
+    ),
   threatFeed: (scope: "ours" | "all") => request<ThreatFeed>(`/threat-feed?scope=${scope}`),
   syncFeeds: () => request<Task>("/feeds/sync", { method: "POST" }),
   reviewQueue: () => request<ReviewItem[]>("/review-queue"),
-  decideReview: (id: string, accept: boolean, decidedBy: string) =>
+  decideReview: (id: string, accept: boolean) =>
     request<{ match_status: string; findings_created: number }>(`/review-queue/${id}/decision`, {
       method: "POST",
-      body: JSON.stringify({ accept, decided_by: decidedBy }),
+      body: JSON.stringify({ accept }),
     }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
-  triggerScan: (actor: string) =>
-    request<Task>("/scans", {
-      method: "POST",
-      body: JSON.stringify({ actor }),
-    }),
+  triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
-  approveAction: (id: string, actor: string, reason: string) =>
+  approveAction: (id: string, reason: string) =>
     request<Task>(`/scan-actions/${id}/approve`, {
       method: "POST",
-      body: JSON.stringify({ actor, reason }),
+      body: JSON.stringify({ reason }),
     }),
-  rejectAction: (id: string, actor: string, reason: string) =>
+  rejectAction: (id: string, reason: string) =>
     request<ScanAction>(`/scan-actions/${id}/reject`, {
       method: "POST",
-      body: JSON.stringify({ actor, reason }),
+      body: JSON.stringify({ reason }),
     }),
   notifications: () => request<NotificationItem[]>("/notifications?limit=20"),
   scope: () => request<Scope>("/scope"),
-  checkScope: (target: string, intrusiveness: 0 | 1 | 2) =>
+  checkScope: (target: string, intrusiveness: 1 | 2 | 3) =>
     request<ScopeCheck>("/scope/check", {
       method: "POST",
       body: JSON.stringify({ target, intrusiveness }),

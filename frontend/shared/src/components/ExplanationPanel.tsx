@@ -2,11 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, FileText, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { api, type Audience, type Explanation } from "@/lib/api";
-import { useOperator } from "@/lib/operator";
-import { cn, formatDateTime } from "@/lib/utils";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { api, type Audience, type Explanation } from "@shared/lib/api";
+import { cn, formatDateTime } from "@shared/lib/utils";
 
 const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
   { value: "executive", label: "Zarządczy", hint: "1–2 zdania dla zarządu" },
@@ -69,7 +68,6 @@ export function ExplanationPanel({ findingId }: { findingId: string }) {
   const [audience, setAudience] = useState<Audience>("operational");
   const [live, setLive] = useState<Live>({ state: "idle" });
   const [notice, setNotice] = useState<string | null>(null);
-  const [operator] = useOperator();
   const close = useRef<(() => void) | null>(null);
   const queryClient = useQueryClient();
 
@@ -94,7 +92,6 @@ export function ExplanationPanel({ findingId }: { findingId: string }) {
     try {
       const job = await api.requestExplanation(findingId, {
         audience,
-        actor: operator || "operator",
         regenerate,
       });
       if (!job.job_id) {

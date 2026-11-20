@@ -9,19 +9,11 @@ import {
   ScrollText,
   Server,
   ShieldAlert,
-  type LucideIcon,
 } from "lucide-react";
 
-export interface NavItem {
-  path: string;
-  label: string;
-  icon: LucideIcon;
-  /** Etap planu, w którym widok dostaje dane. Brak = działa już teraz. */
-  stage?: number;
-  summary?: string;
-}
+import type { NavGroup } from "@shared/components/AppShell";
 
-export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Przegląd",
     items: [

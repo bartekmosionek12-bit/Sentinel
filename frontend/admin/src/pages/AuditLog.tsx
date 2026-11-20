@@ -1,13 +1,13 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { PageHeader, QueryState } from "@/components/Layout";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Table, Td, Th } from "@/components/ui/table";
-import { api } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
+import { PageHeader, QueryState } from "@shared/components/page";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { Card } from "@shared/components/ui/card";
+import { Table, Td, Th } from "@shared/components/ui/table";
+import { api } from "@shared/lib/api";
+import { formatDateTime } from "@shared/lib/utils";
 
 const PAGE_SIZE = 50;
 

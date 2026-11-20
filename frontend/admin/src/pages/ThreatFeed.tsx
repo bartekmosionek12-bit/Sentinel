@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { PageHeader, QueryState } from "@/components/Layout";
-import { KevBadge, RiskBadge } from "@/components/risk";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
-import { Table, Td, Th } from "@/components/ui/table";
-import { api } from "@/lib/api";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { PageHeader, QueryState } from "@shared/components/page";
+import { KevBadge, RiskBadge } from "@shared/components/risk";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader } from "@shared/components/ui/card";
+import { Table, Td, Th } from "@shared/components/ui/table";
+import { api } from "@shared/lib/api";
+import { formatDate, formatDateTime } from "@shared/lib/utils";
 
 const FEED_NAMES: Record<string, string> = {
   nvd: "NVD",

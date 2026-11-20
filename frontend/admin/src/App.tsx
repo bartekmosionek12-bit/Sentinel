@@ -1,22 +1,72 @@
+import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { Layout } from "@/components/Layout";
 import { NAV_GROUPS } from "@/navigation";
 import { Assets } from "@/pages/Assets";
 import { AuditLog } from "@/pages/AuditLog";
 import { Dashboard } from "@/pages/Dashboard";
 import { Findings } from "@/pages/Findings";
-import { Planned } from "@/pages/Planned";
 import { ReviewQueue } from "@/pages/ReviewQueue";
 import { Scans } from "@/pages/Scans";
 import { Scope } from "@/pages/Scope";
 import { ThreatFeed } from "@/pages/ThreatFeed";
+import { AppShell } from "@shared/components/AppShell";
+import { Planned } from "@shared/components/Planned";
+import { api, ApiError } from "@shared/lib/api";
+import { AccessDenied } from "@shared/lib/auth";
+import { useAuth } from "@shared/lib/auth-context";
 
 const planned = NAV_GROUPS.flatMap((group) => group.items).filter((item) => item.stage);
 
+/** Konsola operacyjna jest dla administratora zalogowanego z TOTP. O wejściu decyduje API
+ *  (`console:admin`); odmowa trafia do dziennika audytu, a każda operacja i tak ma osobne
+ *  uprawnienie sprawdzane przy wywołaniu. */
 export function App() {
+  const { me } = useAuth();
+  const access = useQuery({
+    queryKey: ["console-access", "admin"],
+    queryFn: api.adminConsoleAccess,
+    retry: false,
+    staleTime: Infinity,
+  });
+  if (access.isPending) {
+    return <p className="p-8 text-sm text-muted-foreground">Sprawdzanie uprawnień…</p>;
+  }
+  if (access.error) {
+    if (!(access.error instanceof ApiError) || access.error.status !== 403) {
+      return (
+        <p className="p-8 text-sm text-red-700">
+          Nie udało się sprawdzić uprawnień: {access.error.message}
+        </p>
+      );
+    }
+    const admin = me?.roles.includes("admin");
+    return (
+      <AccessDenied title="Brak dostępu do konsoli operacyjnej">
+        {admin ? (
+          <p>
+            Operacje administratora wymagają logowania z drugim składnikiem (TOTP). Wyloguj się
+            i zaloguj ponownie do konsoli operacyjnej.
+          </p>
+        ) : (
+          <p>
+            Ta konsola jest przeznaczona dla administratorów bezpieczeństwa. Próba dostępu
+            została zapisana w dzienniku audytu. Przegląd stanu bezpieczeństwa znajdziesz w{" "}
+            <a className="underline" href="/dashboard/">
+              dashboardzie
+            </a>
+            .
+          </p>
+        )}
+      </AccessDenied>
+    );
+  }
   return (
-    <Layout>
+    <AppShell
+      navGroups={NAV_GROUPS}
+      subtitle="Konsola operacyjna"
+      footer="Decyzje podejmuje kod. Model językowy tylko tłumaczy."
+    >
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/zasoby" element={<Assets />} />
@@ -31,6 +81,6 @@ export function App() {
         ))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Layout>
+    </AppShell>
   );
 }

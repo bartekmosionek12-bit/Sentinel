@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
-import { PageHeader } from "@/components/Layout";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
-import { api } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
+import { PageHeader } from "@shared/components/page";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import { Input, Select } from "@shared/components/ui/input";
+import { api } from "@shared/lib/api";
+import { formatDateTime } from "@shared/lib/utils";
 
 function ScopeList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
   return (
@@ -30,17 +30,17 @@ function ScopeList({ title, items, empty }: { title: string; items: string[]; em
   );
 }
 
-const LEVELS: { value: 0 | 1 | 2; label: string }[] = [
-  { value: 0, label: "L0: pasywny" },
-  { value: 1, label: "L1: lekki aktywny" },
-  { value: 2, label: "L2: inwazyjny (wymaga zgody)" },
+const LEVELS: { value: 1 | 2 | 3; label: string }[] = [
+  { value: 1, label: "L1: pasywny i lekki" },
+  { value: 2, label: "L2: inwazyjny (wymaga zgody admina)" },
+  { value: 3, label: "L3: red team systemów AI (wymaga zgody admina)" },
 ];
 
 export function Scope() {
   const queryClient = useQueryClient();
   const { data: scope, error } = useQuery({ queryKey: ["scope"], queryFn: api.scope });
   const [target, setTarget] = useState("");
-  const [level, setLevel] = useState<0 | 1 | 2>(1);
+  const [level, setLevel] = useState<1 | 2 | 3>(1);
   const check = useMutation({
     mutationFn: () => api.checkScope(target.trim(), level),
     onSuccess: () => {
@@ -146,7 +146,7 @@ export function Scope() {
               <Select
                 className="mt-1"
                 value={level}
-                onChange={(e) => setLevel(Number(e.target.value) as 0 | 1 | 2)}
+                onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3)}
               >
                 {LEVELS.map((item) => (
                   <option key={item.value} value={item.value}>

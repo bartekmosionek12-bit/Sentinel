@@ -1,12 +1,27 @@
+/** Szkielet obu konsol: menu boczne, nagłówek ze stanem systemu i zalogowanym użytkownikiem. */
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/navigation";
+import { Badge } from "@shared/components/ui/badge";
+import { api } from "@shared/lib/api";
+import { UserMenu } from "@shared/lib/auth";
+import { cn } from "@shared/lib/utils";
+
+export interface NavItem {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+  /** Etap planu, w którym widok dostaje dane. Brak = działa już teraz. */
+  stage?: number;
+  summary?: string;
+}
+
+export interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
 
 function SystemStatus() {
   const { data, isError, isPending } = useQuery({
@@ -48,7 +63,17 @@ function DemoDataNotice() {
   );
 }
 
-export function Layout({ children }: { children: ReactNode }) {
+export function AppShell({
+  navGroups,
+  subtitle,
+  footer,
+  children,
+}: {
+  navGroups: NavGroup[];
+  subtitle: string;
+  footer: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
@@ -57,7 +82,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="text-base font-semibold">Sentinel ASI</span>
         </div>
         <nav className="flex-1 space-y-6 px-3 pb-6" aria-label="Nawigacja główna">
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.title}>
               <p className="px-2 pb-2 text-xs font-medium tracking-wide text-slate-500 uppercase">
                 {group.title}
@@ -85,14 +110,14 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <p className="px-5 pb-4 text-xs text-slate-500">
-          Decyzje podejmuje kod. Model językowy tylko tłumaczy.
+          {footer}
         </p>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 md:px-8">
           <nav className="flex gap-1 overflow-x-auto md:hidden" aria-label="Nawigacja mobilna">
-            {NAV_GROUPS.flatMap((g) => g.items).map(({ path, label, icon: Icon }) => (
+            {navGroups.flatMap((g) => g.items).map(({ path, label, icon: Icon }) => (
               <NavLink
                 key={path}
                 to={path}
@@ -107,43 +132,15 @@ export function Layout({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
-          <span className="hidden text-sm text-muted-foreground md:block">
-            Attack Surface Intelligence
-          </span>
-          <SystemStatus />
+          <span className="hidden text-sm text-muted-foreground md:block">{subtitle}</span>
+          <div className="flex items-center gap-3">
+            <SystemStatus />
+            <UserMenu />
+          </div>
         </header>
         <DemoDataNotice />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
       </div>
     </div>
   );
-}
-
-export function PageHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-export function QueryState({
-  isPending,
-  error,
-  empty,
-  emptyText,
-}: {
-  isPending: boolean;
-  error: Error | null;
-  empty: boolean;
-  emptyText: string;
-}) {
-  if (isPending) return <p className="p-5 text-sm text-muted-foreground">Wczytywanie…</p>;
-  if (error)
-    return (
-      <p className="p-5 text-sm text-red-700">Nie udało się wczytać danych: {error.message}</p>
-    );
-  if (empty) return <p className="p-5 text-sm text-muted-foreground">{emptyText}</p>;
-  return null;
 }

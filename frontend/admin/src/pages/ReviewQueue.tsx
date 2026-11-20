@@ -1,17 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { PageHeader, QueryState } from "@/components/Layout";
-import { OperatorField } from "@/components/OperatorField";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, Td, Th } from "@/components/ui/table";
-import { api } from "@/lib/api";
-import { useOperator } from "@/lib/operator";
+import { PageHeader, QueryState } from "@shared/components/page";
+import { Button } from "@shared/components/ui/button";
+import { Card, CardContent } from "@shared/components/ui/card";
+import { Table, Td, Th } from "@shared/components/ui/table";
+import { api } from "@shared/lib/api";
+import { SignedBy } from "@shared/lib/auth";
 
 export function ReviewQueue() {
   const queryClient = useQueryClient();
-  const [operator, setOperator] = useOperator();
   const [message, setMessage] = useState<string | null>(null);
   const { data, isPending, error } = useQuery({
     queryKey: ["review-queue"],
@@ -19,7 +17,7 @@ export function ReviewQueue() {
   });
   const decide = useMutation({
     mutationFn: ({ id, accept }: { id: string; accept: boolean }) =>
-      api.decideReview(id, accept, operator.trim()),
+      api.decideReview(id, accept),
     onSuccess: (result, variables) => {
       setMessage(
         variables.accept
@@ -29,7 +27,6 @@ export function ReviewQueue() {
       void queryClient.invalidateQueries();
     },
   });
-  const ready = operator.trim().length > 0;
 
   return (
     <>
@@ -39,7 +36,7 @@ export function ReviewQueue() {
       />
       <Card className="mb-6">
         <CardContent className="flex flex-wrap items-end gap-4 pt-5">
-          <OperatorField value={operator} onChange={setOperator} />
+          <SignedBy />
           <p className="max-w-xl text-xs text-muted-foreground">
             Decyzja trafia do dziennika audytu razem z imieniem. Pakiety dystrybucji (np. z Debiana)
             często mają poprawki bezpieczeństwa bez zmiany numeru wersji, dlatego system nie zgaduje
@@ -94,7 +91,7 @@ export function ReviewQueue() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        disabled={!ready || decide.isPending}
+                        disabled={decide.isPending}
                         onClick={() => decide.mutate({ id: item.id, accept: true })}
                       >
                         Potwierdź
@@ -102,7 +99,7 @@ export function ReviewQueue() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={!ready || decide.isPending}
+                        disabled={decide.isPending}
                         onClick={() => decide.mutate({ id: item.id, accept: false })}
                       >
                         Odrzuć

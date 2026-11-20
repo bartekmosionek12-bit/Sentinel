@@ -1,6 +1,6 @@
-import { PageHeader } from "@/components/Layout";
-import { Card, CardContent } from "@/components/ui/card";
-import type { NavItem } from "@/navigation";
+import { PageHeader } from "@shared/components/page";
+import { Card, CardContent } from "@shared/components/ui/card";
+import type { NavItem } from "@shared/components/AppShell";
 
 export function Planned({ item }: { item: NavItem }) {
   return (

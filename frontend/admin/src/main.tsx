@@ -4,7 +4,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import { App } from "@/App";
-import "@/index.css";
+import { AuthProvider } from "@shared/lib/auth";
+import "@shared/index.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -16,9 +17,11 @@ if (!root) throw new Error("Brak elementu #root");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <AuthProvider app="admin">
+        <BrowserRouter basename="/admin">
+          <App />
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

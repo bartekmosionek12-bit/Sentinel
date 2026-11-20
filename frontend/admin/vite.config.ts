@@ -1,12 +1,3 @@
-import path from "node:path";
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { sentinelApp } from "../vite.shared.ts";
 
-const apiTarget = process.env.VITE_API_PROXY ?? "http://localhost:8000";
-
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
-  server: { port: 5173, proxy: { "/api": apiTarget } },
-});
+export default sentinelApp("admin", 5173);

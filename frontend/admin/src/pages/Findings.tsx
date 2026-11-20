@@ -1,19 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
-import { PageHeader, QueryState } from "@/components/Layout";
-import { OperatorField } from "@/components/OperatorField";
-import { KevBadge, RiskBadge, RiskBar } from "@/components/risk";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
-import { Table, Td, Th } from "@/components/ui/table";
-import { ExplanationPanel } from "@/components/ExplanationPanel";
-import { api, type FindingDetail, type FindingStatus } from "@/lib/api";
-import { STATUS_LABELS } from "@/lib/labels";
-import { useOperator } from "@/lib/operator";
-import { cn, formatDate, formatDateTime } from "@/lib/utils";
+import { PageHeader, QueryState } from "@shared/components/page";
+import { KevBadge, RiskBadge, RiskBar } from "@shared/components/risk";
+import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import { Input, Select } from "@shared/components/ui/input";
+import { Table, Td, Th } from "@shared/components/ui/table";
+import { ExplanationPanel } from "@shared/components/ExplanationPanel";
+import { api, type FindingDetail, type FindingStatus } from "@shared/lib/api";
+import { STATUS_LABELS } from "@shared/lib/labels";
+import { SignedBy } from "@shared/lib/auth";
+import { cn, formatDate, formatDateTime } from "@shared/lib/utils";
 
 const FILTERS: { value: string; label: string }[] = [
   { value: "active", label: "Aktywne" },
@@ -77,11 +76,10 @@ function Breakdown({ finding }: { finding: FindingDetail }) {
 
 function StatusForm({ finding }: { finding: FindingDetail }) {
   const queryClient = useQueryClient();
-  const [operator, setOperator] = useOperator();
   const [status, setStatus] = useState<FindingStatus>(finding.status);
   const [reason, setReason] = useState("");
   const update = useMutation({
-    mutationFn: () => api.updateFinding(finding.id, { status, reason, actor: operator.trim() }),
+    mutationFn: () => api.updateFinding(finding.id, { status, reason }),
     onSuccess: () => {
       setReason("");
       void queryClient.invalidateQueries({ queryKey: ["findings"] });
@@ -123,7 +121,7 @@ function StatusForm({ finding }: { finding: FindingDetail }) {
           onChange={(e) => setReason(e.target.value)}
         />
       </label>
-      <OperatorField value={operator} onChange={setOperator} />
+      <SignedBy />
       <Button type="submit" disabled={update.isPending || status === finding.status}>
         Zapisz status
       </Button>
