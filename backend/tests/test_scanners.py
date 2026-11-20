@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from app.core.scope_guard import Intrusiveness, ScopeConfig, ScopeGuard
-from app.scanners.nmap import NmapAdapter, parse_nmap_xml
+from app.scanners.nmap import NmapAdapter, expand_ports, parse_nmap_xml
 from app.scanners.runner import SubprocessRunner, ToolError, build_argv
+from app.scanners.top_ports import TOP_1000_TCP
 from tests.conftest import FakeResolver, MemoryAudit
 from tests.scanner_fakes import FakeRunner, fixture
 
+RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
 SCOPE = {"allow": {"cidrs": ["172.30.99.0/24"]}, "deny": {"cidrs": ["172.30.99.1/32"]}}
 
 
@@ -121,7 +126,48 @@ def test_runner_rejects_plain_targets_and_unknown_binaries(guard: ScopeGuard) ->
     assert build_argv("nmap", ["-sV"], target) == ("nmap", "-sV", "--", "172.30.99.10")
 
 
-@pytest.mark.parametrize("ports", ["80;id", "top-0", "top-99999", "", "80 443"])
+def _port_set(spec: str) -> set[int]:
+    ports: set[int] = set()
+    for token in spec.split(","):
+        first, _, last = token.partition("-")
+        ports.update(range(int(first), int(last or first) + 1))
+    return ports
+
+
+def test_top_1000_list_has_exactly_1000_ports() -> None:
+    assert len(_port_set(TOP_1000_TCP)) == 1000
+
+
+def test_extra_ports_extend_top_1000_instead_of_replacing_it() -> None:
+    top = _port_set(TOP_1000_TCP)
+    assert 6379 not in top
+    combined = _port_set(expand_ports("top-1000,6379,27017"))
+    assert combined == top | {6379, 27017}
+    assert expand_ports("80,81,82,443,1-3") == "1-3,80-82,443"
+
+
+def test_light_scan_rule_covers_top_1000_and_our_extra_ports(guard: ScopeGuard) -> None:
+    rules = yaml.safe_load((RULES_DIR / "scan_rules.yaml").read_text(encoding="utf-8"))
+    scanned = _port_set(expand_ports(rules["service_ports"]))
+    assert _port_set(TOP_1000_TCP) <= scanned
+    assert {6379, 5984, 9200, 11211, 27017} <= scanned
+
+    seen: list[str] = []
+
+    def handler(argv: tuple[str, ...]) -> str:
+        seen.append(argv[argv.index("-p") + 1])
+        return "<nmaprun/>"
+
+    target = guard.authorize(
+        "172.30.99.10", tool="x", intrusiveness=Intrusiveness.LIGHT, rule_name="r"
+    )
+    NmapAdapter(FakeRunner(handler)).scan_services(target, ports=rules["service_ports"])
+    assert _port_set(seen[0]) == scanned
+
+
+@pytest.mark.parametrize(
+    "ports", ["80;id", "top-0", "top-99999", "top-100", "", "80 443", "0", "70000", "9-1", "80-"]
+)
 def test_invalid_port_specs_are_rejected(guard: ScopeGuard, ports: str) -> None:
     target = guard.authorize(
         "172.30.99.10", tool="x", intrusiveness=Intrusiveness.LIGHT, rule_name="r"
