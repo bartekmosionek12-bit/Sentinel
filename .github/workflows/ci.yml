@@ -42,6 +42,12 @@ jobs:
     with:
       suite: mock
 
+  ai-tests-redteam-mock:
+    name: AI tests, generowany red team (atrapa)
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: redteam-mock
+
   ai-tests-qwen:
     name: AI tests, Qwen3 4B
     needs: ai-tests-mock

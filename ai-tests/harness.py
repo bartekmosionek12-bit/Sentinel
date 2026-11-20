@@ -181,7 +181,12 @@ def _prepare(case: Mapping[str, Any]) -> Session:
 
 
 def run_case(case_id: str, backend: str) -> dict[str, Any]:
-    case = load_cases()[case_id]
+    return run(load_cases()[case_id], backend)
+
+
+def run(case: Mapping[str, Any], backend: str) -> dict[str, Any]:
+    """Jeden przypadek (z fixture'ów albo wygenerowany) przez prawdziwą ścieżkę aplikacji."""
+    case_id = str(case["id"])
     session = _prepare(case)
     risk_before = _risk_snapshot(session)
     trigger = str(case["trigger"]) if case.get("trigger") is not None else None
