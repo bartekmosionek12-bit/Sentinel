@@ -1074,11 +1074,11 @@ R1–R15 z wersji 1 obowiązują. Nowe:
 | 0–3 | architektura, szkielet, ścieżka krytyczna, AI Explainer | zrobione (#1, #9, #12, #13) |
 | **3b** | ta aktualizacja architektury, issues, Qwen3 4B domyślny | ten PR |
 | **4** | Keycloak, MFA admina, model uprawnień, szkielety dwóch konsol (przeniesienie widoków), macierz rola × endpoint | #8 |
-| **4b** | `ai-tests/` z promptfoo + zadanie CI; raporty dwuwarstwowe i skrzynka menedżera; scenariusz zero-day | #4, nowe |
-| **5** | serwer MCP + agent (plan → zatwierdzenie → wykonanie) + OpenBao i SSH 15 min + skan uwierzytelniony w demo-lab + kill switch + nuclei w L2 | nowe, #11 |
-| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md | #6, nowe |
-| **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5, nowe |
-| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab | nowe |
+| **4b** | `ai-tests/` z promptfoo + zadanie CI; raporty dwuwarstwowe i skrzynka menedżera; scenariusz zero-day | #4, #14, #15 |
+| **5** | serwer MCP + agent (plan → zatwierdzenie → wykonanie) + OpenBao i SSH 15 min + skan uwierzytelniony w demo-lab + kill switch + nuclei w L2 | #16, #17, #11 |
+| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md | #6, #18 |
+| **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5 |
+| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab | #19 |
 | **9** | 5 scenariuszy demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline | #7 |
 
 **Linia cięcia** (odpada od dołu listy ze specyfikacji, więc najpierw sandbox): KRI, DORA, CRA
