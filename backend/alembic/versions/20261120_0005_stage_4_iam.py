@@ -9,6 +9,8 @@
   wersja formatu skrótu. Istniejące wpisy dostają `hash_version = 1` i weryfikują się po
   starym wzorze; nowe są w formacie 2. Dodanie kolumn nie zmienia istniejących wierszy, więc
   nie narusza triggera „tylko do dopisywania”.
+- schemat `keycloak` w tej samej bazie: tabele Keycloaka (KC_DB_SCHEMA), oddzielone od
+  tabel aplikacji. Migracje Keycloak robi sam; cofnięcie tej migracji schematu nie usuwa.
 
 Revision ID: 0005
 Revises: 0004
@@ -30,6 +32,8 @@ JSON = sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgres
 
 
 def upgrade() -> None:
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("CREATE SCHEMA IF NOT EXISTS keycloak")
     op.create_table(
         "iam_user",
         sa.Column("id", sa.Uuid(), nullable=False),

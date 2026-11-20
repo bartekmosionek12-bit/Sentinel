@@ -61,9 +61,7 @@ TEST_ISSUER = "http://keycloak.test/auth/realms/sentinel"
 TEST_AUDIENCE = "sentinel-api"
 ADMIN_CLIENT = "sentinel-admin"
 DASHBOARD_CLIENT = "sentinel-dashboard"
-TEST_POLICY = TokenPolicy(
-    issuer=TEST_ISSUER, audience=TEST_AUDIENCE, mfa_clients=frozenset({ADMIN_CLIENT})
-)
+TEST_POLICY = TokenPolicy(issuer=TEST_ISSUER, audience=TEST_AUDIENCE)
 
 
 @pytest.fixture(scope="session")
@@ -90,8 +88,11 @@ class TokenFactory:
         **extra: Any,
     ) -> dict[str, Any]:
         roles = list(roles)
-        # Jak w realmie: admin loguje się do konsoli operacyjnej (z MFA), reszta do dashboardu.
+        # Jak w realmie: admin loguje się do konsoli operacyjnej hasłem i TOTP (amr pwd+otp),
+        # reszta do dashboardu samym hasłem.
         client = client or (ADMIN_CLIENT if "admin" in roles else DASHBOARD_CLIENT)
+        if amr is None:
+            amr = ["pwd", "otp"] if "admin" in roles and client == ADMIN_CLIENT else ["pwd"]
         name = username or (roles[0] if roles else "anonim")
         now = int(time.time())
         claims: dict[str, Any] = {
@@ -107,7 +108,7 @@ class TokenFactory:
             "sid": sid or uuid.uuid4().hex,
             "realm_access": {"roles": roles},
         }
-        if amr is not None:
+        if amr:
             claims["amr"] = amr
         claims.update(extra)
         return claims

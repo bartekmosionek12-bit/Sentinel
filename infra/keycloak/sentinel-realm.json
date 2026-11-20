@@ -1,0 +1,240 @@
+{
+  "realm": "sentinel",
+  "displayName": "Sentinel ASI",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["pl", "en"],
+  "defaultLocale": "pl",
+  "passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)",
+
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 43200,
+  "clientSessionIdleTimeout": 0,
+  "clientSessionMaxLifespan": 0,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanLogin": 900,
+  "actionTokenGeneratedByUserLifespan": 300,
+
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+  "otpSupportedApplications": ["totpAppFreeOTPName", "totpAppGoogleName", "totpAppMicrosoftAuthenticatorName"],
+
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "enabledEventTypes": [
+    "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR", "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+    "REFRESH_TOKEN_ERROR", "UPDATE_TOTP", "REMOVE_TOTP", "UPDATE_PASSWORD", "UPDATE_CREDENTIAL",
+    "REMOVE_CREDENTIAL", "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+
+  "roles": {
+    "realm": [
+      {"name": "admin", "description": "Administrator bezpieczeństwa: konsola operacyjna, wymaga MFA (rules/roles.yaml)"},
+      {"name": "manager", "description": "Menedżer: tylko odczyt, dane wrażliwe zredagowane"},
+      {"name": "auditor", "description": "Audytor: odczyt i dziennik audytu, bez danych osobowych"},
+      {"name": "agent", "description": "Konto usługowe agenta AI (Etap 5)"},
+      {"name": "system", "description": "Konto usługowe potoku i workerów"}
+    ]
+  },
+
+  "authenticationFlows": [
+    {
+      "id": "5e7d2c0a-4b1f-4c55-9a51-6d1f3c0a0001",
+      "alias": "sentinel-admin-mfa",
+      "description": "Konsola operacyjna: hasło przy każdym logowaniu (bez ponownego użycia sesji SSO z dashboardu), a dla roli admin także TOTP",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {"authenticator": "auth-username-password-form", "authenticatorConfig": "sentinel-amr-pwd", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false},
+        {"flowAlias": "sentinel-admin-otp", "authenticatorFlow": true, "requirement": "CONDITIONAL", "priority": 20, "userSetupAllowed": false}
+      ]
+    },
+    {
+      "id": "5e7d2c0a-4b1f-4c55-9a51-6d1f3c0a0002",
+      "alias": "sentinel-admin-otp",
+      "description": "TOTP obowiązkowy dla roli admin; bez skonfigurowanego TOTP Keycloak wymusi jego dodanie",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {"authenticator": "conditional-user-role", "authenticatorConfig": "sentinel-role-admin", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10, "userSetupAllowed": false},
+        {"authenticator": "auth-otp-form", "authenticatorConfig": "sentinel-amr-otp", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20, "userSetupAllowed": false}
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {"alias": "sentinel-amr-pwd", "config": {"default.reference.value": "pwd", "default.reference.maxAge": "0"}},
+    {"alias": "sentinel-amr-otp", "config": {"default.reference.value": "otp", "default.reference.maxAge": "0"}},
+    {"alias": "sentinel-role-admin", "config": {"condUserRole": "admin", "negate": "false"}}
+  ],
+
+  "clients": [
+    {
+      "clientId": "sentinel-admin",
+      "name": "Sentinel ASI: konsola operacyjna",
+      "description": "Konsola operacyjna. Rola admin loguje się zawsze z TOTP (przepływ sentinel-admin-mfa); inni bez TOTP i bez operacji wymagających MFA.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "${PUBLIC_URL:http://localhost:8080}",
+      "baseUrl": "/admin/",
+      "redirectUris": ["${PUBLIC_URL:http://localhost:8080}/admin/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_URL:http://localhost:8080}/admin/*",
+        "access.token.lifespan": "300"
+      },
+      "authenticationFlowBindingOverrides": {
+        "browser": "5e7d2c0a-4b1f-4c55-9a51-6d1f3c0a0001"
+      },
+      "protocolMappers": [
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "config": {"access.token.claim": "true", "id.token.claim": "true", "introspection.token.claim": "true"}
+        },
+        {
+          "name": "audience-sentinel-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {"included.custom.audience": "sentinel-api", "access.token.claim": "true", "id.token.claim": "false", "introspection.token.claim": "true"}
+        }
+      ]
+    },
+    {
+      "clientId": "sentinel-dashboard",
+      "name": "Sentinel ASI: dashboard menedżera",
+      "description": "Dashboard menedżera. Logowanie hasłem; operacje wymagające MFA są niedostępne.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "${PUBLIC_URL:http://localhost:8080}",
+      "baseUrl": "/dashboard/",
+      "redirectUris": ["${PUBLIC_URL:http://localhost:8080}/dashboard/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_URL:http://localhost:8080}/dashboard/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "config": {"access.token.claim": "true", "id.token.claim": "true", "introspection.token.claim": "true"}
+        },
+        {
+          "name": "audience-sentinel-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {"included.custom.audience": "sentinel-api", "access.token.claim": "true", "id.token.claim": "false", "introspection.token.claim": "true"}
+        }
+      ]
+    },
+    {
+      "clientId": "sentinel-agent",
+      "name": "Sentinel ASI: agent AI",
+      "description": "Konto usługowe agenta (Etap 5). Sekret generuje Keycloak; tokeny ważne 5 minut.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {"access.token.lifespan": "300"},
+      "protocolMappers": [
+        {
+          "name": "audience-sentinel-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {"included.custom.audience": "sentinel-api", "access.token.claim": "true", "id.token.claim": "false", "introspection.token.claim": "true"}
+        }
+      ]
+    },
+    {
+      "clientId": "sentinel-pipeline",
+      "name": "Sentinel ASI: potok i workery",
+      "description": "Konto usługowe procesów systemowych. Sekret generuje Keycloak; tokeny ważne 5 minut.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {"access.token.lifespan": "300"},
+      "protocolMappers": [
+        {
+          "name": "audience-sentinel-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {"included.custom.audience": "sentinel-api", "access.token.claim": "true", "id.token.claim": "false", "introspection.token.claim": "true"}
+        }
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "service-account-sentinel-agent",
+      "enabled": true,
+      "serviceAccountClientId": "sentinel-agent",
+      "realmRoles": ["agent"]
+    },
+    {
+      "username": "service-account-sentinel-pipeline",
+      "enabled": true,
+      "serviceAccountClientId": "sentinel-pipeline",
+      "realmRoles": ["system"]
+    },
+    {
+      "username": "breakglass-admin",
+      "firstName": "Konto",
+      "lastName": "awaryjne",
+      "enabled": true,
+      "realmRoles": ["admin"],
+      "requiredActions": ["CONFIGURE_TOTP"]
+    }
+  ]
+}

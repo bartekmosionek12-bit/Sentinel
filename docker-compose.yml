@@ -4,6 +4,8 @@
 #   core      API, baza, kolejka, workery. Bez dostępu do celów skanowania.
 #   llm       model językowy (Ollama). `internal: true`: model nie ma wyjścia do internetu,
 #             a widzą go tylko API (stan modelu) i worker `llm` (generowanie).
+#   Keycloak (logowanie, MFA) działa w `core`: korzysta z tej samej bazy (osobny schemat
+#             `keycloak`), a z zewnątrz jest dostępny tylko przez nginx pod /auth/realms.
 #   demo-lab  celowo podatne środowisko testowe. `internal: true`, czyli bez wyjścia
 #             na zewnątrz i bez portów na hoście. Widzi ją wyłącznie worker `scans`.
 
@@ -22,6 +24,10 @@ x-backend: &backend
     DEMO_APPROVAL_EXPIRES_AT: ${DEMO_APPROVAL_EXPIRES_AT:-}
     FEEDS_DIR: /app/data/feeds
     DEMO_FEEDS_DIR: /app/demo-feeds
+    # Tokeny wystawia Keycloak pod publicznym adresem interfejsu; klucze API pobiera
+    # wewnętrznie, z sieci core.
+    OIDC_ISSUER: ${PUBLIC_URL:-http://localhost:8080}/auth/realms/sentinel
+    OIDC_JWKS_URL: http://keycloak:8080/auth/realms/sentinel/protocol/openid-connect/certs
   volumes:
     # Snapshoty feedów pobrane przez scripts/fetch_feeds.sh (poza Gitem).
     - ./data/feeds:/app/data/feeds:ro
@@ -78,11 +84,58 @@ services:
 
   migrate:
     <<: *backend
-    command: ["alembic", "upgrade", "head"]
+    # Migracje (w tym schemat `keycloak`) i kopia rules/roles.yaml w tabelach iam_*.
+    command: ["sh", "-c", "alembic upgrade head && python -m app.cli sync-roles"]
     restart: "no"
     depends_on:
       db:
         condition: service_healthy
+
+  # Logowanie OIDC, MFA (TOTP), blokada po nieudanych próbach. Realm z infra/keycloak.
+  keycloak:
+    image: keycloak/keycloak:26.8.2
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-sentinel}
+      KC_DB_USERNAME: ${POSTGRES_USER:-sentinel}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w pliku .env}
+      KC_DB_SCHEMA: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Adres, pod którym przeglądarka widzi Keycloaka (przez nginx). Wewnątrz sieci core
+      # API pobiera klucze z http://keycloak:8080 (backchannel dynamiczny).
+      KC_HOSTNAME: ${PUBLIC_URL:-http://localhost:8080}/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # Tymczasowe konto administratora Keycloaka; konsola /auth/admin nie jest wystawiona
+      # przez nginx, używa go tylko kcadm.sh w kontenerze (seed_demo, breakglass).
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-kcadmin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Ustaw KEYCLOAK_ADMIN_PASSWORD w pliku .env}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=30
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q UP <&3"
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - core
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 900m
 
   api:
     <<: *backend
@@ -164,10 +217,13 @@ services:
       context: frontend
     image: sentinel-asi/frontend:dev
     ports:
-      # Tylko lokalnie: interfejs nie jest wystawiany do sieci.
-      - "127.0.0.1:8080:8080"
+      # Domyślnie tylko lokalnie. Wystawienie w sieci (SENTINEL_BIND=0.0.0.0) wymaga HTTPS:
+      # ciasteczka logowania Keycloaka mają flagę Secure (README, sekcja „Logowanie”).
+      - "${SENTINEL_BIND:-127.0.0.1}:8080:8080"
     depends_on:
       api:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     restart: unless-stopped
     read_only: true

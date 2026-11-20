@@ -102,7 +102,8 @@ def test_unknown_permission_fails_at_import() -> None:
 
 # --- macierz rola × endpoint ----------------------------------------------------------
 
-# Rodzaje wywołujących: role z tokenu i klient, który go wystawił (MFA wynika z klienta).
+# Rodzaje wywołujących: role z tokenu i klient, który go wystawił. MFA wynika z `amr`
+# (admin w konsoli operacyjnej loguje się hasłem i TOTP, patrz infra/keycloak).
 CALLERS: dict[str, tuple[list[str], str]] = {
     "admin_mfa": (["admin"], ADMIN_CLIENT),
     "admin_bez_mfa": (["admin"], DASHBOARD_CLIENT),
@@ -147,8 +148,8 @@ GUARDED = _guarded_routes()
 @pytest.mark.parametrize("caller", list(CALLERS))
 def test_role_endpoint_matrix(anon_client: TestClient, tokens: TokenFactory, caller: str) -> None:
     roles, client_id = CALLERS[caller]
-    mfa = client_id == ADMIN_CLIENT
-    granted = CATALOG.resolve(frozenset(roles), mfa=mfa if roles != ["agent"] else False)
+    mfa = caller == "admin_mfa"
+    granted = CATALOG.resolve(frozenset(roles), mfa=mfa)
     headers = tokens.headers(roles, client=client_id, username=f"u-{caller}")
     wrong: list[str] = []
     # Wylogowanie unieważnia sesję tokenu, więc idzie na końcu.
@@ -272,9 +273,14 @@ def test_admin_without_mfa_keeps_read_but_loses_operations(
     assert "MFA" in denied.json()["detail"]
 
 
-def test_mfa_from_amr_claim_counts(anon_client: TestClient, tokens: TokenFactory) -> None:
-    headers = tokens.headers(["admin"], client=DASHBOARD_CLIENT, amr=["pwd", "otp"])
-    assert anon_client.post("/api/scans", headers=headers).status_code == 202
+def test_mfa_comes_from_amr_not_from_client(anon_client: TestClient, tokens: TokenFactory) -> None:
+    """Sam klient konsoli operacyjnej nie oznacza MFA: menedżer loguje się tam bez TOTP."""
+    with_otp = tokens.headers(["admin"], client=DASHBOARD_CLIENT, amr=["pwd", "otp"])
+    assert anon_client.post("/api/scans", headers=with_otp).status_code == 202
+    password_only = tokens.headers(["admin"], client=ADMIN_CLIENT, amr=["pwd"])
+    assert anon_client.post("/api/scans", headers=password_only).status_code == 403
+    no_amr = tokens.headers(["admin"], client=ADMIN_CLIENT, amr=[])
+    assert anon_client.post("/api/scans", headers=no_amr).status_code == 403
 
 
 def test_service_accounts_never_count_as_mfa() -> None:
@@ -493,7 +499,7 @@ def test_l3_approval_needs_its_own_permission(
     response = anon_client.post(
         f"/api/scan-actions/{action_id}/approve",
         json={"reason": "Okno serwisowe"},
-        headers=tokens.headers(["operator"], username="olek", client=ADMIN_CLIENT),
+        headers=tokens.headers(["operator"], username="olek", amr=["pwd", "otp"]),
     )
     assert response.status_code == expected
     if expected == 403:

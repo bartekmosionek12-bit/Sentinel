@@ -67,10 +67,10 @@ class StaticKeyProvider:
 class TokenPolicy:
     issuer: str
     audience: str
-    # Klienci, których logowanie zawsze wymaga drugiego składnika (konsola /admin).
-    mfa_clients: frozenset[str]
-    # Wartości `amr`, które oznaczają drugi składnik (gdy Keycloak je wystawia).
-    mfa_methods: frozenset[str] = frozenset({"otp", "mfa", "hwk", "webauthn"})
+    # Wartości `amr`, które oznaczają drugi składnik. Keycloak wpisuje je z konfiguracji
+    # kroków przepływu logowania (infra/keycloak: `pwd` dla hasła, `otp` dla TOTP), więc
+    # token mówi, czym naprawdę uwierzytelnił się użytkownik, a nie tylko z jakiej aplikacji.
+    mfa_methods: frozenset[str] = frozenset({"otp", "hwk", "webauthn"})
     leeway_seconds: int = 10
 
 
@@ -118,7 +118,7 @@ def principal_from_claims(
     roles = frozenset(_strings(realm_access.get("roles") if isinstance(realm_access, dict) else []))
     client_id = str(claims.get("azp") or claims.get("client_id") or "")
     amr = frozenset(_strings(claims.get("amr")))
-    mfa = client_id in policy.mfa_clients or bool(amr & policy.mfa_methods)
+    mfa = bool(amr & policy.mfa_methods)
     kind = catalog.kind_of(roles)
     username = str(claims.get("preferred_username") or claims.get("client_id") or claims["sub"])
     if kind != "human":

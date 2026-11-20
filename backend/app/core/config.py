@@ -74,8 +74,6 @@ class Settings(BaseSettings):
     oidc_issuer: str = "http://localhost:8080/auth/realms/sentinel"
     oidc_jwks_url: str = "http://keycloak:8080/auth/realms/sentinel/protocol/openid-connect/certs"
     oidc_audience: str = "sentinel-api"
-    # Klienci, których logowanie zawsze wymaga drugiego składnika (konsola /admin).
-    oidc_mfa_clients: str = "sentinel-admin"
     # Konto awaryjne: każde użycie = wpis w audycie i alert.
     breakglass_username: str = "breakglass-admin"
 
@@ -96,10 +94,6 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
-
-    @property
-    def mfa_clients(self) -> frozenset[str]:
-        return frozenset(c.strip() for c in self.oidc_mfa_clients.split(",") if c.strip())
 
     @property
     def demo_lab_network(self) -> IPv4Network | IPv6Network:

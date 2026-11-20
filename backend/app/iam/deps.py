@@ -46,11 +46,7 @@ def get_token_verifier() -> TokenVerifier:
     from app.iam.jwks import JwksKeyProvider
 
     settings = get_settings()
-    policy = TokenPolicy(
-        issuer=settings.oidc_issuer,
-        audience=settings.oidc_audience,
-        mfa_clients=settings.mfa_clients,
-    )
+    policy = TokenPolicy(issuer=settings.oidc_issuer, audience=settings.oidc_audience)
     return TokenVerifier(JwksKeyProvider(settings.oidc_jwks_url), policy, get_role_catalog)
 
 
