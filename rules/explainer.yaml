@@ -1,0 +1,41 @@
+# Konfiguracja AI Explainera. Model językowy tylko formułuje tekst z faktów podanych
+# przez kod; wszystko, co model może „wiedzieć”, pochodzi z bazy i z tego pliku.
+
+# Limity per poziom odbiorcy: max_tokens ogranicza generowanie, a walidator odrzuca
+# odpowiedź spoza widełek znaków i zdań.
+audiences:
+  executive:
+    max_tokens: 110
+    min_chars: 60
+    max_chars: 420
+    min_sentences: 1
+    max_sentences: 2
+  operational:
+    max_tokens: 230
+    min_chars: 150
+    max_chars: 900
+    min_sentences: 2
+    max_sentences: 6
+  technical:
+    max_tokens: 420
+    min_chars: 250
+    max_chars: 1800
+    min_sentences: 3
+    max_sentences: 16
+    required_sections: ["Co to jest", "Co zrobić", "Jak sprawdzić"]
+
+# Maksymalna długość opisu CVE przekazywanego modelowi (znaki).
+description_max_chars: 500
+
+# Polecenia sprawdzające wersję, które model może przytoczyć. Walidator odrzuca każde
+# polecenie w odpowiedzi, którego nie ma na tej liście dla danego produktu.
+verify_commands:
+  "apache:http_server": ["httpd -v", "apache2 -v"]
+  "f5:nginx": ["nginx -v"]
+  "redis:redis": ["redis-server --version"]
+  "openbsd:openssh": ["ssh -V"]
+  "postgresql:postgresql": ["psql --version"]
+  "oracle:mysql": ["mysql --version"]
+  "mariadb:mariadb": ["mariadb --version"]
+  "openssl:openssl": ["openssl version"]
+  "php:php": ["php -v"]

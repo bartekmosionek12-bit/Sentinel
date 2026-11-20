@@ -8,9 +8,10 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Stan:** Etap 2 z 6 (ścieżka krytyczna). Działa od początku do końca, bez internetu:
-> import inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów,
-> ocena ryzyka z rozbiciem, kolejka weryfikacji, powiadomienia. Plan:
+> **Stan:** Etap 3 z 6 (AI Explainer). Ścieżka krytyczna działa od początku do końca, bez
+> internetu: import inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do
+> zasobów, ocena ryzyka z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia
+> zagrożeń na trzech poziomach z lokalnego modelu, sprawdzane przez kod. Plan:
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), sekcja 12.
 
 ## Uruchomienie
@@ -59,6 +60,32 @@ zaimportowaniu inwentarza, przed prezentacją bez sieci). Gdy `data/feeds/` jest
 `seed_demo` używa miniaturowego, ręcznie przygotowanego zestawu z
 `backend/tests/fixtures/feeds/` (9 publicznie znanych CVE, wartości EPSS fikcyjne i tak oznaczone w pliku; interfejs pokazuje wtedy etykietę „Dane demonstracyjne”).
 
+### Wyjaśnienia z lokalnego modelu (opcjonalnie)
+
+System działa w pełni bez modelu: każde zagrożenie ma wtedy wyjaśnienie z szablonu,
+zbudowane przez kod z danych w bazie. Żeby włączyć lokalny model:
+
+```bash
+# w .env: LLM_MODEL=qwen3-4b-q4km   (wybór i porównanie z Bielikiem: eval/RESULTS.md)
+./scripts/fetch_models.sh          # około 2,5 GB, z oficjalnego repozytorium, z sumą SHA-256
+docker compose up -d
+```
+
+Model działa w Ollamie, w sieci bez dostępu do internetu. W widoku Zagrożenia panel
+„Wyjaśnienie” ma trzy poziomy (zarządczy, operacyjny, techniczny) i pokazuje odpowiedź na
+żywo. Model dostaje wyłącznie fakty z bazy, bez nazw i adresów zasobów; kontekst zasobu
+dokleja kod. Każdą odpowiedź sprawdza walidator: identyfikatory CVE, wersje, daty i polecenia
+muszą pochodzić z faktów, inaczej użytkownik dostaje wersję z szablonu. Tekst dla danego CVE
+i poziomu powstaje raz i trafia do cache. `seed_demo` zleca generowanie w tle, gdy model
+jest skonfigurowany. Na 4 rdzeniach jedna odpowiedź trwa zwykle 15–40 s.
+
+Zewnętrzny model jest domyślnie wyłączony (`EXTERNAL_LLM_ENABLED=false`). Po świadomym
+włączeniu przez administratora dostaje tylko tekst po anonimizacji (zasoby jako
+`asset_<id>`, adresy IP, domeny i e-maile zamaskowane), a każde użycie trafia do dziennika
+audytu.
+
+![Wyjaśnienie generowane na żywo](docs/screenshots/etap3-strumien.png)
+
 ## Wymagania sprzętowe
 
 4+ rdzenie CPU, 16 GB RAM, około 30 GB SSD, Docker z Compose. **GPU nie jest wymagane.**
@@ -76,6 +103,7 @@ zaimportowaniu inwentarza, przed prezentacją bez sieci). Gdy `data/feeds/` jest
 | Dopasowanie | Słownik aliasów, CPE z narzędzia, dopasowanie rozmyte z progami w [`rules/matching.yaml`](rules/matching.yaml). Niska pewność trafia do kolejki weryfikacji. Nieznana wersja nie tworzy zagrożenia. |
 | Ocena ryzyka | Jawna formuła z wagami w [`rules/scoring.yaml`](rules/scoring.yaml), rozbicie na składniki i zdanie „dlaczego” budowane przez kod. |
 | Powiadomienia | Reguły w [`rules/notifications.yaml`](rules/notifications.yaml): grupowanie per zasób, bez powtórek w ciągu doby. E-mail, Slack i Teams są wyłączone do czasu konfiguracji w `.env`. |
+| AI Explainer | Wyjaśnienia na trzech poziomach z lokalnego modelu (Ollama), generowane raz i trzymane w cache, z walidatorem faktów i wersją z szablonu, gdy model jest niedostępny albo się myli. Streaming przez SSE. Prompty wersjonowane w `backend/app/explainer/prompts/`, limity w [`rules/explainer.yaml`](rules/explainer.yaml). |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz). |
 | Interfejs | Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. |
 
@@ -124,5 +152,9 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
   (nuclei) i pozostałe narzędzia odkrywania dojdą w kolejnych etapach.
 - Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 5.
+- Walidator wyjaśnień sprawdza pochodzenie identyfikatorów, wersji, dat, poleceń i linków,
+  ale nie sens zdań. Model może więc nieprecyzyjnie streścić fakt (przykłady w
+  [eval/RESULTS.md](eval/RESULTS.md)). Dlatego decyzje i ocena ryzyka nigdy nie zależą od
+  tekstu modelu, a obok wyjaśnienia zawsze widać fakty z bazy.
 - W repozytorium nie ma modeli, snapshotów feedów, wyników skanów ani danych o
   rzeczywistej infrastrukturze.

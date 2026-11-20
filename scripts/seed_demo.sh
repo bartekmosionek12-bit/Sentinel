@@ -34,6 +34,12 @@ sleep 25
 echo "==> seed-demo w kontenerze skanera"
 docker compose exec -T worker-scans python -m app.cli seed-demo
 
+if grep -Eq '^LLM_MODEL=[^[:space:]]+' .env; then
+  echo "==> Wyjaśnienia: zlecam generowanie w tle (kolejka llm, niski priorytet)"
+  docker compose exec -T worker-llm python -m app.cli explain --queue || \
+    echo "Model niedostępny; interfejs pokaże wyjaśnienia z szablonu (scripts/fetch_models.sh)."
+fi
+
 echo
 echo "Gotowe. Interfejs: http://localhost:8080"
 echo "Uwaga: zwykłe 'docker compose up' przywraca pusty zakres skanowania."

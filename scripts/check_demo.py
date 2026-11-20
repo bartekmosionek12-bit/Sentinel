@@ -25,6 +25,17 @@ def main() -> int:
     actions = get(base, "/scan-actions")
     audit = get(base, "/audit-log/verify")
     by_cve = {(f["vulnerability"]["cve_id"], f["asset"]["name"]): f for f in findings}
+    web = by_cve.get(("CVE-2021-41773", "web-01"), {})
+    explanation = get(base, f"/findings/{web['id']}/explanation?audience=technical") if web else {}
+    llm = get(base, "/llm/status")
+    explained = (
+        isinstance(explanation, dict)
+        and isinstance(llm, dict)
+        and explanation.get("cve_id") == "CVE-2021-41773"
+        and "Co to jest:" in explanation.get("text", "")
+        and explanation.get("asset_context", "").startswith("Dotyczy: web-01")
+        and (explanation.get("source") == "template" or bool(llm.get("available")))
+    )
 
     checks = {
         "CVE-2021-41773 na web-01 jest krytyczne": by_cve.get(("CVE-2021-41773", "web-01"), {}).get(
@@ -37,12 +48,18 @@ def main() -> int:
         in by_cve,
         "pakiet z Debiana czeka w kolejce weryfikacji, bez findingów": stats["review_queue"] == 1  # type: ignore[index]
         and not any(asset == "legacy-01" for _, asset in by_cve),
-        "host spoza inwentarza oznaczony jako shadow IT": assets.get("172.30.99.14", {}).get("status")
+        "host spoza inwentarza oznaczony jako shadow IT": assets.get("172.30.99.14", {}).get(
+            "status"
+        )
         == "shadow",
-        "zasób, który nie odpowiada, oznaczony jako missing": assets.get("old-db-01", {}).get("status")
+        "zasób, który nie odpowiada, oznaczony jako missing": assets.get("old-db-01", {}).get(
+            "status"
+        )
         == "missing",
         "skan L2 wykonany ze zgodą seed_demo": any(
-            a["intrusiveness"] == 2 and a["status"] == "done" and a["approval_source"] == "seed_demo"
+            a["intrusiveness"] == 2
+            and a["status"] == "done"
+            and a["approval_source"] == "seed_demo"
             for a in actions  # type: ignore[union-attr]
         ),
         "żadna akcja nie dotknęła adresu spoza demo-lab": all(
@@ -54,6 +71,7 @@ def main() -> int:
             for f in stats["feeds"]  # type: ignore[index]
         ),
         "powiadomienie o KEV na zasobie z internetu": stats["notifications_today"] >= 1,  # type: ignore[index]
+        "wyjaśnienie dostępne także bez modelu (szablon z faktami z bazy)": explained,
         "łańcuch dziennika audytu jest spójny": audit["ok"] is True,  # type: ignore[index]
     }
     failed = [name for name, ok in checks.items() if not ok]

@@ -2,6 +2,8 @@
 #
 # Sieci (docs/ARCHITECTURE.md, sekcja 3):
 #   core      API, baza, kolejka, workery. Bez dostępu do celów skanowania.
+#   llm       model językowy (Ollama). `internal: true`: model nie ma wyjścia do internetu,
+#             a widzą go tylko API (stan modelu) i worker `llm` (generowanie).
 #   demo-lab  celowo podatne środowisko testowe. `internal: true`, czyli bez wyjścia
 #             na zewnątrz i bez portów na hoście. Widzi ją wyłącznie worker `scans`.
 
@@ -84,6 +86,9 @@ services:
 
   api:
     <<: *backend
+    networks:
+      - core
+      - llm
     healthcheck:
       test:
         - CMD
@@ -126,7 +131,28 @@ services:
   worker-llm:
     <<: *backend
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "llm", "-c", "1", "-n", "llm@%h", "--loglevel", "INFO"]
+    networks:
+      - core
+      - llm
     mem_limit: 384m
+
+  # Lokalny model językowy. Bez portów na hoście i bez dostępu do internetu: pliki modeli
+  # pobiera na hoście scripts/fetch_models.sh, a kontener tylko je wczytuje.
+  ollama:
+    image: ollama/ollama:0.40.16
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NOPRUNE: "1"
+    volumes:
+      - ollama-data:/root/.ollama
+      - ./data/models:/models:ro
+      - ./llm:/modelfiles:ro
+    restart: unless-stopped
+    networks:
+      - llm
+    mem_limit: 6g
 
   beat:
     <<: *backend
@@ -204,6 +230,8 @@ services:
 
 networks:
   core:
+  llm:
+    internal: true
   demo-lab:
     internal: true
     ipam:
@@ -213,3 +241,4 @@ networks:
 
 volumes:
   db-data:
+  ollama-data:

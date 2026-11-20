@@ -1,0 +1,184 @@
+# Zestaw ewaluacyjny AI Explainera: publicznie znane podatności z faktami w takiej postaci,
+# w jakiej składa je kod z bazy. Wartości EPSS są PRZYKŁADOWE (rząd wielkości), a nie
+# pobrane z FIRST; ewaluacja sprawdza wierność modelu faktom z kontekstu, nie same fakty.
+#
+# expect: elementy, które powinny pojawić się w odpowiedzi (sprawdzane bez wielkości liter).
+#   Domyślnie: dla poziomu technicznego i operacyjnego identyfikator CVE i wersja
+#   naprawiająca, dla zarządczego słowo „aktualiz”. Pole `expect` dopisuje własne.
+cases:
+  - cve: CVE-2021-41773
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [wersja 2.4.49]
+    fixed: 2.4.51
+    cvss: 7.5
+    epss: 0.94
+    kev: {due: 2021-11-17, action: Apply updates per vendor instructions.}
+    exploit: true
+    description: A flaw in path normalization in Apache HTTP Server 2.4.49 allows path traversal to files outside the document root; with CGI enabled it can lead to remote code execution.
+  - cve: CVE-2021-42013
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [wersja 2.4.49, wersja 2.4.50]
+    fixed: 2.4.51
+    cvss: 9.8
+    epss: 0.94
+    kev: {due: 2021-11-17, action: Apply updates per vendor instructions.}
+    exploit: true
+    description: The fix for CVE-2021-41773 in Apache HTTP Server 2.4.50 was insufficient; path traversal and remote code execution remain possible.
+  - cve: CVE-2021-23017
+    product: [f5, nginx, nginx]
+    ranges: [od 0.6.18 włącznie poniżej 1.20.1]
+    fixed: 1.20.1
+    cvss: 7.7
+    epss: 0.30
+    exploit: true
+    description: A security issue in the nginx resolver allows an attacker who can forge UDP packets from the DNS server to cause a 1-byte memory overwrite, resulting in a crash or potentially other impact.
+  - cve: CVE-2022-24735
+    product: [redis, redis, Redis]
+    ranges: [poniżej 6.2.7]
+    fixed: 6.2.7
+    cvss: 7.8
+    epss: 0.01
+    exploit: false
+    description: In Redis, a Lua script can be manipulated to overcome ACL rules or inject code that runs with the permissions of another user.
+  - cve: CVE-2021-44228
+    product: [apache, log4j, Apache Log4j]
+    ranges: [od 2.0.1 włącznie poniżej 2.15.0]
+    fixed: 2.15.0
+    cvss: 10.0
+    epss: 0.97
+    kev: {due: 2021-12-24, action: For all affected software assets for which updates exist, apply updates per vendor instructions.}
+    exploit: true
+    description: JNDI features in Apache Log4j2 configuration, log messages and parameters do not protect against attacker-controlled LDAP and other JNDI endpoints, allowing remote code execution.
+  - cve: CVE-2022-22965
+    product: [vmware, spring_framework, Spring Framework]
+    ranges: [poniżej 5.3.18]
+    fixed: 5.3.18
+    cvss: 9.8
+    epss: 0.97
+    kev: {due: 2022-04-25, action: Apply updates per vendor instructions.}
+    exploit: true
+    description: A Spring MVC or Spring WebFlux application running on JDK 9+ may be vulnerable to remote code execution via data binding.
+  - cve: CVE-2024-6387
+    product: [openbsd, openssh, OpenSSH]
+    ranges: [od 8.5p1 włącznie poniżej 9.8p1]
+    fixed: 9.8p1
+    cvss: 8.1
+    epss: 0.40
+    exploit: true
+    commands: [ssh -V]
+    description: A signal handler race condition in the OpenSSH server (sshd) may allow an unauthenticated remote attacker to execute code as root on glibc-based Linux systems.
+  - cve: CVE-2023-38408
+    product: [openbsd, openssh, OpenSSH]
+    ranges: [poniżej 9.3p2]
+    fixed: 9.3p2
+    cvss: 9.8
+    epss: 0.60
+    exploit: true
+    commands: [ssh -V]
+    description: The PKCS#11 feature in ssh-agent in OpenSSH has an insufficiently trustworthy search path, leading to remote code execution if an agent is forwarded to an attacker-controlled system.
+  - cve: CVE-2022-0778
+    product: [openssl, openssl, OpenSSL]
+    ranges: [od 1.1.1 włącznie poniżej 1.1.1n]
+    fixed: 1.1.1n
+    cvss: 7.5
+    epss: 0.05
+    exploit: false
+    commands: [openssl version]
+    description: The BN_mod_sqrt() function in OpenSSL can loop forever for non-prime moduli, which can be triggered when parsing certificates and leads to denial of service.
+  - cve: CVE-2014-0160
+    product: [openssl, openssl, OpenSSL]
+    ranges: [od 1.0.1 włącznie poniżej 1.0.1g]
+    fixed: 1.0.1g
+    cvss: 7.5
+    epss: 0.97
+    kev: {due: 2022-05-25, action: Apply updates per vendor instructions.}
+    exploit: true
+    commands: [openssl version]
+    description: The TLS heartbeat extension in OpenSSL does not properly handle heartbeat requests, allowing remote attackers to read sensitive information from process memory (Heartbleed).
+  - cve: CVE-2019-11043
+    product: [php, php, PHP]
+    ranges: [poniżej 7.1.33]
+    fixed: 7.1.33
+    cvss: 9.8
+    epss: 0.97
+    kev: {due: 2022-04-15, action: Apply updates per vendor instructions.}
+    exploit: true
+    commands: [php -v]
+    description: In certain configurations of PHP-FPM with nginx, a buffer underflow in env_path_info can lead to remote code execution.
+  - cve: CVE-2023-25690
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [od 2.4.0 włącznie poniżej 2.4.56]
+    fixed: 2.4.56
+    cvss: 9.8
+    epss: 0.20
+    exploit: false
+    description: Some mod_proxy configurations in Apache HTTP Server allow HTTP request smuggling attacks when RewriteRule or ProxyPassMatch use user-supplied data.
+  - cve: CVE-2017-9798
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [do 2.4.27 włącznie]
+    fixed: null
+    cvss: 7.5
+    epss: 0.90
+    exploit: true
+    description: Apache httpd allows remote attackers to read secret data from process memory if the Limit directive can be set in .htaccess (Optionsbleed).
+  - cve: CVE-2019-0211
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [od 2.4.17 włącznie do 2.4.38 włącznie]
+    fixed: null
+    cvss: 7.8
+    epss: 0.50
+    kev: {due: 2022-05-03, action: Apply updates per vendor instructions.}
+    exploit: true
+    description: In Apache HTTP Server, code executing in less-privileged child processes can execute arbitrary code with the privileges of the parent process (usually root).
+  - cve: CVE-2021-40438
+    product: [apache, http_server, Apache HTTP Server]
+    ranges: [do 2.4.48 włącznie]
+    fixed: null
+    cvss: 9.0
+    epss: 0.97
+    kev: {due: 2021-12-15, action: Apply updates per vendor instructions.}
+    exploit: true
+    description: A crafted request URI-path can cause mod_proxy in Apache HTTP Server to forward the request to an origin server chosen by the remote user (server-side request forgery).
+  - cve: CVE-2023-44487
+    product: [f5, nginx, nginx]
+    ranges: [poniżej 1.25.3]
+    fixed: 1.25.3
+    cvss: 7.5
+    epss: 0.80
+    kev: {due: 2023-10-31, action: Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.}
+    exploit: true
+    description: The HTTP/2 protocol allows denial of service because request cancellation can reset many streams quickly (Rapid Reset).
+  - cve: CVE-2022-41741
+    product: [f5, nginx, nginx]
+    ranges: [od 1.1.3 włącznie poniżej 1.23.2]
+    fixed: 1.23.2
+    cvss: 7.8
+    epss: 0.01
+    exploit: false
+    description: NGINX may be vulnerable to an issue in the ngx_http_mp4_module that allows a local attacker to corrupt worker process memory using a specially crafted audio or video file.
+  - cve: CVE-2023-41056
+    product: [redis, redis, Redis]
+    ranges: [od 7.0.9 włącznie poniżej 7.0.15]
+    fixed: 7.0.15
+    cvss: 8.1
+    epss: 0.01
+    exploit: false
+    description: In certain cases Redis incorrectly handles resizing of memory buffers, which can result in integer overflow that leads to heap overflow and potential remote code execution.
+  - cve: CVE-2023-2454
+    product: [postgresql, postgresql, PostgreSQL]
+    ranges: [od 15.0 włącznie poniżej 15.3]
+    fixed: "15.3"
+    cvss: 7.2
+    epss: 0.01
+    exploit: false
+    commands: [psql --version]
+    description: Schema-scoped CREATE privileges in PostgreSQL let a user with that privilege execute arbitrary code with the privileges of a bootstrap superuser in some situations.
+  - cve: CVE-2024-21762
+    product: [fortinet, fortios, Fortinet FortiOS]
+    ranges: [od 7.4.0 włącznie poniżej 7.4.3]
+    fixed: 7.4.3
+    cvss: 9.8
+    epss: 0.90
+    kev: {due: 2024-02-16, action: Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.}
+    exploit: true
+    description: An out-of-bounds write in FortiOS SSL VPN may allow a remote unauthenticated attacker to execute arbitrary code via specially crafted HTTP requests.

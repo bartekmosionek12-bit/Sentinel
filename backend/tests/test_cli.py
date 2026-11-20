@@ -86,3 +86,11 @@ def test_sync_feeds_offline_then_analysis(
     assert result["mode"] == "offline"
     assert result["feeds"]["nvd"]["status"] == "ok"
     assert result["analysis"]["findings_created"] == 0
+
+
+def test_explain_without_model_skips_and_keeps_working(session: Session) -> None:
+    from app.cli import cmd_explain
+
+    result = cmd_explain(session, _settings())
+    assert result["generated"] == 0
+    assert "LLM_MODEL" in result["skipped"]

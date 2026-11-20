@@ -36,6 +36,18 @@ class Dispatcher(Protocol):
 
     def sync_feeds(self, actor: str) -> str: ...
 
+    def generate_explanation(
+        self,
+        cve_id: str,
+        audience: str,
+        actor: str,
+        job_id: str | None,
+        *,
+        regenerate: bool = False,
+        use_external: bool = False,
+        background: bool = False,
+    ) -> str: ...
+
 
 class CeleryDispatcher:
     def _send(self, name: str, *args: str) -> str:
@@ -53,6 +65,27 @@ class CeleryDispatcher:
 
     def sync_feeds(self, actor: str) -> str:
         return self._send("app.workers.tasks.feeds.sync_feeds", actor)
+
+    def generate_explanation(
+        self,
+        cve_id: str,
+        audience: str,
+        actor: str,
+        job_id: str | None,
+        *,
+        regenerate: bool = False,
+        use_external: bool = False,
+        background: bool = False,
+    ) -> str:
+        from app.workers.celery_app import celery_app
+
+        result = celery_app.send_task(
+            "app.workers.tasks.llm.generate_explanation",
+            args=[cve_id, audience, actor, job_id, regenerate, use_external],
+            # Żądanie użytkownika wyprzedza generowanie w tle.
+            priority=5 if background else 0,
+        )
+        return str(result.id)
 
 
 def get_dispatcher() -> Dispatcher:

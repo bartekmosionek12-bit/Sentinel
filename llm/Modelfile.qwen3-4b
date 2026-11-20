@@ -1,0 +1,20 @@
+# Qwen3 4B (Alibaba), kwantyzacja Q4_K_M z oficjalnego repozytorium Qwen/Qwen3-4B-GGUF.
+# Plik GGUF pobiera scripts/fetch_models.sh; nie trafia do Gita.
+FROM /models/Qwen3-4B-Q4_K_M.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{- range .Messages }}{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ .Content }}<|im_end|>
+{{ end }}{{- end }}<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER temperature 0.2

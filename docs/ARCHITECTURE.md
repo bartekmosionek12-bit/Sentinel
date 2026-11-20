@@ -58,6 +58,9 @@ flowchart LR
         WFEEDS["Worker feeds<br/>adaptery ThreatFeed"]
         WCORE["Worker core<br/>planner, matching,<br/>scoring, compliance,<br/>powiadomienia"]
         WLLM["Worker llm<br/>concurrency = 1"]
+    end
+
+    subgraph LLMNET["Sieć llm (internal, bez internetu)"]
         OLLAMA["Ollama<br/>model 3-4B Q4_K_M"]
     end
 
@@ -94,7 +97,8 @@ flowchart LR
     WLLM --> DB
     WSCAN --> DB
     WLLM --> OLLAMA
-    WLLM -. tokeny przez pub/sub .-> REDIS
+    WLLM -. tokeny przez strumień Redis .-> REDIS
+    API -. tylko stan modelu .-> OLLAMA
     WSCAN --> TOOLS
     TOOLS --> LAB
     WFEEDS -->|online| FEEDS
@@ -663,27 +667,33 @@ class LLMProvider(Protocol):
 
 ### Walidacja odpowiedzi
 
+Model dostaje listę faktów złożoną przez kod (`app/explainer/context.py`) i nic więcej. Walidator (`app/explainer/validator.py`) sprawdza odpowiedź względem tych samych faktów.
+
 | Kontrola | Reguła | Po niepowodzeniu |
 |---|---|---|
-| Długość | w widełkach dla poziomu (zarządczy: 1–2 zdania) | jedna ponowna próba |
-| Język | polski (heurystyka: znaki diakrytyczne i lista słów funkcyjnych) | jedna ponowna próba |
-| Identyfikatory CVE | każdy `CVE-RRRR-NNNN` w tekście musi istnieć w bazie **i** w kontekście promptu | odrzucenie |
-| Format | wymagane sekcje dla poziomu technicznego (co to jest, kroki, weryfikacja) | jedna ponowna próba |
-| Wersje i komendy | numery wersji w tekście muszą pochodzić z kontekstu | odrzucenie |
+| Identyfikatory CVE | każdy `CVE-RRRR-NNNN` w tekście musi istnieć w bazie **i** być tym z kontekstu | odrzucenie |
+| Wersje | każdy numer z kropką musi pochodzić z faktów (dozwolony prefiks, np. „gałąź 2.4”) | odrzucenie |
+| Daty | każda data musi pochodzić z faktów | odrzucenie |
+| Polecenia | tekst w znakach kodu musi być na liście `verify_commands` dla produktu (`rules/explainer.yaml`) | odrzucenie |
+| Linki | żadnych adresów URL | odrzucenie |
+| Długość | znaki i zdania w widełkach dla poziomu (`rules/explainer.yaml`) | jedna ponowna próba |
+| Język | polski (znaki diakrytyczne, słowa funkcyjne, brak innego alfabetu, mało angielskich słów) | jedna ponowna próba |
+| Format | poziom techniczny: sekcje „Co to jest”, „Co zrobić”, „Jak sprawdzić” w tej kolejności | jedna ponowna próba |
 
-Po odrzuceniu użytkownik dostaje **wyjaśnienie z szablonu** zbudowane z danych z bazy, z etykietą „wersja automatyczna”. System jest więc w pełni użyteczny także wtedy, gdy model jest wyłączony, zajęty albo się myli.
+Po odrzuceniu użytkownik dostaje **wyjaśnienie z szablonu** (`app/explainer/fallback.py`) zbudowane z tych samych faktów, z etykietą „wersja automatyczna”. Test sprawdza, że tekst z szablonu zawsze przechodzi walidator. Odrzucenie też trafia do cache, więc kolejne wyświetlenie nie pyta modelu ponownie; „Wygeneruj ponownie” w interfejsie wymusza nową próbę. Gdy model nie odpowiada, nic nie jest zapisywane, a następne żądanie próbuje znowu. Każde wywołanie modelu trafia do audit logu: kto, poziom, wersja promptu, skrót SHA-256 faktów, model, liczba prób i powody odrzucenia.
 
 ### Prompty i kolejka
 
 - Prompty leżą w `backend/app/explainer/prompts/<nazwa>.v<N>.md`. Zmiana treści oznacza nową wersję, a więc nowy klucz cache.
 - Kontekst wejściowy składa kod z pól bazy (opis CVE skrócony, CVSS, KEV, wersja naprawiająca, mitigacja z advisory). Surowy output narzędzi nigdy nie trafia do modelu.
 - Kolejka `llm` ma `concurrency=1` i priorytety: żądanie użytkownika na żywo przed generowaniem w tle.
-- Streaming: worker publikuje tokeny do Redis pub/sub, API przekazuje je przez SSE. API nie rozmawia z Ollamą bezpośrednio, więc limit jednego zadania naraz jest zawsze zachowany.
+- Streaming: worker publikuje zdarzenia (`queued`, `start`, `token`, `retry`, `done`, `error`) do strumienia Redis `llm:job:<id>` (TTL 15 minut), API przekazuje je przez SSE (`GET /api/explanations/jobs/{id}/events`). Strumień zamiast pub/sub: klient, który podłączy się chwilę po starcie, dostaje zdarzenia od początku. Tokeny są tylko podglądem; obowiązuje tekst po walidacji. API nie generuje tekstu modelem, więc limit jednego zadania naraz jest zawsze zachowany; do Ollamy pyta tylko o stan (`/api/tags`).
+- Ollama działa w osobnej sieci `internal` bez dostępu do internetu. `OllamaProvider` przyjmuje wyłącznie adres lokalny i nie używa proxy. Pliki modeli pobiera na hoście `scripts/fetch_models.sh` z przypiętej rewizji, ze sprawdzeniem SHA-256.
 - Raporty PDF: struktura i tabele pochodzą z szablonu i z bazy; model pisze tylko streszczenie i rekomendacje, z tych samych skróconych danych.
 
 ### Eval modeli
 
-Katalog `eval/`: 20–30 przypadków (CVE + kontekst zasobu + oczekiwane elementy), skrypt porównujący mały wariant Bielika z małym Qwenem (i ewentualnie trzecim kandydatem). Metryki: obecność oczekiwanych elementów, odsetek odpowiedzi przechodzących walidator, jakość polszczyzny (rubryka oceniana ręcznie na próbce plus automatyczne heurystyki), czas do pierwszego tokenu, tokeny na sekundę na CPU i szczytowe zużycie RAM. Wynik trafia do `eval/RESULTS.md` i wyznacza domyślną wartość `LLM_MODEL`. Dokładne tagi modeli potwierdzę w Etapie 3 na podstawie tego, co jest faktycznie dostępne w Ollamie.
+Katalog `eval/`: 20–30 przypadków (CVE + kontekst zasobu + oczekiwane elementy), skrypt porównujący mały wariant Bielika z małym Qwenem (i ewentualnie trzecim kandydatem). Metryki: obecność oczekiwanych elementów, odsetek odpowiedzi przechodzących walidator, jakość polszczyzny (rubryka oceniana ręcznie na próbce plus automatyczne heurystyki), czas do pierwszego tokenu, tokeny na sekundę na CPU i szczytowe zużycie RAM. Wynik trafia do `eval/RESULTS.md` i wyznacza domyślną wartość `LLM_MODEL`. Kandydaci w Etapie 3: Bielik 4.5B v3.0 Instruct (SpeakLeash i ACK Cyfronet AGH) i Qwen3 4B, oba w kwantyzacji Q4_K_M, z oficjalnych repozytoriów producentów (szczegóły w `eval/README.md`).
 
 ---
 

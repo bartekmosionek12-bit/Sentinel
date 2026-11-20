@@ -302,6 +302,44 @@ export interface ImportResult {
   errors: string[];
 }
 
+export type Audience = "technical" | "operational" | "executive";
+
+export interface Explanation {
+  finding_id: string;
+  cve_id: string;
+  audience: Audience;
+  asset_context: string;
+  text: string;
+  source: "model" | "template";
+  label: string;
+  validation: "passed" | "rejected" | "none" | "unavailable";
+  cached: boolean;
+  model: string | null;
+  prompt_version: string;
+  created_at: string | null;
+  problems: string[];
+}
+
+export interface ExplanationJob {
+  job_id: string | null;
+  detail: string;
+  explanation: Explanation | null;
+}
+
+export interface LlmStatus {
+  enabled: boolean;
+  available: boolean;
+  model: string;
+  detail: string;
+  external_enabled: boolean;
+}
+
+export type ExplanationEvent =
+  | { type: "queued" | "start" | "retry" }
+  | { type: "token"; text: string }
+  | { type: "done"; source: string; validation: string; problems?: string[] }
+  | { type: "error"; message: string };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -352,6 +390,36 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  llmStatus: () => request<LlmStatus>("/llm/status"),
+  explanation: (findingId: string, audience: Audience) =>
+    request<Explanation>(`/findings/${findingId}/explanation?audience=${audience}`),
+  requestExplanation: (
+    findingId: string,
+    body: {
+      audience: Audience;
+      actor: string;
+      regenerate?: boolean;
+      provider?: "local" | "external";
+    },
+  ) =>
+    request<ExplanationJob>(`/findings/${findingId}/explanation`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Strumień zdarzeń generowania (SSE). Zwraca funkcję zamykającą połączenie. */
+  explanationEvents: (jobId: string, onEvent: (event: ExplanationEvent) => void) => {
+    const source = new EventSource(`/api/explanations/jobs/${jobId}/events`);
+    source.onmessage = (message: MessageEvent<string>) => {
+      const event = JSON.parse(message.data) as ExplanationEvent;
+      onEvent(event);
+      if (event.type === "done" || event.type === "error") source.close();
+    };
+    source.onerror = () => {
+      source.close();
+      onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" });
+    };
+    return () => source.close();
+  },
   threatFeed: (scope: "ours" | "all") => request<ThreatFeed>(`/threat-feed?scope=${scope}`),
   syncFeeds: () => request<Task>("/feeds/sync", { method: "POST" }),
   reviewQueue: () => request<ReviewItem[]>("/review-queue"),

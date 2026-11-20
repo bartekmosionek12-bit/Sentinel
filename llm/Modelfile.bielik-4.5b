@@ -1,0 +1,14 @@
+# Bielik 4.5B v3.0 Instruct (SpeakLeash i ACK Cyfronet AGH), kwantyzacja Q4_K_M wykonana
+# lokalnie z oficjalnego pliku fp16 (speakleash/Bielik-4.5B-v3.0-Instruct-GGUF), bo
+# oficjalne repozytorium nie publikuje wariantu Q4_K_M. Szablon rozmowy odpowiada
+# `tokenizer.chat_template` zapisanemu w pliku GGUF. Plik pobiera scripts/fetch_models.sh.
+FROM /models/Bielik-4.5B-v3.0-Instruct-Q4_K_M.gguf
+
+TEMPLATE """{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"
+PARAMETER temperature 0.2

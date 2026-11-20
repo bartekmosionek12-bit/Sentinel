@@ -34,6 +34,9 @@ celery_app.conf.update(
     timezone="UTC",
     result_expires=3600,
     broker_connection_retry_on_startup=True,
+    # Priorytety w Redisie: 0 = żądanie użytkownika na żywo, 5 = generowanie w tle.
+    broker_transport_options={"priority_steps": [0, 5], "queue_order_strategy": "priority"},
+    task_default_priority=5,
     imports=("app.workers.tasks",),
     beat_schedule={
         # Feedy co 6 godzin (offline: ponowne wczytanie snapshotu niczego nie zmienia).
