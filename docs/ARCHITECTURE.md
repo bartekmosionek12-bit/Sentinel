@@ -328,8 +328,11 @@ mapowanie rola → uprawnienia robi backend.
   stronę „brak dostępu”.
 - Każde żądanie dostaje `request_id` (nagłówek `X-Request-ID` od nginx albo nowy), a wpisy
   audytu mają `actor_type`, `actor_id` i `request_id` uzupełniane z kontekstu żądania.
-- Keycloak używa schematu `keycloak` w tej samej bazie i z tym samym użytkownikiem co
-  aplikacja. Osobny użytkownik z minimalnymi uprawnieniami: [ROADMAP](ROADMAP.md).
+- Keycloak używa schematu `keycloak` w tej samej instancji PostgreSQL, ale własnego
+  użytkownika bazy (decyzja z 2026-11-20). `infra/postgres/init_roles.sql` (usługa `db-init`)
+  zakłada użytkownika aplikacji (właściciel `public`) i Keycloaka (właściciel `keycloak`), bez
+  uprawnień do cudzego schematu i bez prawa tworzenia schematów; `tests/test_db_roles.py`
+  sprawdza to na PostgreSQL w CI. Osobna instancja bazy: [ROADMAP](ROADMAP.md).
 
 ---
 
@@ -772,6 +775,20 @@ fakty i światło liczy kod (sekcja 12.3), warstwę „W skrócie” formułuje 
 walidacją i szablonem awaryjnym), `REPORT_DELIVERY` trafia do skrzynek użytkowników z rolą
 `manager`, a powiadomienie na skonfigurowane kanały.
 
+**Stan po Etapie 4b (odstępstwa od projektu):**
+
+- Doręczenie jest per rola, nie per osoba: `REPORT_DELIVERY(report_id, recipient_role,
+  channel)`, a odczyt osobno w `REPORT_READ(report_id, user_id, read_at)`. Nowy menedżer widzi
+  wcześniejsze raporty, a każdy ma własne „przeczytane”. Odbiorców ustawia `recipients` w
+  `rules/reports.yaml`.
+- Baner zero-day w konsoli menedżera odpytuje `/api/inbox` co 5 s zamiast SSE: prościej, a
+  cel „poniżej 5 s” dotyczy powstania raportu (mierzone w CI: około 50 ms bez modelu).
+- Powiadomienie o raporcie to `NOTIFICATION` kanału `in_app` z `report_id`; e-mail, Slack i
+  Teams obsłużą ten sam rekord, gdy zostaną skonfigurowane. Digesty i PDF: ROADMAP.
+- Warstwa „W skrócie” jest zapisana w samym raporcie (`summary`, `summary_source`,
+  `summary_validation`, `summary_model`), nie w `LLM_CACHE`: zależy od stanu bazy w chwili
+  raportu, więc nie ma czego współdzielić.
+
 ### 8.6 Pokrycie inwentarza i shadow IT (Etap 6)
 
 Metryka pokrycia liczona codziennie przez worker `core` i zapisywana jako szereg czasowy:
@@ -925,7 +942,10 @@ mechanizm co anonimizator dla zewnętrznego LLM, więc jest jedna ścieżka zami
   Każdy termin ze słownika dostaje w UI podpowiedź.
 - **„Szczegóły techniczne”**: tabela z bazy, zwinięta; dla menedżera z redakcją.
 - Szablon awaryjny dla każdej odpowiedzi, więc raport powstaje także bez modelu.
-- PDF: ta sama struktura w Jinja2 + WeasyPrint.
+- PDF: ta sama struktura w Jinja2 + WeasyPrint (**nie powstał w Etapie 4b**, ROADMAP).
+- Opis CVE z rejestru trafia do faktów modelu jako „tylko informacja”, ale walidator sprawdza
+  pochodzenie CVE, wersji, dat i identyfikatorów względem faktów **bez** tego opisu
+  (`app/explainer/guards.py`, sekcja 13.1).
 
 ### 12.4 Czat „czy jesteśmy podatni na X?”
 
@@ -951,6 +971,16 @@ pod nią tabela źródłowa. Odpowiedź przechodzi walidator z 12.2.
 - **Kryterium fail:** udana injection, która zmienia ocenę ryzyka albo plan agenta (po
   walidacji kodem). Sam „dziwny tekst” odrzucony przez walidator to sukces obrony.
 - CI: patrz sekcja 20, punkt 5 (runner nie uniesie pełnego zestawu na prawdziwym modelu).
+
+**Stan po Etapie 4b:** [`ai-tests/README.md`](../ai-tests/README.md). Provider promptfoo w
+Pythonie uruchamia prawdziwą ścieżkę aplikacji (raport „W skrócie” i wyjaśnienie CVE) na
+zatrutym opisie CVE, z posłuszną atrapą (każdy PR, 19 przypadków) albo z Qwen3 4B (9
+przypadków w każdym PR, 19 nocą i ręcznie); wyniki w osobnych plikach i tabelach. Asercje
+wyłącznie deterministyczne, bez oceniającego LLM. Pierwszy przebieg atrapy przepchnął przez
+walidację 12 z 17 ataków (ocena ryzyka nie zmieniła się ani razu); poprawki w
+`app/explainer/guards.py`. Przypadki są pisane ręcznie: generowany red team promptfoo z
+presetem OWASP LLM Top 10 wymaga modelu generującego i oceniającego, więc przechodzi do
+Etapu 8 razem z wyborem oceniającego. Czat, RAG i plan agenta dochodzą w swoich etapach.
 
 ### 13.2 Testowanie systemów AI w infrastrukturze (Etap 8)
 

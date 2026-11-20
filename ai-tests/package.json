@@ -1,0 +1,13 @@
+{
+  "name": "sentinel-ai-tests",
+  "private": true,
+  "description": "Testy bezpieczeństwa własnego AI (promptfoo): pośrednie prompt injection przez opisy CVE.",
+  "scripts": {
+    "mock": "./run.sh mock",
+    "qwen": "./run.sh qwen",
+    "full": "./run.sh full"
+  },
+  "devDependencies": {
+    "promptfoo": "0.125.1"
+  }
+}

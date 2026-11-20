@@ -36,6 +36,19 @@ jobs:
       - name: Pytest (bez sieci i bez modelu)
         run: uv run pytest
 
+  ai-tests-mock:
+    name: AI tests, atrapa
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: mock
+
+  ai-tests-qwen:
+    name: AI tests, Qwen3 4B
+    needs: ai-tests-mock
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: qwen
+
   migrations:
     name: Migracje na PostgreSQL 16
     runs-on: ubuntu-latest
@@ -57,7 +70,8 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: postgresql+psycopg://sentinel:ci-only@localhost:5432/sentinel
+      # Migracje jak w Compose: jako użytkownik aplikacji, nie administrator bazy.
+      DATABASE_URL: postgresql+psycopg://sentinel_app:ci-only-app@localhost:5432/sentinel
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -65,6 +79,16 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Użytkownicy bazy (infra/postgres/init_roles.sql)
+        env:
+          PGHOST: localhost
+          PGUSER: sentinel
+          PGPASSWORD: ci-only
+          PGDATABASE: sentinel
+        run: |
+          psql -q -v app_user=sentinel_app -v app_password=ci-only-app \
+            -v keycloak_user=keycloak -v keycloak_password=ci-only-kcdb \
+            -v db_name=sentinel -f ../infra/postgres/init_roles.sql
       - name: Migracja w górę, w dół i ponownie w górę
         run: |
           uv run alembic upgrade head
@@ -72,6 +96,11 @@ jobs:
           uv run alembic upgrade head
       - name: Modele zgodne z migracjami
         run: uv run alembic check
+      - name: Użytkownik aplikacji nie widzi schematu Keycloaka (i odwrotnie)
+        env:
+          SENTINEL_TEST_APP_DB_URL: postgresql+psycopg://sentinel_app:ci-only-app@localhost:5432/sentinel
+          SENTINEL_TEST_KEYCLOAK_DB_URL: postgresql+psycopg://keycloak:ci-only-kcdb@localhost:5432/sentinel
+        run: uv run pytest tests/test_db_roles.py -o addopts="" -v
 
   frontend:
     name: Frontend (eslint, typecheck, build)
@@ -133,11 +162,22 @@ jobs:
       - name: Konfiguracja demo (tylko w CI)
         run: |
           cp .env.example .env
-          sed -i 's/^DEMO_MODE=false/DEMO_MODE=true/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only/; s/^KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=ci-only-kc/' .env
+          sed -i 's/^DEMO_MODE=false/DEMO_MODE=true/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only/; s/^KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=ci-only-kc/; s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/; s/^KEYCLOAK_DB_PASSWORD=.*/KEYCLOAK_DB_PASSWORD=ci-only-kcdb/' .env
       - name: seed_demo (import, feedy offline, skan, dopasowanie, ocena ryzyka)
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API
         run: python3 scripts/check_demo.py http://localhost:8080
+      - name: Scenariusz zero-day (syntetyczny wpis KEV, raport w skrzynce poniżej 5 s)
+        run: |
+          ./scripts/inject_kev.sh | tee zero-day.json
+          python3 - <<'PY'
+          import json, sys
+          text = open("zero-day.json", encoding="utf-8").read()
+          total = json.loads(text[text.index("\n{") + 1 if not text.startswith("{") else 0:])["timings_ms"]["total"]
+          print("czas od wpisu KEV do raportu w skrzynce:", total, "ms")
+          sys.exit(total >= 5000)
+          PY
+          python3 scripts/check_demo.py http://localhost:8080 --zero-day
       - name: Zużycie pamięci przez kontenery (do budżetu RAM)
         if: always()
         run: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}'

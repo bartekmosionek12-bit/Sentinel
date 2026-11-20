@@ -210,7 +210,12 @@ class ExplainerService:
                     text, result.model, result.tokens, result.duration_ms, result.first_token_ms
                 )
                 verdict = validate(
-                    text, limits=limits, context=context, known_cves=self._known_cves(text)
+                    text,
+                    limits=limits,
+                    context=context,
+                    known_cves=self._known_cves(text),
+                    system_prompt=prompt.system,
+                    downplaying_phrases=self._config.downplaying,
                 )
                 if verdict.ok or not verdict.retryable:
                     break

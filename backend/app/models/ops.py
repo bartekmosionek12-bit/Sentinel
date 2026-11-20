@@ -91,6 +91,10 @@ class Notification(Base):
     finding_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("finding.id", ondelete="SET NULL"), index=True
     )
+    # Powiadomienie o nowym raporcie (np. zero-day) wskazuje raport w skrzynce.
+    report_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("report.id", ondelete="SET NULL"), index=True
+    )
     rule_name: Mapped[str] = mapped_column(String(128))
     channel: Mapped[str] = mapped_column(String(16))
     group_key: Mapped[str] = mapped_column(String(255), index=True)

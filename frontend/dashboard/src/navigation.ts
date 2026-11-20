@@ -14,21 +14,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Dla zarządu",
     items: [
-      {
-        path: "/raporty",
-        label: "Raporty",
-        icon: FileText,
-        stage: 4,
-        summary:
-          "Raport dwuwarstwowy: podsumowanie dla zarządu i szczegóły techniczne, do pobrania jako PDF.",
-      },
-      {
-        path: "/skrzynka",
-        label: "Skrzynka",
-        icon: Inbox,
-        stage: 4,
-        summary: "Sprawy, które czekają na decyzję menedżera, z terminami i właścicielami.",
-      },
+      { path: "/skrzynka", label: "Skrzynka", icon: Inbox },
+      { path: "/raporty", label: "Raporty", icon: FileText },
       {
         path: "/zgodnosc",
         label: "Zgodność",

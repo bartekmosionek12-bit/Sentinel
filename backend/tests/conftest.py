@@ -158,6 +158,9 @@ class RecordingDispatcher:
     ) -> str:
         return self._record("generate_explanation", cve_id, audience, actor)
 
+    def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str:
+        return self._record("generate_report_summary", report_id, actor)
+
 
 @pytest.fixture
 def dispatcher() -> RecordingDispatcher:
