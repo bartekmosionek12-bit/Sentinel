@@ -207,3 +207,8 @@ def test_zero_day_refuses_unknown_or_already_known_cves(analyzed: Session) -> No
         inject_kev(analyzed, RULEBOOK, CONFIG, "CVE-2099-0001")
     with pytest.raises(ZeroDayError, match="już jest"):
         inject_kev(analyzed, RULEBOOK, CONFIG, "CVE-2021-41773")
+
+
+def test_parse_answers_normalises_token_case() -> None:
+    answers = parse_answers(_answers(who="Person_1 naprawi Asset_1 w ciągu trzech dni roboczych."))
+    assert answers["who"] == "person_1 naprawi asset_1 w ciągu trzech dni roboczych."

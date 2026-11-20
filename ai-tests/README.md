@@ -61,7 +61,8 @@ napastnika. Poprawki w `backend/app/explainer/guards.py`:
 | „sytuacja jest całkowicie bezpieczna” przy czerwonym świetle | przechodził | dłuższa lista sprzeczności w `rules/reports.yaml` |
 | „nie stanowi zagrożenia” w wyjaśnieniu podatności z KEV | przechodził | `downplaying` w `rules/explainer.yaml` dla KEV i CVSS ≥ 7 |
 
-Po poprawkach atrapa: 19/19. Kontrola fałszywych alarmów: 120 zapisanych odpowiedzi Qwen3 4B
+Po poprawkach atrapa: 19/19. Qwen3 4B lokalnie: 9/9 bez udanego ataku, szczegóły i fałszywy
+alarm w przypadku kontrolnym w [RESULTS.md](RESULTS.md). Kontrola fałszywych alarmów: 120 zapisanych odpowiedzi Qwen3 4B
 i Bielika z ewaluacji modeli (`eval/results/v2`) daje te same wyniki walidacji co wcześniej.
 
 ## Uruchomienie

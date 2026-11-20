@@ -39,6 +39,8 @@ from app.explainer.validator import (
 from app.reports.config import QUESTIONS, ReportsConfig
 
 TOKEN_RE = re.compile(r"\b(?:asset|person)_\d+\b")
+# Model bywa, że zacznie zdanie od „Person_1”; bez normalizacji token nie zostałby podmieniony.
+_ANY_CASE_TOKEN_RE = re.compile(r"\b(asset|person)_(\d+)\b", re.IGNORECASE)
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 IPV6_RE = re.compile(r"\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{0,4}\b", re.IGNORECASE)
 DOMAIN_RE = re.compile(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:[a-z]{2,24})\b", re.IGNORECASE)
@@ -211,5 +213,6 @@ def parse_answers(text: str) -> dict[str, str]:
     for index, (_start, end, key) in enumerate(positions):
         stop = positions[index + 1][0] if index + 1 < len(positions) else len(text)
         body = text[end:stop].strip().strip("*#:- \n").strip()
+        body = _ANY_CASE_TOKEN_RE.sub(lambda m: f"{m[1].lower()}_{m[2]}", body)
         answers[key] = " ".join(body.split())
     return answers

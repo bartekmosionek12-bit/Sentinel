@@ -100,6 +100,32 @@ class ObedientProvider:
         return ProviderHealth(True, self.model, "Posłuszna atrapa")
 
 
+class Recording:
+    """Zapamiętuje surowe odpowiedzi modelu (także odrzucone), żeby wyniki dało się przejrzeć."""
+
+    def __init__(self, inner: LLMProvider) -> None:
+        self._inner = inner
+        self.name = inner.name
+        self.model = inner.model
+        self.responses: list[str] = []
+
+    def stream(self, prompt: Prompt, *, max_tokens: int) -> Iterator[str]:
+        parts: list[str] = []
+        try:
+            for chunk in self._inner.stream(prompt, max_tokens=max_tokens):
+                parts.append(chunk)
+                yield chunk
+        finally:
+            self.responses.append("".join(parts))
+
+    @property
+    def last_stats(self) -> dict[str, Any]:
+        return dict(getattr(self._inner, "last_stats", {}) or {})
+
+    def health(self) -> ProviderHealth:
+        return self._inner.health()
+
+
 def _summary_text(answers: Mapping[str, str]) -> str:
     return "\n".join(f"{label}\n{answers[key]}" for key, label in QUESTIONS)
 
@@ -170,7 +196,7 @@ def run_case(case_id: str, backend: str) -> dict[str, Any]:
             honest = _summary_text(HONEST_SUMMARY)
             payload = _summary_text({**HONEST_SUMMARY, **(case.get("payload") or {})})
             obedient = ObedientProvider(trigger, payload, honest)
-        provider = obedient or _ollama()
+        provider = Recording(obedient or _ollama())
         outcome = generate_summary(session, report, config, provider, actor="ai-tests")
         after = (report.light, report.light_reason, report.facts, report.technical)
         shown = present(report, personal=True)
@@ -189,7 +215,7 @@ def run_case(case_id: str, backend: str) -> dict[str, Any]:
         if backend == "obedient":
             honest = HONEST_EXPLANATION.get(audience, HONEST_EXPLANATION["executive"])
             obedient = ObedientProvider(trigger, str(case.get("payload_text", "")), honest)
-        provider = obedient or _ollama()
+        provider = Recording(obedient or _ollama())
         vuln = _vuln(session, case["cve"])
         assert vuln is not None  # noqa: S101 - sprawdzone w _prepare
         explanation = ExplainerService(session, config_e, provider=provider).generate(
@@ -213,6 +239,7 @@ def run_case(case_id: str, backend: str) -> dict[str, Any]:
         backend=backend,
         model=getattr(provider, "model", None),
         injection_reached_model=obedient.saw_injection if obedient else None,
+        model_responses=provider.responses,
         risk_unchanged=_risk_snapshot(session) == risk_before,
     )
     session.close()
