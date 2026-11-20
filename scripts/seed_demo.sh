@@ -34,6 +34,9 @@ sleep 25
 echo "==> seed-demo w kontenerze skanera"
 docker compose exec -T worker-scans python -m app.cli seed-demo
 
+echo "==> Konta demo w Keycloaku (admin z TOTP, menedżer, audytor)"
+./scripts/demo_users.sh
+
 # Domyślny model to Qwen3 4B (LLM_MODEL=qwen3-4b-q4km w .env.example, wybór: eval/RESULTS.md).
 LLM_MODEL_NAME=$(grep -E '^LLM_MODEL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
 if [ -n "$LLM_MODEL_NAME" ]; then
@@ -45,6 +48,11 @@ else
   echo "==> LLM_MODEL jest pusty: wyjaśnienia z szablonu (domyślnie: LLM_MODEL=qwen3-4b-q4km)"
 fi
 
+PUBLIC_URL_VALUE=$(grep -E '^PUBLIC_URL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
+PUBLIC_URL_VALUE=${PUBLIC_URL_VALUE:-http://localhost:8080}
 echo
-echo "Gotowe. Interfejs: http://localhost:8080"
+echo "Gotowe."
+echo "  Dashboard menedżera:  ${PUBLIC_URL_VALUE}/dashboard/"
+echo "  Konsola operacyjna:   ${PUBLIC_URL_VALUE}/admin/"
+echo "  Hasła i sekret TOTP kont demo: data/demo-credentials.env"
 echo "Uwaga: zwykłe 'docker compose up' przywraca pusty zakres skanowania."
