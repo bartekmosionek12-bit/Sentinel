@@ -1,6 +1,7 @@
 {
  "status": "OK",
- "note": "Wartosci przykladowe, recznie przygotowane na potrzeby demo.",
+ "synthetic": true,
+ "note": "DANE FIKCYJNE. Wartosci epss i percentile w tym pliku sa przykladowe, przygotowane recznie na potrzeby demo i testow. NIE pochodza z FIRST EPSS i nie wolno ich traktowac jako rzeczywistych prawdopodobienstw. Prawdziwe dane pobiera scripts/fetch_feeds.sh do data/feeds/ (poza Gitem).",
  "total": 9,
  "data": [
   {
