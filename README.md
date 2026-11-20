@@ -145,6 +145,11 @@ Bez HTTPS logowanie spoza localhost nie zadziała: przeglądarka udostępnia Web
 (potrzebne do PKCE) tylko w bezpiecznym kontekście, a ciasteczka Keycloaka mają flagę
 `Secure`.
 
+![Drugi składnik logowania admina](docs/screenshots/etap4-totp.png)
+![Odmowy w dzienniku audytu](docs/screenshots/etap4-audyt-odmowy.png)
+![Menedżer w konsoli operacyjnej](docs/screenshots/etap4-odmowa-menedzera.png)
+![Dashboard menedżera](docs/screenshots/etap4-dashboard.png)
+
 ## Wymagania sprzętowe
 
 4+ rdzenie CPU, 16 GB RAM, około 30 GB SSD, Docker z Compose. **GPU nie jest wymagane.**
