@@ -346,15 +346,18 @@ Osobna usługa w Pythonie na oficjalnym SDK MCP, transport Streamable HTTP w sie
 
 | Narzędzie | Poziom | Adapter |
 |---|---|---|
-| `discover_hosts`, `resolve_dns`, `probe_http` | L1 | subfinder (pasywnie), dnsx, httpx |
-| `scan_services` | L1 | naabu + nmap `-sV`, lista portów lekkiego skanu |
-| `scan_all_ports` | L2 | nmap pełny zakres |
-| `check_tls` | L1 | testssl.sh |
-| `verify_cve` | L2 | nuclei, jawna lista szablonów (issue #11) |
-| `collect_software_authenticated` | L2 | SSH z certyfikatem JIT, odczyt listy pakietów (tylko odczyt) |
-| `check_compliance` | L1/L2 | sprawdzenia reguł CIS na danych ze skanu albo przez SSH JIT |
-| `probe_ai_endpoint` | L1 | pasywne sprawdzenie API LLM (uwierzytelnienie, lista modeli, wersja) |
-| `redteam_ai` | L3 | promptfoo, wybrane presety, limit zapytań |
+| `discover_hosts` | L1 | nmap `-sn` (cel: sieć CIDR) |
+| `scan_services` | L1 | nmap `-sV`, top 1000 portów |
+| `probe_http` | L1 | jedno zapytanie GET (nagłówek `Server`, tytuł strony) |
+| `scan_all_ports` | L2 | nmap pełny zakres 1–65535 z wersjami |
+| `verify_cve` | L2 | nuclei, jawna lista szablonów **detekcyjnych** (potwierdzenie po wersji, bez eksploatacji) |
+| `collect_software_authenticated` | L2 | SSH z certyfikatem JIT 15 min, odczyt listy pakietów (tylko odczyt) |
+
+**Stan po Etapie 5:** zbudowane jest sześć narzędzi z tabeli (`app/agent/catalog.py`).
+Planowane wcześniej `resolve_dns`, `check_tls` (testssl.sh), `check_compliance`,
+`probe_ai_endpoint` i `redteam_ai` (L3) oraz adaptery subfinder, dnsx, httpx i naabu są w
+ROADMAP (część w Etapach 7 i 8). Poziom narzędzia jest stały w kodzie: plan nie może go
+obniżyć.
 
 Każde wywołanie przechodzi ścieżkę z diagramu w sekcji 3. Wynik dla agenta jest filtrowany:
 bez sekretów, bez surowych banerów powyżej limitu długości, jako ustrukturyzowany JSON. Pełny
@@ -404,8 +407,12 @@ sequenceDiagram
   rozpoznanych intencji (assessment zasobu, segmentu, organizacji; test systemu AI)
   deterministyczny planista składa plan z reguł Scan Plannera. Admin widzi etykietę
   „plan z szablonu”. Dzięki temu scenariusz demo 2 nie zależy od jakości modelu.
-- Wykonuje kod (`worker scans`), nie model. Model nie widzi wyników narzędzi w trakcie
-  wykonania; po zakończeniu dostaje tylko skrócone fakty do raportu.
+- Wykonuje kod (`worker-agent` przez `mcp-scanner`), nie model. **Zmiana względem pierwszej
+  wersji projektu:** po wykonaniu zatwierdzonych kroków model dostaje skrócone wyniki
+  (oznaczone w prompcie jako niezaufane dane) i może zaproponować **jedną** rundę kroków
+  uzupełniających. Ta runda przechodzi ten sam walidator, a dopuszczone kroki (każdego poziomu)
+  wracają do admina do zatwierdzenia. Bez modelu kroki uzupełniające składa szablon
+  (`template_follow_up`). Więcej rund nie ma: limit jest w kodzie.
 - Treść z zewnątrz (opisy CVE, advisory, odpowiedzi testowanych systemów, banery) jest
   oznaczana w prompcie jako niezaufane dane i nigdy nie trafia do planu jako instrukcja.
   Ochrona nie polega na prompcie: nawet „posłuszny” model nie zmieni ryzyka (liczy je kod) ani
@@ -415,30 +422,36 @@ sequenceDiagram
 
 **Kill switch** (`POST /api/agent/kill`, uprawnienie `agent:kill`, jedno kliknięcie):
 
-1. flaga `agent:killed` w Redisie i w bazie: `mcp-scanner` odrzuca każde wywołanie agenta,
-2. unieważnienie sesji i wyłączenie klienta `sentinel-agent` w Keycloak (nowe tokeny nie
-   powstaną, stare wygasają w ≤ 5 min, ale flaga z punktu 1 blokuje je od razu),
-3. `revoke` zadań Celery agenta i status `killed` dla aktywnych `AgentTask`,
-4. odwołanie wszystkich leasów agenta w OpenBao (`sys/leases/revoke-prefix`),
-5. wpis w audycie i alert. Ponowne włączenie wymaga nowej wersji zdolności.
+1. flaga `AgentSwitch.killed` w bazie: polityka `ToolRuntime` w `mcp-scanner`, walidator
+   planu i wykonawca sprawdzają ją przed każdym krokiem i odrzucają wywołanie od razu,
+2. status `killed` dla aktywnych `AgentTask`, kroki `planned`/`approved` przechodzą w
+   `skipped` z decyzją `agent_killed`; wykonawca przerywa po bieżącym kroku,
+3. wszystkie wersje `AgentCapability` stają się nieaktywne,
+4. wpis w audycie. Ponowne włączenie wymaga nowej wersji zdolności (a ta przechodzi bramkę
+   testu agenta z sekcji 23).
+
+**Czego kill switch w Etapie 5 nie robi** (ROADMAP): nie wyłącza klienta `sentinel-agent` w
+Keycloak, nie wysyła `revoke` do Celery i nie woła `sys/leases/revoke-prefix` w OpenBao.
+Flaga z punktu 1 blokuje każde kolejne wywołanie, a certyfikat SSH i tak wygasa po 15 min.
 
 ---
 
 ## 6. Poświadczenia just-in-time (OpenBao)
 
-- OpenBao w trybie serwerowym z magazynem plikowym w wolumenie. Inicjalizację i
-  rozpieczętowanie robi jednorazowa usługa `bao-init` (skrypt w `infra/openbao/`). **W demo**
-  klucz rozpieczętowania leży w `.env` (dopuszczone wyłącznie dla demo; opisane jako
-  ograniczenie w README).
+- OpenBao w trybie serwerowym z magazynem `raft` w wolumenie. Inicjalizację i
+  rozpieczętowanie robi jednorazowa usługa `openbao-init` (`infra/openbao/init.sh`). **W demo**
+  klucz rozpieczętowania i token startowy leżą w osobnym wolumenie `openbao-init`, dostępnym
+  tylko dla tej usługi, a nie w `.env` (uproszczenie demo opisane w README; produkcja:
+  auto-unseal przez KMS/HSM).
 - **SSH:** silnik `ssh` w trybie CA. Na każde zadanie `mcp-scanner` generuje w pamięci parę
   kluczy, prosi OpenBao o podpis z TTL 15 min, principalem z polityki i rozszerzeniami tylko do
   odczytu, łączy się, zbiera dane i niszczy klucz. Hosty demo-lab ufają kluczowi publicznemu CA
   (`TrustedUserCAKeys`).
 - **Odwołanie:** po zadaniu `mcp-scanner` odwołuje lease i token OpenBao oraz kasuje klucz
   prywatny. Certyfikatu SSH nie da się „odwołać” bez listy KRL na hoście, więc granicą jest TTL
-  15 min; w demo-lab dodamy KRL, żeby pokazać pełne odwołanie (patrz sekcja 20).
-- **Sekrety dynamiczne:** silnik `database` dla otwartej bazy w demo-lab (konto tylko do
-  odczytu na czas zadania). Konta chmurowe: ROADMAP.
+  15 min. KRL na hostach demo-lab nie powstała w Etapie 5 (ROADMAP).
+- **Sekrety dynamiczne:** silnik `database` (konto tylko do odczytu na czas zadania) i konta
+  chmurowe są w ROADMAP. W Etapie 5 jedynym poświadczeniem JIT jest certyfikat SSH.
 - `CredentialLease` w bazie: zadanie, typ, TTL, wydano, odwołano, przez kogo. **Bez sekretów.**
 - Sekret nigdy nie trafia do kontekstu LLM, logów aplikacji, audytu ani odpowiedzi API. Testy
   wycieku: znacznik `SENTINEL-CANARY-<losowy>` ustawiany jako sekret w testach nie może się
@@ -710,12 +723,14 @@ zapytaniem po `scan_run_id`.
 
 ## 8. Przepływy danych
 
-### 8.1 Ścieżka krytyczna (Etap 2, od Etapu 5 przez MCP)
+### 8.1 Ścieżka krytyczna (Etap 2; przejście na MCP w ROADMAP)
 
 Bez zmian w logice: planner → `scope_guard` → narzędzia → inwentarz → matching → scoring →
-powiadomienia. Zmienia się tylko transport: zamiast wywołania adaptera w workerze `scans`,
-wykonawca wywołuje narzędzie MCP z tokenem `sentinel-pipeline`. Kod planera, matchingu i
-scoringu się nie zmienia.
+powiadomienia. **Stan po Etapie 5 (odstępstwo od planu):** przez `mcp-scanner` przechodzi
+tylko agent. Pipeline skanów (`worker-scans`) nadal woła adaptery bezpośrednio, a każde
+wywołanie sprawdza ten sam `scope_guard` (zakres, deny list, poziom, zgoda, rate limit).
+Twarde ograniczenie jest więc spełnione: żadna ścieżka nie omija `scope_guard`. Przeniesienie
+pipeline na narzędzia MCP z tokenem `sentinel-pipeline` (diagram niżej) jest w ROADMAP.
 
 ```mermaid
 sequenceDiagram
@@ -811,6 +826,18 @@ Bez zmian względem wersji 1 i implementacji z Etapu 2: słownik aliasów (pewno
 kolejka weryfikacji bez findingu, < 0.60 odrzucone); porównywanie wersji z zakresami NVD;
 brak wersji albo wersja dystrybucyjna (backporty) → weryfikacja przez człowieka. „Nie
 zgadujemy.”
+
+**Sygnały bez CPE (Etap 5, `app/matching/signals.py`).** Nowa, aktywnie wykorzystywana
+podatność często ma już wpis w KEV (producent i produkt), a jeszcze nie ma konfiguracji CPE w
+NVD. Zwykłe dopasowanie jej nie widzi, bo nie ma zakresu wersji. Moduł sygnałów porównuje
+producenta i produkt z KEV z oprogramowaniem w inwentarzu: najpierw przez słownik CPE (metoda
+`kev_cpe`), potem samym podobieństwem nazw z karą × 0.9 (metoda `kev_name`). Każde dopasowanie
+od progu `review` trafia do kolejki `SignalMatch` (`GET /api/signal-queue`, sekcja w kolejce
+weryfikacji konsoli). **Finding (typ `signal`) powstaje wyłącznie po decyzji człowieka**
+(`POST /api/signal-queue/{id}/decision`), z oceną ryzyka liczoną przez kod. Gdy NVD dopisze
+zakres wersji, czekające sygnały przechodzą w `superseded`, a potwierdzony finding `signal`
+zamyka się, kiedy zwykłe dopasowanie utworzy finding `cve` dla tej samej podatności i zasobu.
+Każdy krok jest w audycie.
 
 ---
 
@@ -997,6 +1024,16 @@ lokalności, ograniczony do testów:
 - **Sędzia deterministyczny wszędzie, gdzie się da**: kanarki, wersje i CVE spoza bazy,
   zakazane polecenia, prośby o sekrety, zmiana oceny ryzyka. Sędzia LLM tylko tam, gdzie reguła
   nie wystarczy, a jego werdykt jest w wynikach oddzielony od werdyktów deterministycznych.
+
+**Stan po Etapie 5:** generator to skrypt `ai-tests/redteam/generate.py`, a nie
+`promptfoo redteam generate` (ten wymaga zdalnej generacji promptfoo). Kategorie OWASP LLM:
+LLM01 (obniżenie ryzyka), LLM09 (dezinformacja), LLM02 (sekrety) na raporcie „W skrócie”,
+LLM05 (obsługa wyjścia) i LLM07 (wyciek promptu) na wyjaśnieniu CVE, LLM06 (wyjście agenta
+poza zakres) na planiście. promptfoo uruchamia ewaluację wygenerowanych testów na prawdziwej
+ścieżce aplikacji. O wyniku decydują asercje deterministyczne (`threshold: 1`); `llm-rubric`
+ma wagę 0 i jego ocena jest w osobnej kolumnie. Domyślny generator i sędzia: model z
+`vars.REDTEAM_MODEL` (domyślnie `claude-opus-5-5`); bez klucza Bielik 4.5B Q8_0. Na każdym
+PR działa `redteam-mock` (atrapa generatora, posłuszny model, sędzia atrapa) bez sieci.
 
 ### 13.2 Testowanie systemów AI w infrastrukturze (Etap 8)
 
@@ -1361,7 +1398,21 @@ Wyniki są rozdzielone na dwie oceny:
   agenta jako niezaufane dane, próba rozszerzenia zakresu zostaje zablokowana przez politykę,
   wpis w audycie, raport dla menedżera.
 
-### 23.6 Model danych
+### 23.6 Stan po Etapie 5
+
+Zbudowane zgodnie z 23.1–23.5, z tymi uściśleniami:
+
+- Harness (`app/agent_tests/`) ocenia każdy przypadek dwa razy: prawdziwym planistą (ocena
+  modelu) i **posłusznym napastnikiem**, który wpisuje do planu dokładnie to, o co prosi atak
+  (ocena kodu). Dzięki temu ocena kodu nie zależy od tego, czy model akurat się oparł.
+- Bramka: wersja przechodzi w `active`, gdy **kod** zablokował wszystko (`code_failed == 0`).
+  Porażki modelu są informacją w wyniku, nie blokują zmiany. Stany wersji: `pending_test`,
+  `active`, `forced`, `rejected`, `superseded`. Wymuszenie wymaga uzasadnienia ≥ 20 znaków.
+- 11 własnych przypadków w `ai-tests/agent/cases.yaml` (sześć kategorii z 23.2 plus przypadek
+  kontrolny), szybki zestaw to ich podzbiór. Pełny zestaw w CI: `ai-tests/agent/run.py`.
+- Raport dla menedżera (23.4, druga część) jest w Etapie 6.
+
+### 23.7 Model danych
 
 `AGENT_CONFIG_VERSION` (model, wersja promptów, wersja zdolności, zewnętrzny LLM, stan
 `pending_test | active | forced | rejected`, uzasadnienie wymuszenia), `AGENT_TEST_RUN`

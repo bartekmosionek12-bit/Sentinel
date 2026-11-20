@@ -194,8 +194,12 @@ kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 | AI Explainer | Wyjaśnienia na trzech poziomach z lokalnego modelu (Ollama), generowane raz i trzymane w cache, z walidatorem faktów i wersją z szablonu, gdy model jest niedostępny albo się myli. Streaming przez SSE. Prompty wersjonowane w `backend/app/explainer/prompts/`, limity w [`rules/explainer.yaml`](rules/explainer.yaml). |
 | Raporty | Raport dwuwarstwowy: światło z reguł [`rules/reports.yaml`](rules/reports.yaml), „W skrócie” z modelu po walidacji (albo z szablonu), słownik terminów [`rules/glossary.yaml`](rules/glossary.yaml), szczegóły techniczne. Doręczenie do skrzynki ról z potwierdzeniem odczytu per osoba. Nazwy zasobów i osób model widzi tylko jako tokeny (`asset_1`, `person_1`). |
 | Scenariusz zero-day | `scripts/inject_kev.sh`: syntetyczny wpis KEV, raport w skrzynce i baner w konsoli menedżera w czasie poniżej 5 s, bez modelu. |
-| Testy własnego AI | [promptfoo w `ai-tests/`](ai-tests/README.md): pośrednie prompt injection przez opisy CVE na prawdziwej ścieżce aplikacji, z posłuszną atrapą (każdy PR) i z Qwen3 4B (9 przypadków w każdym PR, pełny zestaw nocą), wyniki osobno. |
-| Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz). |
+| Testy własnego AI | [promptfoo w `ai-tests/`](ai-tests/README.md): pośrednie prompt injection przez opisy CVE na prawdziwej ścieżce aplikacji, z posłuszną atrapą (każdy PR) i z Qwen3 4B (9 przypadków w każdym PR, pełny zestaw nocą), wyniki osobno. Nocą także generowany red team OWASP LLM Top 10 (generator i sędzia przez API na syntetycznych danych, bez klucza Bielik 4.5B). |
+| Agent AI | Polecenie → plan (model albo szablon) → walidacja kodem → zatwierdzenie przez admina → wykonanie przez serwer MCP `mcp-scanner` (polityka zdolności → `scope_guard` → adapter). Sześć narzędzi: `discover_hosts`, `scan_services`, `probe_http` (L1), `scan_all_ports`, `verify_cve` z nuclei (szablony detekcyjne), `collect_software_authenticated` (L2). Jedna runda kroków uzupełniających, też do zatwierdzenia. Kill switch jednym kliknięciem. |
+| Poświadczenia JIT | OpenBao: certyfikat SSH podpisywany na zadanie z TTL 15 min, klucz tylko w pamięci, odwołanie leasu po zadaniu. Sekret nie trafia do modelu, logów, API ani audytu (testy z kanarkami). |
+| Test agenta (moduł 19) | Niezależny harness na osobnej kolejce i osobnym użytkowniku bazy, tryb dry-run z atrapami narzędzi i kanarkami, 11 przypadków w sześciu kategoriach, dwie oceny (model i kod), wynik podpisany Ed25519 i w audycie. Bramka zmian konfiguracji agenta z wymuszeniem wymagającym uzasadnienia. Nocny przebieg w CI. |
+| Sygnały bez CPE | Wpis KEV bez zakresu wersji w NVD trafia do kolejki weryfikacji jako sygnał; finding powstaje wyłącznie po decyzji człowieka. |
+| Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz), `agent`, `agent_tests`. |
 | Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
 | Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Konsola operacyjna ma też Raporty (nowy raport o stanie, ponowne zlecenie „W skrócie”). Dashboard `/dashboard/`: strona główna, najważniejsze zagrożenia, Skrzynka, Raporty i baner zero-day (pełna konsola menedżera w Etapie 6). |
 
@@ -253,8 +257,15 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
   jednorazowa usługa `db-init`. Osobna instancja bazy jest w [ROADMAP](docs/ROADMAP.md).
 - Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) nie powstało: Keycloak mieści się w
   budżecie pamięci, więc fallback nie był potrzebny.
-- Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
-  (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
+- Weryfikacja podatności (nuclei) używa wyłącznie szablonów detekcyjnych z jawnej listy i
+  potwierdza podatność po wersji; nic nie jest eksploatowane.
+- Przez serwer MCP idzie tylko agent. Pipeline skanów woła adaptery bezpośrednio, zawsze
+  przez `scope_guard` (przejście na MCP w [ROADMAP](docs/ROADMAP.md)).
+- Certyfikatu SSH nie da się odwołać przed czasem bez listy KRL na hoście: granicą jest TTL
+  15 min. Kill switch blokuje każde kolejne wywołanie agenta od razu, ale nie wyłącza klienta
+  w Keycloak i nie odwołuje leasów OpenBao hurtowo (ROADMAP).
+- OpenBao w demo trzyma klucz rozpieczętowania w wolumenie `openbao-init`, dostępnym tylko
+  dla usługi inicjalizującej. Produkcja: auto-unseal przez KMS/HSM.
 - Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka, e-mail i PDF raportów
   powstają w Etapie 6; Slack, Teams i baner przez SSE są w [ROADMAP](docs/ROADMAP.md).
 - Reguły przeciw pośredniemu prompt injection (sprzeczności, prośby o hasła) są słownikowe i
