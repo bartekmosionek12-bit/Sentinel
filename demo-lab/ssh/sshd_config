@@ -1,0 +1,18 @@
+# Tylko certyfikaty z CA OpenBao, tylko konto sentinel-scan, bez PTY i bez przekierowań.
+Port 22
+HostKey /etc/ssh/ssh_host_ed25519_key
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile none
+TrustedUserCAKeys /etc/ssh/ca.pub
+AuthorizedPrincipalsFile /etc/ssh/principals/%u
+AllowUsers sentinel-scan
+PermitTTY no
+AllowTcpForwarding no
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+X11Forwarding no
+PermitTunnel no
+LogLevel VERBOSE

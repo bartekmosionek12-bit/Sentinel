@@ -9,6 +9,7 @@ Szablony wykrywające wersję pozwalają potwierdzić podatność porównaniem w
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,29 +22,50 @@ from app.scanners.runner import SubprocessRunner, ToolError, ToolRunner
 
 EXCLUDED_TAGS = ("intrusive", "dos", "fuzz", "lfi", "rce", "sqli", "xss", "exploit", "bruteforce")
 _ID_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
+_VERSION_RE = re.compile(r"/(\d+(?:\.\d+)+)")
+
+
+@dataclass(frozen=True)
+class CveCheck:
+    # Szablony wykrywające (np. `apache-detect`), które wolno uruchomić dla tej CVE.
+    templates: tuple[str, ...]
+    # Wersje podatne. Podatność jest potwierdzona, gdy wyciągnięta wersja jest na liście.
+    affected_versions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class NucleiConfig:
     templates_dir: str
-    # CVE → identyfikatory szablonów wykrywających, które wolno uruchomić.
-    templates: Mapping[str, tuple[str, ...]]
+    checks: Mapping[str, CveCheck]
     rate_limit: int = 5
+
+    @property
+    def templates(self) -> dict[str, tuple[str, ...]]:
+        return {cve: check.templates for cve, check in self.checks.items()}
 
     @classmethod
     def from_file(cls, path: Path) -> NucleiConfig:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        templates: dict[str, tuple[str, ...]] = {}
-        for cve, ids in (data.get("templates") or {}).items():
-            clean = tuple(str(i) for i in ids)
-            if any(not i or set(i) - _ID_CHARS for i in clean):
-                raise ValueError(f"Nieprawidłowy identyfikator szablonu nuclei dla {cve}")
-            templates[str(cve).upper()] = clean
+        checks: dict[str, CveCheck] = {}
+        for cve, item in (data.get("cves") or {}).items():
+            ids = tuple(str(i) for i in (item or {}).get("templates") or ())
+            if not ids or any(not i or set(i) - _ID_CHARS for i in ids):
+                raise ValueError(f"Nieprawidłowe szablony nuclei dla {cve}")
+            versions = tuple(str(v) for v in (item or {}).get("affected_versions") or ())
+            checks[str(cve).upper()] = CveCheck(ids, versions)
         return cls(
             templates_dir=str(data.get("templates_dir", "/opt/nuclei-templates")),
-            templates=templates,
+            checks=checks,
             rate_limit=int(data.get("rate_limit", 5)),
         )
+
+    def confirmed(self, cve_id: str, matches: Sequence[NucleiMatch]) -> tuple[bool, list[str]]:
+        """Czy wersja wyciągnięta przez szablon jest na liście podatnych. Zwraca też wersje."""
+        check = self.checks.get(cve_id.upper())
+        found = [v for m in matches for v in _VERSION_RE.findall(" ".join(m.extracted))]
+        if check is None or not check.affected_versions:
+            return False, found
+        return any(v in check.affected_versions for v in found), found
 
 
 @dataclass(frozen=True)
@@ -83,8 +105,13 @@ class NucleiAdapter:
         self._config = config
         self._runner = runner or SubprocessRunner()
 
+    @property
+    def config(self) -> NucleiConfig:
+        return self._config
+
     def templates_for(self, cve_id: str) -> tuple[str, ...]:
-        return self._config.templates.get(cve_id.upper(), ())
+        check = self._config.checks.get(cve_id.upper())
+        return check.templates if check else ()
 
     def verify(
         self, target: ScopedTarget, *, cve_id: str, port: int, timeout: float = 180

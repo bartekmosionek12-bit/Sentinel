@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable, Sequence
 from functools import lru_cache
@@ -142,13 +143,13 @@ def mcp_toolbox(settings: Settings) -> Toolbox:
         if settings.nuclei_config.exists()
         else None
     )
+    role_id, secret_id = settings.openbao_role_id, settings.openbao_secret_id
+    if settings.openbao_url and not role_id and settings.openbao_approle_file.exists():
+        approle = json.loads(settings.openbao_approle_file.read_text(encoding="utf-8"))
+        role_id, secret_id = str(approle["role_id"]), str(approle["secret_id"])
     vault = (
-        OpenBao(
-            url=settings.openbao_url,
-            role_id=settings.openbao_role_id,
-            secret_id=settings.openbao_secret_id,
-        )
-        if settings.openbao_url
+        OpenBao(url=settings.openbao_url, role_id=role_id, secret_id=secret_id)
+        if settings.openbao_url and role_id
         else None
     )
     return Toolbox(

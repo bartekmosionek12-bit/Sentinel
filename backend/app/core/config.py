@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     openbao_url: str = ""
     openbao_role_id: str = ""
     openbao_secret_id: str = ""
+    # Plik z role_id i secret_id zapisany przez bao-init (wolumen tylko do odczytu).
+    openbao_approle_file: Path = Path("/run/openbao/approle.json")
     ssh_known_hosts: Path = Path("/app/data/known_hosts")
     ssh_username: str = "sentinel-scan"
     nuclei_config: Path = Path("/app/rules/nuclei.yaml")

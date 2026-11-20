@@ -1,0 +1,23 @@
+# nuclei w Sentinel ASI: wyłącznie szablony WYKRYWAJĄCE z tej listy, bez eksploatacji.
+#
+# Weryfikacja CVE (narzędzie `verify_cve`, poziom L2, zgoda admina) uruchamia szablon, który
+# odczytuje wersję produktu (np. nagłówek Server), i porównuje ją z listą wersji podatnych.
+# Szablony z ładunkiem ataku (path traversal, RCE, SQLi) są zakazane: adapter zawsze dodaje
+# `-etags intrusive,dos,fuzz,lfi,rce,sqli,xss,exploit,bruteforce`, a identyfikator spoza tej
+# listy jest odrzucany przez walidator planu i adapter.
+#
+# Binarkę i szablony pobiera scripts/fetch_nuclei.sh (poza Gitem, data/nuclei/).
+templates_dir: /opt/nuclei-templates
+rate_limit: 5
+
+cves:
+  CVE-2021-41773:
+    templates: [apache-detect]
+    affected_versions: ["2.4.49"]
+  CVE-2021-42013:
+    templates: [apache-detect]
+    affected_versions: ["2.4.49", "2.4.50"]
+  CVE-2021-23017:
+    templates: [nginx-version]
+    # Lista jawna (nie zakres): wersje z demo-lab i najczęstsze wydania podatnej gałęzi.
+    affected_versions: ["1.16.1", "1.18.0", "1.19.10", "1.20.0"]

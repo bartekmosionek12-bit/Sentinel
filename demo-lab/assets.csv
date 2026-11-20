@@ -4,3 +4,5 @@ proxy-01,host,172.30.99.11,internet,4,Zespół WWW,prod
 legacy-01,host,172.30.99.12,internal,3,Zespół Aplikacji,legacy
 shop-01,host,172.30.99.13,internet,4,Zespół E-commerce,prod;sklep
 old-db-01,host,172.30.99.20,internal,2,Zespół Baz Danych,do-wycofania
+intranet-01,host,172.30.99.15,internal,2,Zespół WWW,intranet
+app-01,host,172.30.99.16,internal,3,Zespół Aplikacji,ssh

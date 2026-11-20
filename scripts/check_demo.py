@@ -109,6 +109,8 @@ def main() -> int:
     web = by_cve.get(("CVE-2021-41773", "web-01"), {})
     explanation = get(base, f"/findings/{web['id']}/explanation?audience=technical") if web else {}
     llm = get(base, "/llm/status")
+    agent = get(base, "/agent/status")
+    last_test = agent.get("last_test") or {} if isinstance(agent, dict) else {}
     explained = (
         isinstance(explanation, dict)
         and isinstance(llm, dict)
@@ -166,6 +168,12 @@ def main() -> int:
         ),
         "powiadomienie o KEV na zasobie z internetu": stats["notifications_today"] >= 1,  # type: ignore[index]
         "wyjaśnienie dostępne także bez modelu (szablon z faktami z bazy)": explained,
+        "agent aktywny dopiero po zaliczonym i podpisanym teście (moduł 19)": isinstance(
+            agent, dict
+        )
+        and bool(agent.get("capability"))
+        and last_test.get("passed") is True
+        and last_test.get("signature_valid") is True,
         "łańcuch dziennika audytu jest spójny": audit["ok"] is True,  # type: ignore[index]
         **report_checks(base, manager, zero_day=False),
     }

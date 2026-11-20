@@ -172,10 +172,11 @@
     {
       "clientId": "sentinel-agent",
       "name": "Sentinel ASI: agent AI",
-      "description": "Konto usługowe agenta (Etap 5). Sekret generuje Keycloak; tokeny ważne 5 minut.",
+      "description": "Konto usługowe agenta (Etap 5). Sekret z AGENT_CLIENT_SECRET w .env; tokeny ważne 5 minut. Kill switch wyłącza klienta.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
+      "secret": "${AGENT_CLIENT_SECRET}",
       "protocol": "openid-connect",
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,

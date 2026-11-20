@@ -12,6 +12,7 @@ deny:
   cidrs:
     - 172.30.99.1/32     # brama sieci Dockera (host)
     - 172.30.99.250/32   # sam skaner (worker-scans)
+    - 172.30.99.251/32   # serwer MCP agenta (mcp-scanner)
 
 rate_limits:
   default_per_minute: 30

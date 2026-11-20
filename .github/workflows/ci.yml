@@ -88,6 +88,7 @@ jobs:
         run: |
           psql -q -v app_user=sentinel_app -v app_password=ci-only-app \
             -v keycloak_user=keycloak -v keycloak_password=ci-only-kcdb \
+            -v harness_user=sentinel_harness -v harness_password=ci-only-harness \
             -v db_name=sentinel -f ../infra/postgres/init_roles.sql
       - name: Migracja w górę, w dół i ponownie w górę
         run: |
@@ -96,10 +97,20 @@ jobs:
           uv run alembic upgrade head
       - name: Modele zgodne z migracjami
         run: uv run alembic check
-      - name: Użytkownik aplikacji nie widzi schematu Keycloaka (i odwrotnie)
+      - name: Wyniki testu agenta tylko dla harnessu (infra/postgres/harden_harness.sql)
+        env:
+          PGHOST: localhost
+          PGUSER: sentinel
+          PGPASSWORD: ci-only
+          PGDATABASE: sentinel
+        run: |
+          psql -q -v app_user=sentinel_app -v harness_user=sentinel_harness \
+            -f ../infra/postgres/harden_harness.sql
+      - name: Rozdział użytkowników bazy (aplikacja, Keycloak, harness)
         env:
           SENTINEL_TEST_APP_DB_URL: postgresql+psycopg://sentinel_app:ci-only-app@localhost:5432/sentinel
           SENTINEL_TEST_KEYCLOAK_DB_URL: postgresql+psycopg://keycloak:ci-only-kcdb@localhost:5432/sentinel
+          SENTINEL_TEST_HARNESS_DB_URL: postgresql+psycopg://sentinel_harness:ci-only-harness@localhost:5432/sentinel
         run: uv run pytest tests/test_db_roles.py -o addopts="" -v
 
   frontend:

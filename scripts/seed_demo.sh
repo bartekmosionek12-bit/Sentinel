@@ -24,7 +24,15 @@ if [ -z "${DEMO_APPROVAL_EXPIRES_AT:-}" ]; then
 fi
 export DEMO_APPROVAL_EXPIRES_AT
 
+if ! grep -Eq '^AGENT_CLIENT_SECRET=.+' .env; then
+  echo "Brak AGENT_CLIENT_SECRET w .env (konto usługowe agenta). Wygeneruj: openssl rand -hex 32" >&2
+  exit 1
+fi
+
 mkdir -p data/feeds
+echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"
+./scripts/fetch_nuclei.sh || \
+  echo "nuclei niedostępny: narzędzie verify_cve agenta zwróci błąd, reszta demo działa."
 echo "==> Start stosu z profilem demo (zgoda seed_demo do ${DEMO_APPROVAL_EXPIRES_AT})"
 docker compose --profile demo up -d --build
 
@@ -33,6 +41,9 @@ sleep 25
 
 echo "==> seed-demo w kontenerze skanera"
 docker compose exec -T worker-scans python -m app.cli seed-demo
+
+echo "==> Agent: zdolności dla demo-lab (L0-L2); działają po zaliczonym teście agenta"
+docker compose exec -T worker-agent python -m app.cli agent-bootstrap
 
 echo "==> Konta demo w Keycloaku (admin z TOTP, menedżer, audytor)"
 ./scripts/demo_users.sh

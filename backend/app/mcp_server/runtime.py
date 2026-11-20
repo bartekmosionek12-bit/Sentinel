@@ -326,10 +326,12 @@ class ToolRuntime:
             cve_id = str(params.get("cve_id") or "")
             port = int(params.get("port") or 80)
             matches = self._tools.nuclei.verify(scoped, cve_id=cve_id, port=port)
+            confirmed, versions = self._tools.nuclei.config.confirmed(cve_id, matches)
             attributes = dict(asset.attributes or {})
             verified = dict(attributes.get("verified_cves") or {})
             verified[cve_id.upper()] = {
-                "confirmed": bool(matches),
+                "confirmed": confirmed,
+                "versions": versions,
                 "templates": [m.template_id for m in matches],
                 "checked_at": self._clock().isoformat(),
             }
@@ -338,8 +340,10 @@ class ToolRuntime:
             return {
                 "host": scoped.address,
                 "cve_id": cve_id.upper(),
-                "confirmed": bool(matches),
+                "confirmed": confirmed,
+                "method": "wersja z szablonu wykrywającego, bez ładunku ataku",
                 "templates": [m.template_id for m in matches],
+                "untrusted": {"versions": versions},
             }
         if spec.name == "collect_software_authenticated":
             return self._authenticated(session, task, step, scoped, asset)
