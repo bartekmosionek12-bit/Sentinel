@@ -8,11 +8,13 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Stan:** Etap 3 z 6 (AI Explainer). Ścieżka krytyczna działa od początku do końca, bez
-> internetu: import inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do
-> zasobów, ocena ryzyka z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia
-> zagrożeń na trzech poziomach z lokalnego modelu, sprawdzane przez kod. Plan:
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), sekcja 12.
+> **Stan:** Etapy 0–3 zrobione, Etap 3b (aktualizacja architektury pod pełną specyfikację)
+> czeka na akceptację. Ścieżka krytyczna działa od początku do końca, bez internetu: import
+> inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów, ocena ryzyka
+> z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia zagrożeń na trzech
+> poziomach z lokalnego modelu, sprawdzane przez kod. Architektura i plan Etapów 4–9:
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); co poza linią cięcia:
+> [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Uruchomienie
 
@@ -63,13 +65,24 @@ zaimportowaniu inwentarza, przed prezentacją bez sieci). Gdy `data/feeds/` jest
 ### Wyjaśnienia z lokalnego modelu (opcjonalnie)
 
 System działa w pełni bez modelu: każde zagrożenie ma wtedy wyjaśnienie z szablonu,
-zbudowane przez kod z danych w bazie. Żeby włączyć lokalny model:
+zbudowane przez kod z danych w bazie.
+
+**Domyślny model: Qwen3 4B (Q4_K_M)**, ustawiony w `.env.example` jako
+`LLM_MODEL=qwen3-4b-q4km`. W ewaluacji z promptami v2 jego odpowiedzi przechodzą walidator w
+93% przypadków (poziom techniczny 95%), Bielika 4.5B w 70%; szczegóły w
+[eval/RESULTS.md](eval/RESULTS.md). Żeby go włączyć:
 
 ```bash
-# w .env: LLM_MODEL=qwen3-4b-q4km   (wybór i porównanie z Bielikiem: eval/RESULTS.md)
-./scripts/fetch_models.sh          # około 2,5 GB, z oficjalnego repozytorium, z sumą SHA-256
+./scripts/fetch_models.sh          # Qwen3 4B, około 2,5 GB, przypięta rewizja i suma SHA-256
 docker compose up -d
 ```
+
+**Opcja: Bielik 4.5B v3.0** (`LLM_MODEL=bielik-4.5b-q4km`). Pisze lepszą polszczyzną, ale
+częściej wychodzi poza fakty, więc częściej dostajesz wersję z szablonu. Oficjalne
+repozytorium nie publikuje wariantu Q4_K_M, więc `fetch_models.sh` pobiera fp16 (9,5 GB) i
+kwantyzuje go obrazem `ghcr.io/ggml-org/llama.cpp`. **Ta ścieżka nie jest zweryfikowana**:
+kwantyzację sprawdziłem tylko llama.cpp uruchomionym poza Dockerem, bo obraz z GHCR nie był
+dostępny w moim środowisku.
 
 Model działa w Ollamie, w sieci bez dostępu do internetu. W widoku Zagrożenia panel
 „Wyjaśnienie” ma trzy poziomy (zarządczy, operacyjny, techniczny) i pokazuje odpowiedź na
@@ -148,10 +161,10 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
 - Nie „wykrywa zero-dayów”. Szybko łapie wczesne sygnały i odpowiada, czy i gdzie
   organizacja jest narażona.
 - API nie ma jeszcze logowania użytkowników, dlatego interfejs jest dostępny tylko z
-  `localhost`. Konta i role są zaplanowane jako osobne zadanie.
+  `localhost`. Keycloak, MFA i RBAC to Etap 4.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
-  (nuclei) i pozostałe narzędzia odkrywania dojdą w kolejnych etapach.
-- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 5.
+  (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
+- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 4b.
 - Walidator wyjaśnień sprawdza pochodzenie identyfikatorów, wersji, dat, poleceń i linków,
   ale nie sens zdań. Model może więc nieprecyzyjnie streścić fakt (przykłady w
   [eval/RESULTS.md](eval/RESULTS.md)). Dlatego decyzje i ocena ryzyka nigdy nie zależą od
