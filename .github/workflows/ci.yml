@@ -143,7 +143,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Konfiguracja z .env.example
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          sed -i "s/^AGENT_CLIENT_SECRET=.*/AGENT_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
       - name: Walidacja docker-compose.yml
         run: docker compose config -q
       - name: Budowanie obrazów
@@ -180,6 +182,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^DEMO_MODE=false/DEMO_MODE=true/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only/; s/^KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=ci-only-kc/; s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/; s/^KEYCLOAK_DB_PASSWORD=.*/KEYCLOAK_DB_PASSWORD=ci-only-kcdb/' .env
+          sed -i "s/^AGENT_CLIENT_SECRET=.*/AGENT_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
       - name: seed_demo (import, feedy offline, skan, dopasowanie, ocena ryzyka)
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API
