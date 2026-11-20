@@ -34,10 +34,15 @@ sleep 25
 echo "==> seed-demo w kontenerze skanera"
 docker compose exec -T worker-scans python -m app.cli seed-demo
 
-if grep -Eq '^LLM_MODEL=[^[:space:]]+' .env; then
-  echo "==> Wyjaśnienia: zlecam generowanie w tle (kolejka llm, niski priorytet)"
+# Domyślny model to Qwen3 4B (LLM_MODEL=qwen3-4b-q4km w .env.example, wybór: eval/RESULTS.md).
+LLM_MODEL_NAME=$(grep -E '^LLM_MODEL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
+if [ -n "$LLM_MODEL_NAME" ]; then
+  echo "==> Wyjaśnienia modelem ${LLM_MODEL_NAME}: generowanie w tle (kolejka llm, niski priorytet)"
   docker compose exec -T worker-llm python -m app.cli explain --queue || \
-    echo "Model niedostępny; interfejs pokaże wyjaśnienia z szablonu (scripts/fetch_models.sh)."
+    echo "Model ${LLM_MODEL_NAME} niedostępny; interfejs pokaże wyjaśnienia z szablonu." \
+      "Pobierz go: ./scripts/fetch_models.sh"
+else
+  echo "==> LLM_MODEL jest pusty: wyjaśnienia z szablonu (domyślnie: LLM_MODEL=qwen3-4b-q4km)"
 fi
 
 echo
