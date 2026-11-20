@@ -255,8 +255,8 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
   budżecie pamięci, więc fallback nie był potrzebny.
 - Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
   (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
-- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka i PDF raportów są w
-  [ROADMAP](docs/ROADMAP.md) (nie weszły do Etapu 4b).
+- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka, e-mail i PDF raportów
+  powstają w Etapie 6; Slack, Teams i baner przez SSE są w [ROADMAP](docs/ROADMAP.md).
 - Reguły przeciw pośredniemu prompt injection (sprzeczności, prośby o hasła) są słownikowe i
   nie złapią każdej parafrazy. Twarda gwarancja: ocenę ryzyka, światło i terminy liczy kod,
   a model nie może ich zmienić (sprawdza to [`ai-tests/`](ai-tests/README.md)).

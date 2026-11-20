@@ -56,18 +56,14 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 
 ### Raporty
 
-- PDF raportów (Jinja2 + WeasyPrint), ta sama struktura co w konsoli.
-- Digesty dzienne i tygodniowe jako raporty z doręczeniem e-mailem, Slackiem i Teams.
 - Baner zero-day przez SSE zamiast odpytywania co 5 s.
+- Doręczanie raportów i powiadomień do Slacka i Teams (e-mail w Etapie 6).
 
 ### AI
 
 - Większy model lokalny na sprzęcie z GPU, wybierany tym samym eval.
 - Eval z rubryką ocenianą przez kilku ludzi i z większą liczbą przypadków.
 - Testy MITRE ATLAS dla agentów z narzędziami (nie tylko chatbotów).
-- Generowany red team promptfoo (pluginy OWASP LLM Top 10) dla własnego AI, z modelem
-  oceniającym innym niż testowany Qwen3 4B (dziś przypadki pisane ręcznie i asercje
-  deterministyczne).
 - Klasyfikator parafraz bagatelizujących ryzyko zamiast list zwrotów (dziś reguły słownikowe).
 
 ### Integracje i skala
