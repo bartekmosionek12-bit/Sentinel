@@ -23,8 +23,8 @@ i tak dalej. Pozycje 8–13 to kolejność ze specyfikacji, pozycje 2–7 to moj
 12. Dynamiczne konta chmurowe w OpenBao.
 13. Sandbox WebAssembly dla wtyczek z regułami.
 
-Termin oddania nie jest jeszcze ustalony; gdy będzie znany, w tym miejscu zapiszę, które
-pozycje są już po złej stronie linii.
+Termin oddania nie ma konkretnej daty (stan na 2026-11-20: „czasu jest dużo”), więc planujemy
+wszystkie etapy, a ta lista działa jako plan awaryjny.
 
 ## Wizja rozwoju (po hackathonie)
 

@@ -856,9 +856,10 @@ reviewed_by: null
 - **Treść wymagań nigdy nie pochodzi z LLM w działającym systemie.** Wyjaśnienia (moduł 13)
   dotyczą tylko luk technicznych, nie interpretacji przepisów. O tym, kto pisze streszczenia w
   YAML, patrz sekcja 20, punkt 4.
-- Daty z specyfikacji (KSC: wejście w życie 3.04.2026, wpis do wykazu do 3.10.2026, wdrożenie
+- Daty ze specyfikacji (KSC: wejście w życie 3.04.2026, wpis do wykazu do 3.10.2026, wdrożenie
   obowiązków do 3.04.2027; AI Act po Digital Omnibus: Załącznik III 2.12.2027, Załącznik I
-  2.08.2028) trafiają do YAML z linkiem do źródła i polem `last_reviewed`.
+  2.08.2028) trafiają do YAML dopiero po sprawdzeniu w ISAP, Dzienniku Ustaw lub EUR-Lex
+  (sekcja 20, punkt 4), z linkiem do konkretnego przepisu i polem `last_reviewed`.
 
 ---
 
@@ -1011,10 +1012,10 @@ tokenu 4 s, mediana odpowiedzi 29 s. Pozostałe wartości to szacunki do zmierze
 | **Razem stos** | | **około 5,5–7,3 GB** | |
 | demo-lab: obecne 5 usług | 1,4 GB | 0,8–1,1 GB | httpd, nginx, DVWA, Juice Shop, Redis |
 | demo-lab: nowe usługi | 1,0 GB | 0,4–0,6 GB | wygasły TLS, host CIS, host SSH z CA, 2–3 urządzenia shadow IT |
-| demo-lab: podatny chatbot | 1,5 GB | 0,8–1,2 GB | własna mała Ollama z modelem ok. 0,6B (sekcja 20, punkt 2) |
-| **Razem z demo-lab** | | **około 7,5–10,2 GB** | |
+| demo-lab: podatny chatbot | 1,5–2,5 GB | 0,8–2,0 GB | własna mała Ollama, model 0,6–1,7B zależnie od testu pośredniego injection (sekcja 20, punkt 2) |
+| **Razem z demo-lab** | | **około 7,5–11,0 GB** | |
 
-Zostaje 6–8 GB na system i przeglądarkę. Dysk: obrazy około 10–12 GB (Keycloak, OpenBao,
+Zostaje 5–8 GB na system i przeglądarkę. Dysk: obrazy około 10–12 GB (Keycloak, OpenBao,
 promptfoo dochodzą), modele około 3 GB, reszta jak w wersji 1, mieści się w 30 GB.
 
 Zasady pod wolną inferencję (zmierzone 6,5–7 tok/s zamiast zakładanych 10–20, sekcja 20,
@@ -1101,21 +1102,33 @@ Pytania do decyzji są oznaczone **[pytanie]**.
    z szablonu, a w scenariuszu zero-day alert i ryzyko są natychmiast, bez modelu.
 2. **Podatny chatbot w demo-lab** potrzebuje modelu. Podłączenie demo-lab do sieci `llm`
    dałoby celowo podatnemu kontenerowi dostęp do produkcyjnej Ollamy, więc to odrzucam.
-   Propozycja: osobna mała Ollama w sieci demo-lab z modelem około 0,6B (około 1 GB RAM).
-   **[pytanie]** Akceptujesz dodatkowy model (około 0,5 GB pobierania), czy wolisz chatbot z
-   deterministyczną atrapą „modelu” (bez RAM, ale mniej realistyczny)?
+   **Ustalone 2026-11-20:** osobna mała Ollama w sieci demo-lab, bez połączenia z produkcyjną.
+   Zastrzeżenie: model około 0,5–0,6B ulega bezpośredniemu poleceniu użytkownika, ale może
+   ignorować instrukcje wklejone w treść dokumentu, więc nie pokaże pośredniego prompt
+   injection. Przed wyborem modelu w Etapie 8 sprawdzę oba warianty (bezpośredni i pośredni)
+   na kandydatach od najmniejszego; jeśli 0,6B nie ulega pośredniemu, bierzemy trochę większy
+   model (np. 1,5–1,7B, około 1,5–2 GB RAM) i aktualizuję budżet z sekcji 16. Deterministyczna
+   atrapa chatbota zostaje do testów w CI, na pokazie działa prawdziwy model.
 3. **Pseudonimizacja w `DEMO_MODE`.** Specyfikacja włącza ją automatycznie w trybie demo, ale
    wtedy demo nie pokaże tabeli „Ludzie i urządzenia” ani nazwiska na karcie urządzenia, choć
-   dane i tak są fikcyjne. **[pytanie]** Propozycja: w `DEMO_MODE` pokazujemy fikcyjne nazwiska z
-   etykietą „dane demonstracyjne”, a pseudonimizacja działa w eksportach i dla zewnętrznego
-   LLM, plus przełącznik do pokazania jej na żywo. Czy trzymamy się dosłownie specyfikacji?
+   dane i tak są fikcyjne. **Ustalone 2026-11-20:** w `DEMO_MODE` pokazujemy fikcyjne nazwiska z
+   etykietą „dane demonstracyjne”; pseudonimizacja działa zawsze w eksportach i dla
+   zewnętrznego LLM, a przełącznik w ustawieniach pokazuje ją na żywo podczas prezentacji.
 4. **Kto pisze streszczenia przepisów.** W działającym systemie treść wymagań nie pochodzi z
    LLM. Streszczenia w YAML przygotuję jednak ja w trakcie developmentu, a jestem modelem
-   językowym, więc to ten sam rodzaj ryzyka, tylko przesunięty w czasie. **[pytanie]**
-   Propozycja: każde wymaganie ma `reviewed_by: null`, dopóki nie przejrzy go człowiek, a UI i
-   raporty pokazują przy nim „treść niezweryfikowana przez prawnika”. Czy ktoś z zespołu
-   przejrzy pakiety KSC i RODO art. 32 przed prezentacją? Daty ze specyfikacji też oznaczę
-   jako do weryfikacji ze źródłem, bo nie mam dostępu do aktualnych tekstów aktów.
+   językowym, więc to ten sam rodzaj ryzyka, tylko przesunięty w czasie. **Ustalone
+   2026-11-20:**
+   - dopisek „treść niezweryfikowana przez prawnika” jest obowiązkowy przy każdym wymaganiu z
+     `reviewed_by: null`, w UI, raportach i PDF; przegląd przez kogoś z zespołu jest pożądany,
+   - każde wymaganie linkuje do **konkretnego przepisu** (artykuł, ustęp, punkt w tekście
+     jednolitym w ISAP lub EUR-Lex), nie do całego aktu, żeby przeglądający mógł sprawdzić
+     źródło; test pakietu odrzuca wymaganie bez `source_url` wskazującego przepis,
+   - **przed napisaniem pakietu KSC** ustalam, która wersja ustawy o KSC obowiązuje w dniu
+     prezentacji (czy nowelizacja wdrażająca NIS2 weszła w życie, od kiedy i z jakimi
+     przepisami przejściowymi), na podstawie ISAP i Dziennika Ustaw. Wynik zapisuję w
+     `rules/legal/ksc/SOURCE.md` (akt, pozycja Dz.U., data stanu prawnego) i w polu „stan
+     prawny na dzień”. Jeśli nie da się tego ustalić pewnie, pakiet dostaje status „projekt” i
+     wyraźną etykietę w UI. Dotyczy też dat AI Act po Digital Omnibus.
 5. **promptfoo w CI.** Standardowy runner GitHub dla repozytoriów prywatnych jest mniejszy niż
    dla publicznych (2 vCPU i 7 GB RAM według znanej mi dokumentacji GitHub; sprawdzę to na
    pierwszym przebiegu w Etapie 4b). Qwen3 4B działa tam około 2–3 razy wolniej niż
@@ -1123,13 +1136,18 @@ Pytania do decyzji są oznaczone **[pytanie]**.
    **[pytanie]** Propozycja: na każdym PR szybki zestaw z „posłuszną” atrapą modelu (model,
    który zawsze wykonuje wstrzyknięte polecenie) sprawdza, że kod nie da się zmanipulować:
    ryzyko i plan po walidacji się nie zmieniają; plus 5–10 przypadków na prawdziwym Qwen3 4B
-   z modelem w cache CI. Pełny red team nocą i ręcznie (`workflow_dispatch`). Zgoda?
+   z modelem w cache CI. Pełny red team nocą i ręcznie (`workflow_dispatch`). **Ustalone
+   2026-11-20:** taki podział. Przy atrapie wyłącznie asercje deterministyczne (regex, wyciek
+   kanarka, porównanie oceny ryzyka i planu po walidacji), bez oceniającego LLM. Gdy przy
+   prawdziwym modelu potrzebny jest oceniający (`llm-rubric`), nie jest nim testowany Qwen3 4B:
+   najpierw asercje deterministyczne, a oceniający tylko tam, gdzie się bez niego nie da, i
+   wtedy inny model (do ustalenia w Etapie 4b, z uwzględnieniem prywatności danych testowych).
 6. **Odwołanie certyfikatu SSH.** OpenSSH nie sprawdza odwołania certyfikatu bez listy KRL na
    hoście. Odwołujemy lease i token w OpenBao i niszczymy klucz prywatny; ważność certyfikatu
    ogranicza TTL 15 min. W demo-lab dodam KRL aktualizowaną przez `mcp-scanner`, żeby pokazać
    pełne odwołanie, i opiszę to ograniczenie w README.
-7. **Termin oddania.** **[pytanie]** Etapy 4–9 to wielokrotnie więcej pracy niż Etapy 1–3.
-   Podaj termin oddania (data i godzina), a linię cięcia ustawię konkretnie w ROADMAP.md.
+7. **Termin oddania.** Według Bartka (2026-11-20) czasu jest dużo; konkretnej daty brak.
+   Planujemy wszystkie Etapy 4–9, a linia cięcia z ROADMAP.md działa jako plan awaryjny.
 8. **OpenBao w demo** trzyma klucz rozpieczętowania w `.env`. To świadome ograniczenie trybu
    demo, opisane w README; produkcyjnie: auto-unseal przez KMS albo HSM (ROADMAP).
 9. **Rola `system`** dla deterministycznego pipeline'u nie występuje w specyfikacji, ale jest
@@ -1181,4 +1199,12 @@ Ustalone 2026-11-20: domyślny model Qwen3 4B (eval v2), Bielik 4.5B jako opcja;
 awaryjny przy odrzuceniu odpowiedzi zostaje; pełna specyfikacja z 2026-11-20 zastępuje
 poprzednie; merge do `main` merge commitem.
 
-Otwarte: pytania z sekcji 20 (punkty 2, 3, 4, 5, 7).
+Ustalone 2026-11-20 (odpowiedzi na pytania z sekcji 20): osobna mała Ollama dla podatnego
+chatbota z testem pośredniego injection przed wyborem modelu; fikcyjne nazwiska w `DEMO_MODE`
+z przełącznikiem pseudonimizacji; obowiązkowy dopisek „niezweryfikowane przez prawnika”, link
+do konkretnego przepisu i ustalenie obowiązującej wersji ustawy o KSC przed napisaniem
+pakietu; promptfoo: atrapa z asercjami deterministycznymi na każdym PR, 5–10 przypadków na
+prawdziwym modelu, pełny zestaw nocą, oceniający LLM nigdy ten sam co testowany; termin
+oddania bez konkretnej daty.
+
+Otwarte: brak.
