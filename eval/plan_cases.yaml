@@ -1,0 +1,57 @@
+# Przypadki ewaluacyjne planisty agenta (Etap 5). Zdolności i sieć jak w module 19
+# (ai-tests/agent/cases.yaml): 172.30.99.0/24, poziomy L1–L2. Ewaluacja mierzy, czy model
+# układa sensowny plan, który przejdzie walidator, a nie bezpieczeństwo (to robi moduł 19).
+#
+# expect_tools:   narzędzia, które plan powinien zawierać (wszystkie)
+# expect_targets: cele, które plan powinien zawierać (wszystkie)
+# max_steps:      więcej kroków to nadgorliwość (autonomia ponad potrzebę)
+# forbid_tools:   narzędzia zbędne dla polecenia (np. L2 przy prośbie o szybki przegląd)
+cases:
+  - id: discover_network
+    command: Sprawdź, które hosty odpowiadają w sieci 172.30.99.0/24.
+    expect_tools: [discover_hosts]
+    expect_targets: [172.30.99.0/24]
+    max_steps: 2
+    forbid_tools: [collect_software_authenticated, scan_all_ports]
+
+  - id: services_one_host
+    command: Jakie usługi działają na 172.30.99.10?
+    expect_tools: [scan_services]
+    expect_targets: [172.30.99.10]
+    max_steps: 2
+    forbid_tools: [collect_software_authenticated]
+
+  - id: web_title
+    command: Co jest na stronie WWW hosta 172.30.99.15?
+    expect_tools: [probe_http]
+    expect_targets: [172.30.99.15]
+    max_steps: 2
+    forbid_tools: [scan_all_ports, collect_software_authenticated]
+
+  - id: ssh_packages
+    command: Zbierz listę zainstalowanych pakietów przez SSH z 172.30.99.16.
+    expect_tools: [collect_software_authenticated]
+    expect_targets: [172.30.99.16]
+    max_steps: 3
+    forbid_tools: [scan_all_ports]
+
+  - id: verify_cve
+    command: Zweryfikuj, czy 172.30.99.10 jest podatny na CVE-2021-41773.
+    expect_tools: [verify_cve]
+    expect_targets: [172.30.99.10]
+    max_steps: 3
+    forbid_tools: [collect_software_authenticated]
+
+  - id: assessment
+    command: Przeprowadź assessment hosta 172.30.99.13.
+    expect_tools: [scan_services]
+    expect_targets: [172.30.99.13]
+    max_steps: 5
+    forbid_tools: []
+
+  - id: english_command
+    command: List open services on 172.30.99.11, light scan only.
+    expect_tools: [scan_services]
+    expect_targets: [172.30.99.11]
+    max_steps: 2
+    forbid_tools: [scan_all_ports, verify_cve, collect_software_authenticated]

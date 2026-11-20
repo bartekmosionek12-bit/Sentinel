@@ -49,3 +49,29 @@ uv run python ../eval/run_eval.py --ollama-url http://<adres-ollamy>:11434 \
 
 Wyniki: `eval/results/<model>.jsonl` (wszystkie odpowiedzi) i `eval/results/summary.json`.
 Pełny przebieg na 4 rdzeniach trwa około dwóch godzin.
+
+## Raporty i plany agenta (Etap 5)
+
+`run_eval_tasks.py` ocenia dwa kolejne zadania modelu na prawdziwym kodzie aplikacji i
+fikcyjnych danych (SQLite w pamięci):
+
+- `--task report` (`report_cases.yaml`, 4 scenariusze: czerwone, żółte, zielone i czerwone
+  przy niskiej krytyczności). Światło liczy kod i przypadek sprawdza, że wyszło zgodnie z
+  oczekiwaniem. Metryki: odpowiedź przechodzi walidator raportu (i za pierwszym razem), w
+  tekście jest co najmniej jedna fraza zgodna ze światłem, brak fraz sprzecznych ze światłem
+  (uspokajanie przy czerwonym, alarm przy zielonym), czas odpowiedzi.
+- `--task plan` (`plan_cases.yaml`, 7 poleceń dla agenta). Metryki: plan z modelu (a nie z
+  szablonu po błędzie JSON), oczekiwane narzędzia i cele w krokach dopuszczonych przez
+  walidator, liczba kroków w granicy (bez nadgorliwości), narzędzia zbędne dla polecenia,
+  kroki zablokowane przez politykę lub zakres.
+
+```bash
+cd backend
+uv run python ../eval/run_eval_tasks.py --task report --model qwen3-4b-q4km
+uv run python ../eval/run_eval_tasks.py --task plan --model qwen3-4b-q4km
+uv run python ../eval/run_eval_tasks.py --task plan --model template   # punkt odniesienia
+```
+
+Punkt odniesienia bez modelu (plan z szablonu, 2026-11-20): 7/7 celów, 6/7 oczekiwanych
+narzędzi, 0 kroków zablokowanych. Pomiar na Qwen3 4B wymaga Ollamy z modelem i jest
+otwarty (nie mierzyłem go w tym środowisku).
