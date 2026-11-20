@@ -77,6 +77,25 @@ class Settings(BaseSettings):
     # Konto awaryjne: każde użycie = wpis w audycie i alert.
     breakglass_username: str = "breakglass-admin"
 
+    # Agent i serwer MCP (Etap 5). Agent łączy się z `mcp-scanner` z tokenem konta
+    # usługowego `sentinel-agent` (client credentials w Keycloak).
+    mcp_url: str = "http://mcp-scanner:8001/mcp"
+    oidc_token_url: str = "http://keycloak:8080/auth/realms/sentinel/protocol/openid-connect/token"  # noqa: S105
+    agent_client_id: str = "sentinel-agent"
+    agent_client_secret: str = ""
+    # Wersja promptów planisty (zmiana = nowa wersja konfiguracji agenta i test, moduł 19).
+    agent_prompt_version: str = "planner-v1"
+    # OpenBao: poświadczenia JIT. Pusty adres = skan uwierzytelniony wyłączony.
+    openbao_url: str = ""
+    openbao_role_id: str = ""
+    openbao_secret_id: str = ""
+    ssh_known_hosts: Path = Path("/app/data/known_hosts")
+    ssh_username: str = "sentinel-scan"
+    nuclei_config: Path = Path("/app/rules/nuclei.yaml")
+    # Moduł 19: klucz podpisu wyników testu (Ed25519, PEM) tylko w kontenerze harnessu.
+    harness_signing_key: Path = Path("/app/data/harness/signing_key.pem")
+    agent_cases_file: Path = Path("/app/ai-tests/agent/cases.yaml")
+
     @field_validator("demo_approval_expires_at", mode="before")
     @classmethod
     def _empty_as_none(cls, value: object) -> object:

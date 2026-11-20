@@ -216,6 +216,8 @@ class OllamaProvider:
                 "seed": 7,
             },
         }
+        if prompt.schema is not None:
+            body["format"] = prompt.schema
         think = _ThinkFilter()
         try:
             with self._client.stream("POST", f"{self._base_url}/api/chat", json=body) as response:

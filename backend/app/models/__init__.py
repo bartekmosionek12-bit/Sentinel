@@ -1,5 +1,15 @@
 """Modele SQLAlchemy. Import tego pakietu rejestruje wszystkie tabele w Base.metadata."""
 
+from app.models.agent import (
+    AgentCapability,
+    AgentConfigVersion,
+    AgentStep,
+    AgentSwitch,
+    AgentTask,
+    AgentTestCaseResult,
+    AgentTestRun,
+    CredentialLease,
+)
 from app.models.base import Base
 from app.models.finding import (
     ComplianceResult,
@@ -29,6 +39,13 @@ from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
 
 __all__ = [
+    "AgentCapability",
+    "AgentConfigVersion",
+    "AgentStep",
+    "AgentSwitch",
+    "AgentTask",
+    "AgentTestCaseResult",
+    "AgentTestRun",
     "Asset",
     "AssetHistory",
     "AssetRelation",
@@ -37,6 +54,7 @@ __all__ = [
     "ComplianceResult",
     "ComplianceRule",
     "CpeProduct",
+    "CredentialLease",
     "FeedSync",
     "Finding",
     "FindingEvent",

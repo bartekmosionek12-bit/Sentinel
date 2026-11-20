@@ -19,7 +19,9 @@ from app.core.scope_guard import ScopedNetwork, ScopedTarget
 
 logger = logging.getLogger("sentinel.scanners")
 
-ALLOWED_BINARIES = frozenset({"nmap"})
+# Narzędzie → sposób podania celu. Cel zawsze dopisuje runner, z adresu sprawdzonego przez bramę.
+TARGET_STYLE = {"nmap": "positional", "nuclei": "flag"}
+ALLOWED_BINARIES = frozenset(TARGET_STYLE)
 
 
 class ToolError(Exception):
@@ -42,11 +44,16 @@ class ToolRunner(Protocol):
         target: ScopedTarget | ScopedNetwork,
         *,
         timeout: float,
+        port: int | None = None,
     ) -> ToolOutput: ...
 
 
 def build_argv(
-    binary: str, args: Sequence[str], target: ScopedTarget | ScopedNetwork
+    binary: str,
+    args: Sequence[str],
+    target: ScopedTarget | ScopedNetwork,
+    *,
+    port: int | None = None,
 ) -> tuple[str, ...]:
     if not isinstance(target, ScopedTarget | ScopedNetwork):
         raise TypeError(
@@ -58,6 +65,14 @@ def build_argv(
     for arg in args:
         if not isinstance(arg, str) or "\x00" in arg or "\n" in arg:
             raise ToolError("Nieprawidłowy argument narzędzia")
+    if TARGET_STYLE[binary] == "flag":
+        # nuclei: `-u <ip>:<port>`; port to liczba sprawdzona tutaj, adres z bramy.
+        if not isinstance(target, ScopedTarget):
+            raise ToolError(f"{binary} przyjmuje wyłącznie pojedynczy cel")
+        if port is None or not 1 <= int(port) <= 65535:
+            raise ToolError(f"{binary}: wymagany poprawny port celu")
+        host = f"[{target.address}]" if ":" in target.address else target.address
+        return (binary, *args, "-u", f"{host}:{int(port)}")
     return (binary, *args, "--", target.address)
 
 
@@ -69,8 +84,9 @@ class SubprocessRunner:
         target: ScopedTarget | ScopedNetwork,
         *,
         timeout: float,
+        port: int | None = None,
     ) -> ToolOutput:
-        argv = build_argv(binary, args, target)
+        argv = build_argv(binary, args, target, port=port)
         executable = shutil.which(binary)
         if executable is None:
             raise ToolError(f"Brak narzędzia {binary} w tym kontenerze")

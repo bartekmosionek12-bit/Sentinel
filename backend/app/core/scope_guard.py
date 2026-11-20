@@ -353,6 +353,7 @@ class ScopeGuard:
         intrusiveness: Intrusiveness,
         rule_name: str,
         max_addresses: int = 1024,
+        dry_run: bool = False,
     ) -> ScopedNetwork:
         """Zgoda na odkrywanie hostów w sieci. Tylko poziom L1.
 
@@ -364,9 +365,12 @@ class ScopeGuard:
             "tool": tool,
             "intrusiveness": int(intrusiveness),
             "rule": rule_name,
+            "dry_run": dry_run,
         }
         try:
-            scoped = self._decide_network(cidr, tool, intrusiveness, rule_name, max_addresses)
+            scoped = self._decide_network(
+                cidr, tool, intrusiveness, rule_name, max_addresses, dry_run
+            )
         except ScopeError as error:
             self._audit(
                 AuditEvent(
@@ -393,7 +397,13 @@ class ScopeGuard:
         return scoped
 
     def _decide_network(
-        self, cidr: str, tool: str, intrusiveness: Intrusiveness, rule_name: str, max_addresses: int
+        self,
+        cidr: str,
+        tool: str,
+        intrusiveness: Intrusiveness,
+        rule_name: str,
+        max_addresses: int,
+        dry_run: bool = False,
     ) -> ScopedNetwork:
         if intrusiveness > Intrusiveness.LIGHT:
             raise ScopeDenied(cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomie L1")
@@ -415,7 +425,9 @@ class ScopeGuard:
             if network.subnet_of(denied):  # type: ignore[arg-type]
                 raise ScopeDenied(cidr, "Cała sieć jest na denyliście")
             excluded.append(denied)
-        if not self._rate_limiter.acquire(str(network), self._config.rate_for(str(network))):
+        if not dry_run and not self._rate_limiter.acquire(
+            str(network), self._config.rate_for(str(network))
+        ):
             raise RateLimited(cidr, "Przekroczony limit akcji na minutę dla sieci")
         return ScopedNetwork(
             network=network,
