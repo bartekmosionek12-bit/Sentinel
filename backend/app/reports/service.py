@@ -36,9 +36,9 @@ LIGHT_LABELS = {"red": "czerwone", "yellow": "żółte", "green": "zielone"}
 PERSON_HIDDEN = "[dane osobowe ukryte]"
 
 
-def summary_context(report: Report) -> SummaryContext:
+def summary_context(report: Report, *, system_prompt: str = "") -> SummaryContext:
     products = [str(r["product"]) for r in report.technical.get("rows", []) if r.get("product")]
-    return SummaryContext(report.facts, report.entities, report.light, products)
+    return SummaryContext(report.facts, report.entities, report.light, products, system_prompt)
 
 
 def facts_prompt_text(report: Report) -> str:
@@ -148,7 +148,7 @@ def generate_summary(
             session, report, actor, "unavailable", inputs, ("model nie jest skonfigurowany",)
         )
 
-    context = summary_context(report)
+    context = summary_context(report, system_prompt=prompt.system)
     verdict = ValidationResult()
     result: LLMResult | None = None
     answers: dict[str, str] = {}

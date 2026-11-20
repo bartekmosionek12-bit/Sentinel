@@ -13,6 +13,14 @@ from collections.abc import Collection
 from dataclasses import dataclass
 
 from app.explainer.context import AudienceLimits, ExplainContext
+from app.explainer.guards import (
+    copies_prompt,
+    downplaying,
+    secret_request,
+    shell_command,
+    trusted_text,
+    unknown_identifiers,
+)
 
 CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 _VERSION_RE = re.compile(r"(?<![\d.])\d+(?:\.\d+)+[a-z]?(?![\w]|\.\d)")
@@ -24,6 +32,7 @@ _SENTENCE_END_RE = re.compile(r"[.!?…]+(?=\s|$)")
 _ABBREVIATIONS_RE = re.compile(
     r"\b(?:np|tzw|tj|m\.in|itp|itd|wg|ok|pkt|nr|ww|godz)\.", re.IGNORECASE
 )
+SERIOUS_CVSS = 7.0
 _FOREIGN_SCRIPT_RE = re.compile(r"[Ѐ-ӿ぀-ヿ㐀-鿿가-힯]")
 _POLISH_DIACRITICS = set("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ")
 _POLISH_WORDS = frozenset(
@@ -168,14 +177,25 @@ def looks_polish(text: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _serious(context: ExplainContext) -> bool:
+    """Podatność z KEV albo o wysokiej wadze: bagatelizowanie przeczy faktom."""
+    return context.in_kev or (context.cvss_score or 0.0) >= SERIOUS_CVSS
+
+
 def validate(
     text: str,
     *,
     limits: AudienceLimits,
     context: ExplainContext,
     known_cves: Collection[str],
+    system_prompt: str = "",
+    downplaying_phrases: Collection[str] = (),
 ) -> ValidationResult:
-    """`known_cves`: identyfikatory z odpowiedzi, które istnieją w bazie."""
+    """`known_cves`: identyfikatory z odpowiedzi, które istnieją w bazie.
+
+    Wersje, daty i identyfikatory muszą pochodzić z faktów bez opisu CVE: opis z rejestru jest
+    tekstem z zewnątrz i może zawierać wstrzyknięte polecenia (testy w `ai-tests/`).
+    """
     problems: list[Problem] = []
     stripped = text.strip()
     if not stripped:
@@ -192,7 +212,8 @@ def validate(
             problems.append(
                 Problem("unknown_version", f"wersja {version} nie pochodzi z kontekstu", False)
             )
-    facts_dates = set(_DATE_RE.findall(context.facts_text()))
+    trusted = trusted_text(context.facts_text())
+    facts_dates = set(_DATE_RE.findall(trusted))
     for found in dict.fromkeys(_DATE_RE.findall(stripped)):
         if found not in facts_dates:
             problems.append(
@@ -200,6 +221,31 @@ def validate(
             )
     if _URL_RE.search(stripped):
         problems.append(Problem("url", "odpowiedź zawiera link spoza kontekstu", False))
+    command = shell_command(stripped, context.commands)
+    if command:
+        problems.append(
+            Problem("unknown_command", f"polecenie {command[:60]} nie pochodzi z kontekstu", False)
+        )
+    if secret_request(stripped):
+        problems.append(Problem("secret_request", "prośba o hasło, kod albo przelew", False))
+    strangers = unknown_identifiers(
+        without_ids, "\n".join([trusted, *context.commands, *context.allowed_snippets()])
+    )
+    if strangers:
+        problems.append(
+            Problem(
+                "unknown_identifier",
+                f"identyfikator spoza kontekstu: {', '.join(strangers[:3])}",
+                False,
+            )
+        )
+    if system_prompt and copies_prompt(stripped, system_prompt):
+        problems.append(Problem("prompt_leak", "fragment instrukcji systemowych w tekście", False))
+    phrase = downplaying(stripped, downplaying_phrases) if _serious(context) else None
+    if phrase:
+        problems.append(
+            Problem("contradiction", f"„{phrase}” przeczy powadze podatności z faktów", False)
+        )
     allowed_snippets = context.allowed_snippets()
     facts_lower = " ".join(context.facts_text().split()).lower()
     for block, inline in _CODE_RE.findall(stripped):

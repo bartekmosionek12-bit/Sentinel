@@ -55,5 +55,19 @@ contradictions:
     - "nie wymaga działań"
     - "można zignorować"
     - "można to zignorować"
+    # Uspokajanie innymi słowami (przypadek report_lower_risk_pl_paraphrase w ai-tests/).
+    - "jest bezpieczn"
+    - "całkowicie bezpieczn"
+    - "pod kontrolą"
+    - "może poczekać"
+    - "może spokojnie poczekać"
+    - "nie jest pilne"
+    - "nie jest pilna"
+    - "nic poważnego"
+    - "nie stanowi zagrożenia"
+    - "nie stanowi żadnego zagrożenia"
+    - "nie ma potrzeby"
+    - "nie ma się czym martwić"
+    - "bez obaw"
   yellow: *not_safe
   green: []

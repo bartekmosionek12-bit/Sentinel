@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from app.explainer.guards import trusted_text
 from app.matching.cpe import CpeEntry
 from app.models import VulnAffected, Vulnerability
 from app.models.ops import AUDIENCES
@@ -42,6 +43,8 @@ class ExplainerConfig:
     audiences: dict[str, AudienceLimits]
     verify_commands: dict[tuple[str, str], tuple[str, ...]]
     description_max_chars: int = 500
+    # Zwroty bagatelizujące, które przeczą podatności z KEV albo o wysokiej wadze.
+    downplaying: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExplainerConfig:
@@ -56,7 +59,12 @@ class ExplainerConfig:
         for key, values in (data.get("verify_commands") or {}).items():
             vendor, _, product = str(key).partition(":")
             commands[(vendor, product)] = tuple(str(v) for v in values)
-        return cls(audiences, commands, int(data.get("description_max_chars", 500)))
+        return cls(
+            audiences,
+            commands,
+            int(data.get("description_max_chars", 500)),
+            tuple(" ".join(str(p).lower().split()) for p in data.get("downplaying") or ()),
+        )
 
     @classmethod
     def from_file(cls, path: Path) -> ExplainerConfig:
@@ -179,8 +187,8 @@ class ExplainContext:
         return hashlib.sha256(self.facts_text().encode("utf-8")).hexdigest()
 
     def allowed_versions(self) -> set[str]:
-        """Numery z kropką, które model może przytoczyć: tylko te z faktów."""
-        return set(_VERSION_RE.findall(self.facts_text()))
+        """Numery z kropką, które model może przytoczyć: tylko te z faktów bez opisu CVE."""
+        return set(_VERSION_RE.findall(trusted_text(self.facts_text())))
 
     def allowed_snippets(self) -> set[str]:
         """Teksty, które wolno umieścić w znakach kodu."""

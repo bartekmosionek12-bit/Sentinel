@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.explainer.context import severity_label
+from app.explainer.guards import UNTRUSTED_MARKERS
 from app.matching.engine import ACTIVE_STATUSES
 from app.models import Asset, Finding, Vulnerability
 from app.reports.config import QUESTION_KEYS, LightRule, ReportsConfig
@@ -219,11 +220,7 @@ def build(
             f"{item.vuln.cve_id} ({_product(item) or 'oprogramowanie'}): powaga "
             f"{severity_label(item.vuln.cvss_score)}"
             + (", już wykorzystywana przez przestępców" if item.vuln.in_kev else "")
-            + (
-                f". Opis z rejestru (po angielsku, tylko informacja): {description}"
-                if description
-                else ""
-            )
+            + (f". {UNTRUSTED_MARKERS[0]} {description}" if description else "")
             + "."
         )
     if not facts["worst"]:

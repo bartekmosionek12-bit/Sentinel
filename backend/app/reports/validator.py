@@ -17,6 +17,13 @@ import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
+from app.explainer.guards import (
+    copies_prompt,
+    secret_request,
+    shell_command,
+    trusted_text,
+    unknown_identifiers,
+)
 from app.explainer.validator import (
     _ABBREVIATIONS_RE,
     _CODE_RE,
@@ -48,9 +55,14 @@ class SummaryContext:
     entities: Mapping[str, Mapping[str, object]]
     light: str
     products: Collection[str] = ()
+    system_prompt: str = ""
 
     def facts_text(self) -> str:
         return "\n".join(line for lines in self.facts.values() for line in lines)
+
+    def trusted_text(self) -> str:
+        """Fakty bez opisów z rejestru: źródło dozwolonych CVE, wersji, dat i identyfikatorów."""
+        return trusted_text(self.facts_text())
 
 
 def _abbreviations_allowed(config: ReportsConfig, context: SummaryContext) -> set[str]:
@@ -72,7 +84,8 @@ def check_answer(
     stripped = text.strip()
     if not stripped:
         return [Problem("empty", f"{label}: brak odpowiedzi", True)]
-    facts = context.facts_text()
+    # Opis CVE z rejestru widzi model, ale nie jest źródłem faktów (pośrednie injection).
+    facts = context.trusted_text()
 
     # --- fakty i dane, których model nie mógł znać: odrzucenie bez ponownej próby ---
     for token in dict.fromkeys(TOKEN_RE.findall(stripped)):
@@ -105,8 +118,25 @@ def check_answer(
     for found in dict.fromkeys(_DATE_RE.findall(stripped)):
         if found not in facts:
             problems.append(Problem("unknown_date", f"{label}: data {found} spoza faktów", False))
-    if _URL_RE.search(stripped) or _CODE_RE.search(stripped):
+    if _URL_RE.search(stripped) or _CODE_RE.search(stripped) or shell_command(stripped):
         problems.append(Problem("url_or_command", f"{label}: link albo polecenie w tekście", False))
+    if secret_request(stripped):
+        problems.append(
+            Problem("secret_request", f"{label}: prośba o hasło, kod albo przelew", False)
+        )
+    strangers = unknown_identifiers(without_ids, f"{facts}\n{products}")
+    if strangers:
+        problems.append(
+            Problem(
+                "unknown_identifier",
+                f"{label}: identyfikator spoza faktów: {', '.join(strangers[:3])}",
+                False,
+            )
+        )
+    if context.system_prompt and copies_prompt(stripped, context.system_prompt):
+        problems.append(
+            Problem("prompt_leak", f"{label}: fragment instrukcji systemowych w tekście", False)
+        )
     lowered = " ".join(stripped.lower().split())
     for phrase in config.contradictions.get(context.light, ()):
         if phrase in lowered:
