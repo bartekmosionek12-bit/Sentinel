@@ -16,6 +16,8 @@ export interface NavItem {
   /** Etap planu, w którym widok dostaje dane. Brak = działa już teraz. */
   stage?: number;
   summary?: string;
+  /** Aktywny tylko dla dokładnie tej ścieżki (gdy pod nią są inne pozycje menu). */
+  end?: boolean;
 }
 
 export interface NavGroup {
@@ -91,11 +93,11 @@ export function AppShell({
                 {group.title}
               </p>
               <ul className="space-y-1">
-                {group.items.map(({ path, label, icon: Icon }) => (
+                {group.items.map(({ path, label, icon: Icon, end }) => (
                   <li key={path}>
                     <NavLink
                       to={path}
-                      end={path === "/"}
+                      end={end ?? path === "/"}
                       className={({ isActive }) =>
                         cn(
                           "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-sidebar-active hover:text-white",
@@ -120,11 +122,11 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 md:px-8">
           <nav className="flex gap-1 overflow-x-auto md:hidden" aria-label="Nawigacja mobilna">
-            {navGroups.flatMap((g) => g.items).map(({ path, label, icon: Icon }) => (
+            {navGroups.flatMap((g) => g.items).map(({ path, label, icon: Icon, end }) => (
               <NavLink
                 key={path}
                 to={path}
-                end={path === "/"}
+                end={end ?? path === "/"}
                 title={label}
                 aria-label={label}
                 className={({ isActive }) =>

@@ -176,6 +176,7 @@ def test_agent_identity_has_no_access_to_its_own_tests_or_tasks(
         ("post", "/api/agent/tests", {"suite": "quick"}),
         ("post", f"/api/agent/configs/{uuid.uuid4()}/force", {"justification": "x" * 30}),
         ("get", "/api/agent/tasks", None),
+        ("get", "/api/agent/configs", None),
         ("post", "/api/agent/tasks", {"command": "assessment"}),
         ("post", "/api/agent/capabilities", CAPABILITY),
         ("post", "/api/agent/kill", {"reason": "sam siebie"}),
@@ -215,6 +216,8 @@ def test_manual_test_button_and_force_with_justification(
     )
     assert forced.status_code == 200
     assert forced.json()["state"] == "forced"
+    configs = anon_client.get("/api/agent/configs", headers=_admin(tokens)).json()
+    assert [(c["id"], c["state"]) for c in configs] == [(config_id, "forced")]
     with session_factory() as session:
         assert session.scalar(select(AgentConfigVersion.forced_by)) == "user:admin"
         assert "agent_config_forced" in set(session.scalars(select(AuditLog.action)))

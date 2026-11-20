@@ -1,7 +1,9 @@
 import {
+  Bot,
   ClipboardCheck,
   Crosshair,
   FileText,
+  FlaskConical,
   LayoutDashboard,
   ListChecks,
   Network,
@@ -73,6 +75,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: "/skany", label: "Skany", icon: Radar },
       { path: "/zakres", label: "Zakres skanowania", icon: Crosshair },
+      { path: "/agent", label: "Agent AI", icon: Bot, end: true },
+      { path: "/agent/test", label: "Test agenta", icon: FlaskConical },
       { path: "/audyt", label: "Dziennik audytu", icon: ScrollText },
     ],
   },

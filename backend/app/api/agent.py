@@ -513,6 +513,19 @@ def run_agent_test(
     return TaskOut(task_id=job, detail="Test zlecony niezależnemu harnessowi")
 
 
+@router.get(
+    "/configs", response_model=list[ConfigOut], dependencies=[Depends(require("agent:read"))]
+)
+def list_configs(
+    session: SessionDep, limit: Annotated[int, Query(ge=1, le=100)] = 20
+) -> list[ConfigOut]:
+    """Wersje konfiguracji agenta (model, prompt, zdolności) i ich stan w bramce zmian."""
+    rows = session.scalars(
+        select(AgentConfigVersion).order_by(AgentConfigVersion.created_at.desc()).limit(limit)
+    )
+    return [ConfigOut.model_validate(r) for r in rows]
+
+
 @router.post("/configs/{config_id}/force", response_model=ConfigOut)
 def force_config(
     config_id: uuid.UUID,
