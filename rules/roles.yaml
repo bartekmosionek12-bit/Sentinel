@@ -7,6 +7,7 @@ version: 1
 # mfa: true = uprawnienie działa tylko z tokenem po uwierzytelnieniu wieloskładnikowym
 # (konsola operacyjna /admin). Bez MFA rola admin ma wyłącznie uprawnienia do odczytu.
 permissions:
+  console:admin: {description: "Wejście do konsoli operacyjnej (/admin); odmowa trafia do audytu", mfa: true}
   inventory:read: {description: "Odczyt inwentarza zasobów"}
   inventory:write: {description: "Dodawanie i import zasobów", mfa: true}
   findings:read: {description: "Odczyt zagrożeń, feedu i wyjaśnień"}

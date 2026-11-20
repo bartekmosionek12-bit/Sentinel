@@ -58,6 +58,10 @@ class AuditLogOut(OrmModel):
     id: int
     ts: datetime
     actor: str
+    actor_type: str | None = None
+    actor_id: str | None = None
+    on_behalf_of: str | None = None
+    request_id: str | None = None
     action: str
     object_type: str | None
     object_id: str | None
@@ -65,6 +69,7 @@ class AuditLogOut(OrmModel):
     inputs: dict[str, Any]
     hash: str
     prev_hash: str
+    hash_version: int = 1
 
 
 class AuditChainOut(BaseModel):

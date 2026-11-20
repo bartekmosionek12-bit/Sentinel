@@ -326,6 +326,23 @@ def test_manager_denied_on_admin_operation_is_audited(
         assert verify_chain(db).ok
 
 
+def test_manager_opening_admin_console_is_denied_and_audited(
+    anon_client: TestClient, tokens: TokenFactory, session_factory: sessionmaker[Session]
+) -> None:
+    """Scenariusz demo 5 tak, jak go wykonuje interfejs: wejście na /admin."""
+    manager = tokens.headers(["manager"], client=ADMIN_CLIENT, username="marta")
+    assert anon_client.get("/api/console/admin", headers=manager).status_code == 403
+    (entry,) = _audit(session_factory, "access_denied")
+    assert entry.inputs["permission"] == "console:admin"
+    assert "MFA" not in anon_client.get("/api/console/admin", headers=manager).json()["detail"]
+    admin_without_otp = tokens.headers(["admin"], amr=["pwd"])
+    denied = anon_client.get("/api/console/admin", headers=admin_without_otp)
+    assert denied.status_code == 403
+    assert "MFA" in denied.json()["detail"]
+    admin = tokens.headers(["admin"])
+    assert anon_client.get("/api/console/admin", headers=admin).status_code == 204
+
+
 def test_audit_entries_carry_actor_and_request_id(
     client: TestClient, session_factory: sessionmaker[Session]
 ) -> None:
@@ -337,6 +354,12 @@ def test_audit_entries_carry_actor_and_request_id(
     assert created.status_code == 201
     request_id = created.headers["x-request-id"]
     assert len(request_id) == 32  # niepoprawny nagłówek zastąpiony nowym identyfikatorem
+    listed = client.get("/api/audit-log?action=asset_created").json()["items"][0]
+    assert (listed["actor_type"], listed["request_id"], listed["hash_version"]) == (
+        "human",
+        request_id,
+        2,
+    )
     (entry,) = _audit(session_factory, "asset_created")
     assert (entry.actor, entry.actor_type, entry.actor_id, entry.request_id) == (
         "user:admin",
@@ -394,7 +417,8 @@ def test_breakglass_use_alerts_once_per_session(
     assert entry.actor == "user:breakglass-admin"
     with session_factory() as db:
         (alert,) = db.scalars(select(Notification)).all()
-    assert (alert.rule_name, alert.channel, alert.status) == ("breakglass_login", "alert", "queued")
+    assert (alert.rule_name, alert.channel, alert.status) == ("breakglass_login", "in_app", "sent")
+    assert "awaryjnym" in alert.payload["title"]
     other = tokens.headers(["admin"], username="breakglass-admin", sid="awaria-2")
     anon_client.get("/api/me", headers=other)
     assert len(_audit(session_factory, "breakglass_used")) == 2

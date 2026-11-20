@@ -454,7 +454,7 @@ def test_network_sweep_size_limit(audit_sink: MemoryAudit) -> None:
 
 def test_network_sweep_is_never_intrusive(audit_sink: MemoryAudit) -> None:
     guard = make_guard(audit_sink, seed_demo=seed())
-    with pytest.raises(ScopeDenied, match="L0 i L1"):
+    with pytest.raises(ScopeDenied, match="tylko na poziomie L1"):
         sweep(guard, "172.30.99.0/24", Intrusiveness.INTRUSIVE)
 
 

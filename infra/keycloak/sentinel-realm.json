@@ -89,8 +89,8 @@
     }
   ],
   "authenticatorConfig": [
-    {"alias": "sentinel-amr-pwd", "config": {"default.reference.value": "pwd", "default.reference.maxAge": "0"}},
-    {"alias": "sentinel-amr-otp", "config": {"default.reference.value": "otp", "default.reference.maxAge": "0"}},
+    {"alias": "sentinel-amr-pwd", "config": {"default.reference.value": "pwd", "default.reference.maxAge": "43200"}},
+    {"alias": "sentinel-amr-otp", "config": {"default.reference.value": "otp", "default.reference.maxAge": "43200"}},
     {"alias": "sentinel-role-admin", "config": {"condUserRole": "admin", "negate": "false"}}
   ],
 

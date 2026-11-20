@@ -209,13 +209,24 @@ def get_principal(
                 object_id=principal.subject,
             )
         )
+        # Alert w aplikacji (lista powiadomień w konsoli operacyjnej). Wysyłka kanałami
+        # zewnętrznymi (e-mail, Slack, Teams) przez worker: Etap 4b, skrzynka i raporty.
         session.add(
             Notification(
                 rule_name="breakglass_login",
-                channel="alert",
+                channel="in_app",
                 group_key=f"breakglass:{principal.subject}",
-                status="queued",
-                payload={"username": principal.username, "session": principal.session_id},
+                status="sent",
+                payload={
+                    "title": "Logowanie kontem awaryjnym (break-glass)",
+                    "lines": [
+                        f"Konto {principal.username} zalogowało się do {principal.client_id}.",
+                        "Sprawdź, czy to uzgodnione użycie, i nadaj nowe dane konta "
+                        "(scripts/breakglass.sh).",
+                    ],
+                    "username": principal.username,
+                    "session": principal.session_id,
+                },
             )
         )
         logger.warning("breakglass_used", extra={"user": principal.username})
@@ -245,7 +256,9 @@ def deny(principal: Principal, permission: str, request: Request, audit: AuditSi
         )
     )
     detail = f"Brak uprawnienia: {permission}"
-    if get_role_catalog().requires_mfa(permission) and not principal.mfa:
+    catalog = get_role_catalog()
+    # Podpowiedź o MFA tylko wtedy, gdy role wywołującego dałyby to uprawnienie po MFA.
+    if not principal.mfa and permission in catalog.resolve(principal.roles, mfa=True):
         detail += " (wymaga logowania z MFA w konsoli operacyjnej)"
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
 

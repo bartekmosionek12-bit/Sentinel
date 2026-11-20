@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.api.deps import SessionDep
@@ -14,6 +14,7 @@ from app.iam.deps import (
     SessionRegistry,
     authenticated,
     get_session_registry,
+    require,
 )
 from app.iam.tokens import Principal
 
@@ -48,10 +49,19 @@ def me(principal: CurrentPrincipal) -> MeOut:
     )
 
 
+@router.get(
+    "/console/admin",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require("console:admin"))],
+)
+def admin_console_access() -> None:
+    """Wejście do konsoli operacyjnej. Interfejs pyta o to przy starcie; odmowa (np. menedżer
+    otwiera /admin) to 403 z wpisem `access_denied` w dzienniku audytu."""
+
+
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     principal: CurrentPrincipal,
-    request: Request,
     session: SessionDep,
     registry: Annotated[SessionRegistry, Depends(get_session_registry)],
 ) -> None:

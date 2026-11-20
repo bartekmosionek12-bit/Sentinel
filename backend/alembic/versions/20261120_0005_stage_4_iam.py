@@ -3,8 +3,8 @@
 - `iam_user`, `iam_role`, `iam_permission`, `iam_role_permission` zastępują `app_user`
   (logowanie i hasła są w Keycloaku; tu tylko konta widziane w tokenach i kopia roles.yaml).
 - `scan_action.approved_by` wskazuje `iam_user`.
-- `scan_action.intrusiveness`: L1 (lekkie), L2 (inwazyjne), L3 (red team). Dotychczasowe
-  0 → 1 i 1 → 2; poziom 2 nie był dotąd zapisywany (to był poziom zabroniony).
+- `scan_action.intrusiveness`: L1 (pasywne i lekkie), L2 (inwazyjne), L3 (red team).
+  Dotychczasowe L0 (pasywne) łączy się z L1, więc 0 → 1; L1 i L2 zachowują numery.
 - `audit_log`: rodzaj i identyfikator aktora, `on_behalf_of`, identyfikator żądania oraz
   wersja formatu skrótu. Istniejące wpisy dostają `hash_version = 1` i weryfikują się po
   starym wzorze; nowe są w formacie 2. Dodanie kolumn nie zmienia istniejących wierszy, więc
@@ -108,7 +108,7 @@ def upgrade() -> None:
 
     # Poziomy L1–L3.
     op.drop_constraint(op.f("ck_scan_action_intrusiveness_range"), "scan_action", type_="check")
-    op.execute("UPDATE scan_action SET intrusiveness = intrusiveness + 1")
+    op.execute("UPDATE scan_action SET intrusiveness = 1 WHERE intrusiveness = 0")
     op.create_check_constraint(
         op.f("ck_scan_action_intrusiveness_range"),
         "scan_action",
@@ -143,7 +143,8 @@ def downgrade() -> None:
     op.drop_column("audit_log", "actor_type")
 
     op.drop_constraint(op.f("ck_scan_action_intrusiveness_range"), "scan_action", type_="check")
-    op.execute("UPDATE scan_action SET intrusiveness = intrusiveness - 1")
+    # L3 nie istniał: przed cofnięciem traktujemy go jak L2 (najbliższy poziom wymagający zgody).
+    op.execute("UPDATE scan_action SET intrusiveness = 2 WHERE intrusiveness = 3")
     op.create_check_constraint(
         op.f("ck_scan_action_intrusiveness_range"),
         "scan_action",

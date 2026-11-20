@@ -354,7 +354,7 @@ class ScopeGuard:
         rule_name: str,
         max_addresses: int = 1024,
     ) -> ScopedNetwork:
-        """Zgoda na odkrywanie hostów w sieci. Tylko poziomy L0 i L1.
+        """Zgoda na odkrywanie hostów w sieci. Tylko poziom L1.
 
         Sieć musi w całości leżeć w jednym dozwolonym CIDR. Adresy z denylisty
         wewnątrz sieci trafiają do `excluded` i narzędzie je pomija.
@@ -396,9 +396,7 @@ class ScopeGuard:
         self, cidr: str, tool: str, intrusiveness: Intrusiveness, rule_name: str, max_addresses: int
     ) -> ScopedNetwork:
         if intrusiveness > Intrusiveness.LIGHT:
-            raise ScopeDenied(
-                cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomach L0 i L1"
-            )
+            raise ScopeDenied(cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomie L1")
         try:
             network = ip_network(cidr.strip(), strict=True)
         except ValueError as error:
