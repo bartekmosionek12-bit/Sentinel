@@ -8,6 +8,9 @@ import { AssetDetail } from "@/pages/AssetDetail";
 import { Assets } from "@/pages/Assets";
 import { AuditLog } from "@/pages/AuditLog";
 import { Dashboard } from "@/pages/Dashboard";
+import { Discovery } from "@/pages/Discovery";
+import { DiscoveryCompare } from "@/pages/DiscoveryCompare";
+import { DiscoveryRunPage } from "@/pages/DiscoveryRun";
 import { Findings } from "@/pages/Findings";
 import { ReportDetail, Reports } from "@/pages/Reports";
 import { ReviewQueue } from "@/pages/ReviewQueue";
@@ -81,6 +84,9 @@ export function App() {
         <Route path="/zagrozenia" element={<Findings />} />
         <Route path="/feed" element={<ThreatFeed />} />
         <Route path="/weryfikacja" element={<ReviewQueue />} />
+        <Route path="/discovery" element={<Discovery />} />
+        <Route path="/discovery/porownanie" element={<DiscoveryCompare />} />
+        <Route path="/discovery/:id" element={<DiscoveryRunPage />} />
         <Route path="/skany" element={<Scans />} />
         <Route path="/zakres" element={<Scope />} />
         <Route path="/agent" element={<Agent />} />

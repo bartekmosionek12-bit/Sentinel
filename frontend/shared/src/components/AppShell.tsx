@@ -96,7 +96,7 @@ export function AppShell({
     <div className="flex min-h-screen">
       <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center gap-2 px-5 py-5 text-white">
-          <ShieldCheck className="size-6 text-sky-400" aria-hidden />
+          <ShieldCheck className="size-6 text-primary" aria-hidden />
           <span className="text-base font-semibold">Sentinel ASI</span>
         </div>
         <nav className="flex-1 space-y-6 px-3 pb-6" aria-label="Nawigacja główna">
@@ -114,7 +114,7 @@ export function AppShell({
                       className={({ isActive }) =>
                         cn(
                           "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-sidebar-active hover:text-white",
-                          isActive && "bg-sidebar-active text-white",
+                          isActive && "bg-sidebar-active font-semibold text-white ring-1 ring-inset ring-primary",
                         )
                       }
                     >

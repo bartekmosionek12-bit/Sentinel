@@ -365,6 +365,178 @@ export type ExplanationEvent =
   | { type: "done"; source: string; validation: string; problems?: string[] }
   | { type: "error"; message: string };
 
+// --- Discovery (BLOK A–E) ---------------------------------------------------------
+
+export interface DiscoverySettings {
+  workers: number;
+  max_rate: number;
+  timing: number;
+  batch_initial: number;
+  batch_min: number;
+  batch_max: number;
+  batch_target_seconds: number;
+  discovery_ports: string;
+  service_ports: string;
+  http_paths: string[];
+  fingerprint?: boolean;
+}
+
+export interface DiscoveryConfigInfo {
+  defaults: DiscoverySettings;
+  limits: Record<string, number>;
+  host_state: { inactive_after_runs: number; window: number };
+}
+
+export interface TargetPreview {
+  addresses: number;
+  networks: number;
+  domains: number;
+  rows: {
+    target: string;
+    addresses: number;
+    allowed: boolean;
+    reason: string;
+  }[];
+  errors: string[];
+  ok: boolean;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  name: string;
+  status: "queued" | "running" | "stopping" | "stopped" | "done" | "failed";
+  source: "scan" | "import";
+  targets: string[];
+  targets_count: number;
+  settings: Partial<DiscoverySettings>;
+  created_by: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  addresses_total: number;
+  addresses_done: number;
+  progress: number;
+  batches_done: number;
+  hosts_up: number;
+  eta_seconds: number | null;
+  duration_seconds: number | null;
+  error: string | null;
+  summary: Record<string, unknown> | null;
+}
+
+export interface DiscoveryBatch {
+  target: string;
+  addresses: number;
+  phase: "sweep" | "services";
+  status: string;
+  hosts_up: number;
+  duration_ms: number;
+  detail: string | null;
+  finished_at: string | null;
+}
+
+export interface DiscoveryService {
+  port: number;
+  protocol?: string;
+  name?: string;
+  product?: string;
+  version?: string;
+}
+
+export interface HttpFingerprint {
+  url: string;
+  port: number;
+  scheme: string;
+  status: number | null;
+  title: string;
+  headers: Record<string, string>;
+  cookies: { name: string; secure: boolean; httponly: boolean }[];
+  redirects: string[];
+  tls: {
+    subject?: string;
+    issuer?: string;
+    not_after?: string;
+    san?: string[];
+  } | null;
+  favicon_hash: number | null;
+  technologies: string[];
+  paths: Record<string, number>;
+  error: string | null;
+}
+
+export interface HostFlag {
+  kind: string;
+  label: string;
+  evidence: string[];
+  confidence: "niska" | "średnia" | "wysoka";
+}
+
+export interface HostState {
+  state: "active" | "unstable" | "unconfirmed" | "inactive";
+  label: string;
+  history: boolean[];
+  misses: number;
+}
+
+export interface DiscoveryHost {
+  ip: string;
+  hostname: string | null;
+  services: DiscoveryService[];
+  http: HttpFingerprint[];
+  flags: HostFlag[];
+  technologies: string[];
+  note: string | null;
+  tags: string[];
+  criticality: string | null;
+  status: string | null;
+  edited: string[];
+  edits: Record<string, { value: unknown; by: string; at: string }>;
+  state: HostState | null;
+}
+
+export interface DiffHost {
+  ip: string;
+  hostname: string | null;
+  services: string[];
+  technologies: string[];
+  flags: string[];
+}
+
+export interface DictDiff {
+  added: Record<string, string>;
+  removed: Record<string, string>;
+  changed: Record<string, [string, string]>;
+}
+
+export interface RunDiff {
+  older: { id: string; name: string; created_at: string; hosts_up: number };
+  newer: { id: string; name: string; created_at: string; hosts_up: number };
+  new_hosts: DiffHost[];
+  gone_hosts: DiffHost[];
+  changed_hosts: {
+    ip: string;
+    hostname: string | null;
+    services?: DictDiff;
+    headers?: DictDiff;
+    titles?: DictDiff;
+    technologies?: { added: string[]; removed: string[] };
+    flags?: { added: string[]; removed: string[] };
+    hostname_change?: [string | null, string | null];
+  }[];
+  counts: Record<string, number>;
+}
+
+export interface DojoStatus {
+  configured: boolean;
+  ok: boolean;
+  detail: string;
+  url?: string;
+  product?: string;
+  engagement?: string;
+  exported: number;
+  last_export: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -376,7 +548,10 @@ export class ApiError extends Error {
 
 /** Dostawca tokenu dostępu; ustawia go `AuthProvider` po zalogowaniu. */
 type TokenSource = { token: () => string | null; onUnauthorized: () => void };
-let tokenSource: TokenSource = { token: () => null, onUnauthorized: () => undefined };
+let tokenSource: TokenSource = {
+  token: () => null,
+  onUnauthorized: () => undefined,
+};
 
 export function setTokenSource(source: TokenSource): void {
   tokenSource = source;
@@ -390,7 +565,11 @@ function authHeaders(): Record<string, string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...init?.headers,
+    },
   });
   if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) {
@@ -411,7 +590,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Pobranie pliku z autoryzacją (np. PDF raportu): fetch → blob → link tymczasowy. */
 async function download(path: string, fallbackName: string): Promise<void> {
-  const response = await fetch(`/api${path}`, { headers: { ...authHeaders() } });
+  const response = await fetch(`/api${path}`, {
+    headers: { ...authHeaders() },
+  });
   if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) throw new ApiError(response.status, `Błąd serwera (${response.status})`);
   const disposition = response.headers.get("Content-Disposition") ?? "";
@@ -432,7 +613,10 @@ function streamEvents<E extends { type: string }>(
 ): () => void {
   const controller = new AbortController();
   const lost = () =>
-    onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" } as unknown as E);
+    onEvent({
+      type: "error",
+      message: "Utracono połączenie ze strumieniem",
+    } as unknown as E);
   void (async () => {
     try {
       const response = await fetch(`/api${path}`, {
@@ -710,7 +894,6 @@ export interface CredentialLease {
   revoked_by: string | null;
 }
 
-
 // --- świeżość danych i asystent Sentek ---
 
 export interface Freshness {
@@ -895,7 +1078,10 @@ export const api = {
   agentStatus: () => request<AgentStatus>("/agent/status"),
   agentCapabilities: () => request<AgentCapability[]>("/agent/capabilities"),
   createAgentCapability: (input: AgentCapabilityInput) =>
-    request<AgentConfig>("/agent/capabilities", { method: "POST", body: JSON.stringify(input) }),
+    request<AgentConfig>("/agent/capabilities", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   killAgent: (reason: string) =>
     request<Record<string, unknown>>("/agent/kill", {
       method: "POST",
@@ -904,7 +1090,10 @@ export const api = {
   agentLeases: () => request<CredentialLease[]>("/agent/leases?limit=50"),
   agentTasks: () => request<AgentTask[]>("/agent/tasks?limit=20"),
   createAgentTask: (command: string) =>
-    request<AgentTask>("/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
+    request<AgentTask>("/agent/tasks", {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    }),
   approveAgentTask: (id: string, reason: string, stepIds?: string[]) =>
     request<Task>(`/agent/tasks/${id}/approve`, {
       method: "POST",
@@ -919,11 +1108,66 @@ export const api = {
   agentTests: () => request<AgentTestRun[]>("/agent/tests?limit=20"),
   agentTest: (id: string) => request<AgentTestRunDetail>(`/agent/tests/${id}`),
   runAgentTest: (suite: "quick" | "full") =>
-    request<Task>("/agent/tests", { method: "POST", body: JSON.stringify({ suite }) }),
+    request<Task>("/agent/tests", {
+      method: "POST",
+      body: JSON.stringify({ suite }),
+    }),
   forceAgentConfig: (id: string, justification: string) =>
     request<AgentConfig>(`/agent/configs/${id}/force`, {
       method: "POST",
       body: JSON.stringify({ justification }),
+    }),
+  discoveryConfig: () => request<DiscoveryConfigInfo>("/discovery/settings"),
+  previewTargets: (text: string) =>
+    request<TargetPreview>("/discovery/targets/preview", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  startDiscovery: (input: { text: string; name: string; settings: Partial<DiscoverySettings> }) =>
+    request<DiscoveryRun>("/discovery/runs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  discoveryRuns: () => request<DiscoveryRun[]>("/discovery/runs?limit=50"),
+  discoveryRun: (id: string) =>
+    request<DiscoveryRun & { batches: DiscoveryBatch[] }>(`/discovery/runs/${id}`),
+  stopDiscovery: (id: string) =>
+    request<DiscoveryRun>(`/discovery/runs/${id}/stop`, { method: "POST" }),
+  discoveryHosts: (id: string) => request<DiscoveryHost[]>(`/discovery/runs/${id}/hosts`),
+  exportDiscovery: (id: string, format: "json" | "csv" | "nmap") =>
+    download(`/discovery/runs/${id}/export?format=${format}`, `sentinel.${format}`),
+  compareRuns: (older: string, newer: string) =>
+    request<RunDiff>(`/discovery/compare?older=${older}&newer=${newer}`),
+  exportDiff: (older: string, newer: string, format: "json" | "csv") =>
+    download(
+      `/discovery/compare/export?older=${older}&newer=${newer}&format=${format}`,
+      `sentinel-roznice.${format}`,
+    ),
+  hostStates: () =>
+    request<{
+      counts: Record<string, number>;
+      hosts: Record<string, HostState>;
+    }>("/discovery/states"),
+  setOverride: (ip: string, field: string, value: unknown) =>
+    request<unknown>(`/discovery/overrides/${encodeURIComponent(ip)}`, {
+      method: "PUT",
+      body: JSON.stringify({ field, value }),
+    }),
+  importResults: (content: string, filename: string) =>
+    request<DiscoveryRun>("/discovery/import", {
+      method: "POST",
+      body: JSON.stringify({ content, filename, name: `Import ${filename}` }),
+    }),
+  dojoStatus: () => request<DojoStatus>("/discovery/defectdojo/status"),
+  dojoExport: (runId: string, ips: string[]) =>
+    request<{
+      sent: number;
+      skipped_duplicates?: number;
+      detail?: string;
+      test?: number;
+    }>("/discovery/defectdojo/export", {
+      method: "POST",
+      body: JSON.stringify({ run_id: runId, ips }),
     }),
   iamPermissions: () => request<IamPermission[]>("/iam/permissions"),
   iamRoles: () => request<IamRole[]>("/iam/roles"),
@@ -934,7 +1178,9 @@ export const api = {
       body: JSON.stringify(input),
     }),
   deleteRole: (name: string) =>
-    request<void>(`/iam/roles/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    request<void>(`/iam/roles/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
   grantRole: (userId: string, role: string) =>
     request<IamUser>(`/iam/users/${userId}/roles`, {
       method: "POST",

@@ -4,9 +4,18 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@shared/components/page";
 import { KevBadge, RiskBadge } from "@shared/components/risk";
 import { Badge } from "@shared/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@shared/components/ui/card";
 import { api, type RiskLevel } from "@shared/lib/api";
 import { formatDateTime } from "@shared/lib/utils";
+
+import { HOST_STATE } from "@/labels";
+import { RunsTable } from "@/pages/Discovery";
 
 const LEVELS: RiskLevel[] = ["krytyczny", "wysoki", "średni", "niski"];
 
@@ -36,6 +45,166 @@ function Stat({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function BigNumber({
+  label,
+  value,
+  hint,
+  to,
+  demo,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  to: string;
+  demo?: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="block rounded-lg border border-border bg-card p-5 hover:border-primary"
+      data-demo={demo}
+    >
+      <p className="text-sm font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-5xl font-bold tabular-nums">{value}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
+    </Link>
+  );
+}
+
+/** Discovery na górze pulpitu: najważniejsze liczby, zmiany od ostatniego skanu, ostatnie przebiegi. */
+function DiscoveryOverview() {
+  const runs = useQuery({
+    queryKey: ["discovery-runs"],
+    queryFn: api.discoveryRuns,
+    refetchInterval: 5000,
+  });
+  const done = (runs.data ?? []).filter((r) => r.status === "done");
+  const [latest, previous] = done;
+  const hosts = useQuery({
+    queryKey: ["discovery-hosts", latest?.id],
+    queryFn: () => api.discoveryHosts(latest?.id ?? ""),
+    enabled: Boolean(latest),
+  });
+  const diff = useQuery({
+    queryKey: ["compare", previous?.id, latest?.id],
+    queryFn: () => api.compareRuns(previous?.id ?? "", latest?.id ?? ""),
+    enabled: Boolean(latest && previous),
+  });
+  const states = useQuery({ queryKey: ["host-states"], queryFn: api.hostStates });
+  const dojo = useQuery({ queryKey: ["dojo-status"], queryFn: api.dojoStatus });
+  const list = hosts.data ?? [];
+  const services = list.reduce((sum, h) => sum + h.services.length, 0);
+  const panels = list.filter((h) => h.flags.some((f) => f.kind === "panel"));
+  const staging = list.filter((h) => h.flags.some((f) => f.kind === "staging"));
+  const d = diff.data?.counts;
+  const unstable = Object.entries(states.data?.hosts ?? {}).filter(
+    ([, v]) => v.state === "unstable",
+  );
+  const unstableLabel = HOST_STATE.unstable?.label ?? "Niestabilny";
+
+  return (
+    <section className="mb-8" aria-label="Discovery">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-demo="kpis">
+        <BigNumber
+          label="Aktywne hosty"
+          value={latest ? String(latest.hosts_up) : "–"}
+          hint={
+            latest
+              ? `z ${latest.addresses_total.toLocaleString("pl-PL")} adresów w ostatnim przebiegu`
+              : "Uruchom pierwszy przebieg discovery"
+          }
+          to={latest ? `/discovery/${latest.id}` : "/discovery"}
+        />
+        <BigNumber
+          label="Otwarte usługi"
+          value={latest ? String(services) : "–"}
+          hint={`Panele administracyjne: ${panels.length}, staging: ${staging.length}`}
+          to={latest ? `/discovery/${latest.id}` : "/discovery"}
+        />
+        <BigNumber
+          label="Zmiany od ostatniego skanu"
+          value={
+            d ? String((d.new_hosts ?? 0) + (d.gone_hosts ?? 0) + (d.changed_hosts ?? 0)) : "–"
+          }
+          hint={
+            d
+              ? `Nowe hosty: ${d.new_hosts}, znikające: ${d.gone_hosts}, zmienione: ${d.changed_hosts}`
+              : "Potrzebne są dwa przebiegi"
+          }
+          to="/discovery/porownanie"
+        />
+        <BigNumber
+          label={`Hosty: ${unstableLabel.toLowerCase()}`}
+          value={states.data ? String(states.data.counts.unstable ?? 0) : "–"}
+          hint={`Nieaktywne: ${states.data?.counts.inactive ?? 0}, niepotwierdzone: ${states.data?.counts.unconfirmed ?? 0}`}
+          to="/discovery/porownanie"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Ostatnie przebiegi discovery</CardTitle>
+            <CardDescription>Czas trwania, postęp i prognoza zakończenia.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {runs.data && runs.data.length > 0 ? (
+              <RunsTable runs={runs.data.slice(0, 5)} compact />
+            ) : (
+              <p className="text-sm text-muted-foreground">Nie było jeszcze żadnego przebiegu.</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Wymaga uwagi</CardTitle>
+            <CardDescription>Nowe panele, staging i hosty niestabilne.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <ul className="space-y-2">
+              {[...panels, ...staging]
+                .filter((h, i, all) => all.findIndex((x) => x.ip === h.ip) === i)
+                .slice(0, 6)
+                .map((h) => (
+                  <li key={h.ip} className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono">{h.ip}</span>
+                    {h.flags
+                      .filter((f) => f.kind === "panel" || f.kind === "staging")
+                      .map((f) => (
+                        <Badge key={f.kind} variant={f.kind === "panel" ? "danger" : "warn"}>
+                          {f.label}
+                        </Badge>
+                      ))}
+                  </li>
+                ))}
+              {unstable.slice(0, 4).map(([ip]) => (
+                <li key={`u${ip}`} className="flex items-center gap-2">
+                  <span className="font-mono">{ip}</span>
+                  <Badge variant="warn">{unstableLabel}</Badge>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-border pt-3" data-demo="dojo-status">
+              <Badge variant={dojo.data?.ok ? "ok" : "warn"}>
+                DefectDojo:{" "}
+                {dojo.data ? (dojo.data.ok ? "połączono" : dojo.data.detail) : "sprawdzanie"}
+              </Badge>
+              {dojo.data && (
+                <p className="mt-1 text-muted-foreground">
+                  Wysłane obserwacje: {dojo.data.exported}
+                  {dojo.data.last_export
+                    ? `, ostatnio ${formatDateTime(dojo.data.last_export)}`
+                    : ""}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   );
 }
 
@@ -71,8 +240,9 @@ export function Dashboard() {
     <>
       <PageHeader
         title="Pulpit"
-        description="Co wymaga uwagi teraz: zagrożenia od najwyższego ryzyka, decyzje czekające na człowieka i ostatnie powiadomienia."
+        description="Najważniejsze liczby z discovery, zmiany od ostatniego skanu i to, co wymaga uwagi."
       />
+      <DiscoveryOverview />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="Aktywne zagrożenia"

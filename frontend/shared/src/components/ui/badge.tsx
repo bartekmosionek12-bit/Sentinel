@@ -1,10 +1,18 @@
 import { cva, type VariantProps } from "class-variance-authority";
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  CircleX,
+  Info,
+  type LucideIcon,
+} from "lucide-react";
 import type { HTMLAttributes } from "react";
 
 import { cn } from "@shared/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
   {
     variants: {
       variant: {
@@ -19,8 +27,24 @@ const badgeVariants = cva(
   },
 );
 
-type BadgeProps = HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>;
+/** Status nigdy nie jest oznaczany samym kolorem: każdy wariant ma też ikonę. */
+const ICONS: Record<string, LucideIcon | null> = {
+  neutral: CircleDashed,
+  ok: CircleCheck,
+  warn: CircleAlert,
+  danger: CircleX,
+  info: Info,
+};
 
-export function Badge({ className, variant, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
+type BadgeProps = HTMLAttributes<HTMLSpanElement> &
+  VariantProps<typeof badgeVariants> & { icon?: boolean };
+
+export function Badge({ className, variant, icon = true, children, ...props }: BadgeProps) {
+  const Icon = icon ? ICONS[variant ?? "neutral"] : null;
+  return (
+    <span className={cn(badgeVariants({ variant }), className)} {...props}>
+      {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
+      {children}
+    </span>
+  );
 }

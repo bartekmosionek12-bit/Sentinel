@@ -1,6 +1,7 @@
 import {
   Bot,
   Crosshair,
+  GitCompareArrows,
   FileText,
   FlaskConical,
   Inbox,
@@ -37,6 +38,24 @@ export const NAV_GROUPS: NavGroup[] = [
         stage: 10,
         summary:
           "Widok sieci i segmentów: zasoby pogrupowane według podsieci, kolorowane poziomem ryzyka.",
+      },
+    ],
+  },
+  {
+    title: "Discovery",
+    items: [
+      {
+        path: "/discovery",
+        label: "Przebiegi discovery",
+        icon: Radar,
+        end: true,
+        permission: "scan:read",
+      },
+      {
+        path: "/discovery/porownanie",
+        label: "Porównanie i stany",
+        icon: GitCompareArrows,
+        permission: "scan:read",
       },
     ],
   },
