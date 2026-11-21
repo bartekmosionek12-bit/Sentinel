@@ -207,6 +207,9 @@ services:
     mem_limit: 900m
 
   api:
+    # host.docker.internal: podgląd i przebiegi na labie mentorów (scripts/mentor_lab.sh).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     <<: *backend
     environment:
       <<: *backend-env
@@ -243,6 +246,9 @@ services:
     mem_limit: 512m
 
   worker-core:
+    # host.docker.internal: podgląd i przebiegi na labie mentorów (scripts/mentor_lab.sh).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     <<: *backend
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "default", "-c", "2", "-n", "core@%h", "--loglevel", "INFO"]
     mem_limit: 512m
@@ -261,6 +267,10 @@ services:
       target: scanner
     image: sentinel-asi/scanner:dev
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "scans", "-c", "2", "-n", "scans@%h", "--loglevel", "INFO"]
+    # Komputer z labem mentorów (porty na localhost) widziany z kontenera. Nic nie skanuje,
+    # dopóki adres nie jest w zakresie (rules/scope.mentor-lab.yaml, scripts/mentor_lab.sh).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       core:
       demo-lab:

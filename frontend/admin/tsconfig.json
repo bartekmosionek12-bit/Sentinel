@@ -20,7 +20,6 @@
   "include": ["src", "../shared/src"],
   "exclude": [
     "../shared/src/components/CoverageTrend.tsx",
-    "../shared/src/components/assistant.tsx",
     "../shared/src/components/devices.tsx",
     "../shared/src/components/freshness.tsx",
     "../shared/src/lib/devices.ts"

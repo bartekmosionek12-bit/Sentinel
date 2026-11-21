@@ -36,9 +36,9 @@ sprawdza nierozpoznane usługi), a ok. 7–12 s bez nich.
 
 ## Znane ograniczenia
 
-- Aplikacja w Dockerze nie widzi `localhost` komputera. W UI skanujemy wtedy adres bramy
-  sieci Dockera (np. `172.17.0.1`) albo sieć labu, i ten adres musi być w `rules/scope.yaml`.
-  `scope.demo.yaml` celowo blokuje bramę. Skrypt z tej instrukcji działa na hoście, więc
+- Aplikacja w Dockerze nie widzi `localhost` komputera, więc w UI skanujemy
+  `host.docker.internal` po przełączeniu zakresu skryptem `scripts/mentor_lab.sh` (punkt 3).
+  `scope.demo.yaml` celowo blokuje bramę. Skrypt `lab_scan.py` działa na hoście, więc
   skanuje `127.0.0.1` bezpośrednio.
 - Po `./quickstart.sh up` RabbitMQ potrzebuje ok. 30 s; skan wcześniej pokaże porty
   5673 i 15673 jako `tcpwrapped` bez panelu.
@@ -92,8 +92,33 @@ na koniec `docker compose -f … down`. Uruchamiaj jeden stack naraz (porty się
 Sieć Dockera danego stacku też da się skanować: `docker network inspect <sieć>` poda
 podsieć, a jako cel podaj jej /24, np. `172.20.0.0/24`.
 
-### 3. To samo w aplikacji
+### 3. Na żywo w aplikacji (Windows, macOS, Linux)
 
-Po `.\start.cmd` (albo `./start.sh`): konsola → Discovery → wpisz cel w formularzu
-(adres bramy Dockera albo podsieć labu, jeśli są w zakresie) → Uruchom skan. Po trzech
-przebiegach: Discovery → Porównanie i stany.
+Lab mentorów publikuje porty na `localhost` komputera, a skaner działa w kontenerze.
+Skaner widzi komputer jako `host.docker.internal`; zakres
+`rules/scope.mentor-lab.yaml` pozwala tylko na ten adres i demo-lab.
+
+```bash
+# 1. Aplikacja (Windows: .\start.cmd; Linux/macOS/Git Bash: ./start.sh)
+./start.sh
+
+# 2. Zakres skanera na komputer z labem (Windows: w Git Bash albo przez bash z Git for Windows)
+./scripts/mentor_lab.sh
+
+# 3. Lab mentorów w osobnym terminalu, w folderze z lab.zip
+./quickstart.sh up        # Windows bez basha: docker compose -f docker-compose-custom-network.yml up -d flask-app gitea rabbitmq
+```
+
+4. Konsola <http://localhost:8080/admin/> → Discovery → w polu Cele wpisz
+   `host.docker.internal` → Sprawdź cele → Uruchom skan. Po ok. 2 minutach przebieg ma
+   porty 2223, 3001, 5673, 8787, 15673, rozpoznane Gitea i panel RabbitMQ.
+5. `./quickstart.sh change` (albo `docker compose -f docker-compose-custom-network.yml stop flask-app`)
+   → drugi skan. `./quickstart.sh up` → trzeci skan.
+6. Discovery → Porównanie i stany: w drugim przebiegu znika usługa 8787, w trzecim wraca.
+7. Inne stacki: `docker compose -f docker-compose-vulnerable.yml up -d` (albo `-modern.yml`),
+   skan tego samego celu `host.docker.internal`. Jeden stack naraz.
+8. Po teście: `./scripts/mentor_lab.sh off` (zakres wraca do demo-lab) i `./quickstart.sh down`.
+
+Uwaga: `host.docker.internal` to cały komputer, więc skaner zobaczy też inne opublikowane
+porty (np. 8080 samej aplikacji). Skrypt sprawdza, czy adres bramy jest w zakresie
+(Docker Desktop 192.168.65.254, Linux 172.17.0.1); jeśli nie, podaje, co dopisać.

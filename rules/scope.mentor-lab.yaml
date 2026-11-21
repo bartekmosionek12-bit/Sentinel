@@ -1,0 +1,27 @@
+# Zakres do testu na żywo na laboratorium od mentorów (lab.zip), uruchamia go
+# scripts/mentor_lab.sh przez SCOPE_FILE=/app/rules/scope.mentor-lab.yaml.
+#
+# Lab mentorów publikuje porty na komputerze (localhost). Skaner działa w kontenerze, więc
+# widzi komputer pod nazwą host.docker.internal (extra_hosts: host-gateway w compose).
+# Ten adres to TWÓJ komputer: skaner zobaczy wszystkie jego opublikowane porty, nie tylko
+# lab. Używaj tylko na własnej maszynie i wróć do zwykłego zakresu po teście.
+#
+# Adres bramy zależy od systemu: Docker Desktop (Windows, macOS) 192.168.65.254,
+# Docker na Linuksie 172.17.0.1. Skrypt sprawdza, czy rozwiązany adres jest na liście.
+
+allow:
+  domains:
+    - host.docker.internal
+  cidrs:
+    - 172.30.99.0/24       # demo-lab, jak w scope.demo.yaml
+    - 192.168.65.254/32    # host.docker.internal w Docker Desktop
+    - 172.17.0.1/32        # host-gateway w Dockerze na Linuksie
+
+deny:
+  domains: []
+  cidrs:
+    - 172.30.99.250/32     # sam skaner (worker-scans)
+    - 172.30.99.251/32     # serwer MCP agenta (mcp-scanner)
+
+rate_limits:
+  default_per_minute: 30
