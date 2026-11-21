@@ -64,14 +64,12 @@ function BigNumber({
   return (
     <Link
       to={to}
-      className="block rounded-sm border border-border bg-card px-4 py-3 hover:border-primary"
+      className="block border border-border bg-card px-3 py-2.5 text-center hover:border-primary"
       data-demo={demo}
     >
-      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-        {label}
-      </p>
-      <p className="mt-1 text-4xl font-semibold tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      <p className="text-left text-sm font-semibold">{label}</p>
+      <p className="mt-2 text-5xl font-bold text-primary tabular-nums">{value}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
     </Link>
   );
 }

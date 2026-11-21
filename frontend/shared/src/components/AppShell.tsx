@@ -1,8 +1,9 @@
-/** Szkielet konsoli zespołu IT: menu boczne, nagłówek ze stanem systemu i zalogowanym użytkownikiem. */
+/** Szkielet konsoli zespołu IT: czarny pasek systemowy (nazwa, stan, użytkownik) i pasek aplikacji
+ *  z menu grup rozwijanym po kliknięciu, jak w konsolach SIEM. Bez menu bocznego. */
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { ChevronDown, ShieldCheck, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { NavLink, matchPath, useLocation } from "react-router-dom";
 
 import { Badge } from "@shared/components/ui/badge";
 import { api } from "@shared/lib/api";
@@ -59,11 +60,72 @@ function DemoDataNotice() {
   return (
     <p
       role="note"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900 md:px-8"
+      className="border-b border-amber-200 bg-amber-50 px-4 py-1 text-xs text-amber-900"
     >
       <strong className="font-semibold">Tryb demo.</strong> Dane z demo-lab; wartości EPSS
       przykładowe.
     </p>
+  );
+}
+
+function isItemActive(item: NavItem, pathname: string) {
+  const end = item.end ?? item.path === "/";
+  return Boolean(matchPath({ path: item.path, end }, pathname));
+}
+
+/** Grupa menu: przycisk na pasku aplikacji i lista linków pod nim. */
+function NavMenu({
+  group,
+  open,
+  onToggle,
+}: {
+  group: NavGroup;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { pathname } = useLocation();
+  const active = group.items.some((item) => isItemActive(item, pathname));
+  const id = `menu-${group.title.replace(/\s+/g, "-").toLowerCase()}`;
+  return (
+    <li className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+        className={cn(
+          "flex h-9 items-center gap-1 border-b-2 border-transparent px-3 text-sm text-sidebar-foreground hover:bg-sidebar-active hover:text-white",
+          active && "border-accent font-semibold text-white",
+          open && "bg-sidebar-active text-white",
+        )}
+      >
+        {group.title}
+        <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+      </button>
+      <ul
+        id={id}
+        hidden={!open}
+        className="absolute top-full left-0 z-40 min-w-56 border border-border bg-card py-1"
+      >
+        {group.items.map(({ path, label, icon: Icon, end }) => (
+          <li key={path}>
+            <NavLink
+              to={path}
+              end={end ?? path === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2 border-l-2 border-transparent px-3 py-1.5 text-sm whitespace-nowrap text-foreground hover:bg-muted",
+                  isActive && "border-accent bg-muted font-semibold",
+                )
+              }
+            >
+              <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              {label}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </li>
   );
 }
 
@@ -85,79 +147,72 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { can } = useAuth();
+  const { pathname } = useLocation();
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement>(null);
   const visible = navGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => !item.permission || can(item.permission)),
     }))
     .filter((group) => group.items.length);
-  return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
-        <div className="flex items-center gap-2 px-5 py-5 text-white">
-          <ShieldCheck className="size-5 text-primary" aria-hidden />
-          <span className="text-base font-semibold">Sentinel ASI</span>
-        </div>
-        <nav className="flex-1 space-y-5 px-3 pb-6" aria-label="Nawigacja główna">
-          {visible.map((group) => (
-            <div key={group.title}>
-              <p className="px-2 pb-2 text-xs font-medium tracking-wide text-slate-500 uppercase">
-                {group.title}
-              </p>
-              <ul className="space-y-0.5">
-                {group.items.map(({ path, label, icon: Icon, end }) => (
-                  <li key={path}>
-                    <NavLink
-                      to={path}
-                      end={end ?? path === "/"}
-                      className={({ isActive }) =>
-                        cn(
-                          "flex items-center gap-2.5 rounded-sm border-l-2 border-transparent px-2 py-1.5 text-sm hover:bg-sidebar-active hover:text-white",
-                          isActive && "border-primary bg-sidebar-active font-medium text-white",
-                        )
-                      }
-                    >
-                      <Icon className="size-4 shrink-0" aria-hidden />
-                      {label}
-                    </NavLink>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </nav>
-        {footer && <p className="px-5 pb-4 text-xs text-slate-500">{footer}</p>}
-      </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 md:px-8">
-          <nav className="flex gap-1 overflow-x-auto md:hidden" aria-label="Nawigacja mobilna">
-            {visible.flatMap((g) => g.items).map(({ path, label, icon: Icon, end }) => (
-              <NavLink
-                key={path}
-                to={path}
-                end={end ?? path === "/"}
-                title={label}
-                aria-label={label}
-                className={({ isActive }) =>
-                  cn("rounded-md p-2 text-muted-foreground", isActive && "bg-muted text-foreground")
-                }
-              >
-                <Icon className="size-4" aria-hidden />
-              </NavLink>
-            ))}
-          </nav>
-          <span className="hidden text-sm text-muted-foreground md:block">{subtitle}</span>
-          <div className="flex items-center gap-3">
-            {headerExtra}
-            <SystemStatus />
-            <UserMenu />
-          </div>
-        </header>
-        {banner}
-        <DemoDataNotice />
-        <main className="min-w-0 flex-1 px-4 py-5 md:px-6">{children}</main>
-      </div>
+  // Menu zamyka się po przejściu na inną stronę, kliknięciu obok i klawiszu Escape.
+  useEffect(() => setOpenGroup(null), [pathname]);
+  useEffect(() => {
+    if (!openGroup) return;
+    const onClick = (e: MouseEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setOpenGroup(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenGroup(null);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openGroup]);
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <header className="flex h-10 items-center justify-between gap-4 bg-sidebar px-4 text-sidebar-foreground">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+            <ShieldCheck className="size-4 text-accent" aria-hidden />
+            Sentinel ASI
+          </span>
+          <span className="hidden border-l border-border pl-3 text-xs text-slate-500 sm:inline">
+            {subtitle}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {headerExtra}
+          <SystemStatus />
+          <UserMenu />
+        </div>
+      </header>
+      <nav
+        ref={navRef}
+        className="border-b border-border bg-appbar px-2"
+        aria-label="Nawigacja główna"
+      >
+        <ul className="flex flex-wrap items-stretch">
+          {visible.map((group) => (
+            <NavMenu
+              key={group.title}
+              group={group}
+              open={openGroup === group.title}
+              onToggle={() => setOpenGroup((g) => (g === group.title ? null : group.title))}
+            />
+          ))}
+        </ul>
+      </nav>
+      {banner}
+      <DemoDataNotice />
+      <main className="min-w-0 flex-1 px-4 py-4 md:px-5">{children}</main>
+      {footer && <p className="px-5 pb-4 text-xs text-slate-500">{footer}</p>}
     </div>
   );
 }

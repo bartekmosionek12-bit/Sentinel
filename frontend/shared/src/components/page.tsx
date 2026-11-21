@@ -3,8 +3,8 @@
 /** Tytuł strony; opis jest w podpowiedzi (title), bez tłumaczeń nad każdym widokiem. */
 export function PageHeader({ title, description }: { title: string; description: string }) {
   return (
-    <div className="mb-4 border-b border-border pb-3">
-      <h1 className="text-xl font-semibold" title={description}>
+    <div className="mb-3">
+      <h1 className="text-lg font-semibold" title={description}>
         {title}
       </h1>
     </div>

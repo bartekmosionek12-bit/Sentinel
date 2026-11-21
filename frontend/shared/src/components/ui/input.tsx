@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes } from "react";
 import { cn } from "@shared/lib/utils";
 
 const fieldClass =
-  "h-9 w-full rounded-md border border-border bg-card px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary";
+  "h-8 w-full rounded-sm border border-border bg-field px-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldClass, className)} {...props} />;

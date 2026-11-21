@@ -3,32 +3,37 @@
 @source "../../admin/src";
 @source "./";
 
-/* Ciemny motyw domyślnie: wysoki kontrast, jeden stonowany akcent (--color-primary), font
-   systemowy, małe zaokrąglenia, bez cieni, gradientów i poświat. Statusy zawsze kolor + ikona + tekst (patrz ui/badge.tsx). */
+/* Ciemny motyw w stylu konsol operacyjnych (SIEM): gęsty układ, górny pasek z menu zamiast
+   bocznego, panele bez ozdobników, tabele z naprzemiennymi wierszami. Zielony akcent dla akcji,
+   niebieski dla linków. Statusy zawsze kolor + ikona + tekst (patrz ui/badge.tsx). */
 @theme {
   --font-sans:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
   --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --color-background: #101317;
-  --color-foreground: #f3f5f7;
-  --color-card: #171b21;
-  --color-muted: #1e2228;
-  --color-muted-foreground: #b4bcc8;
-  --color-border: #2c323b;
-  --color-primary: #5b9cf5;
-  --color-primary-foreground: #0b1220;
-  --color-sidebar: #0c0f12;
-  --color-sidebar-foreground: #d5dbe3;
-  --color-sidebar-active: #1e2228;
-  --color-danger: #c62828;
-  --color-risk-critical: #ff6b6b;
-  --color-risk-high: #ff9f43;
-  --color-risk-medium: #f5d547;
-  --color-risk-low: #4ade80;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --color-background: #171d21;
+  --color-foreground: #e1e6eb;
+  --color-card: #1e2429;
+  --color-muted: #262d33;
+  --color-muted-foreground: #a6b0ba;
+  --color-border: #353d44;
+  --color-primary: #3ea6f0;
+  --color-primary-foreground: #08131c;
+  --color-accent: #5cc05c;
+  --color-accent-foreground: #0c1a0c;
+  --color-field: #11161a;
+  --color-sidebar: #000000;
+  --color-sidebar-foreground: #c3cbd4;
+  --color-sidebar-active: #262d33;
+  --color-appbar: #1a1f24;
+  --color-danger: #dc4e41;
+  --color-risk-critical: #dc4e41;
+  --color-risk-high: #f1813f;
+  --color-risk-medium: #f8be34;
+  --color-risk-low: #53a051;
 
   /* Jasne odcienie palety z dawnego jasnego motywu przemapowane na ciemne tło. */
   --color-red-50: #2b1416;
@@ -53,14 +58,14 @@
   --color-orange-200: #6b3c19;
   --color-sky-50: #14202f;
   --color-sky-200: #284466;
-  --color-sky-400: #5b9cf5;
-  --color-sky-600: #5b9cf5;
+  --color-sky-400: #3ea6f0;
+  --color-sky-600: #3ea6f0;
   --color-sky-800: #a9cbfa;
-  --color-slate-500: #b4bcc8;
+  --color-slate-500: #8b959f;
 }
 
 html {
-  font-size: 16px;
+  font-size: 14px;
   color-scheme: dark;
 }
 
@@ -80,6 +85,18 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--color-primary);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+a {
+  text-underline-offset: 2px;
+}
+
+/* Tabele jak w konsolach SIEM: naprzemienne wiersze i podświetlenie wiersza pod kursorem. */
+table tbody tr:nth-child(even) {
+  background-color: rgb(255 255 255 / 0.025);
+}
+table tbody tr:hover {
+  background-color: rgb(62 166 240 / 0.08);
 }
