@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.agent.capability import CapabilityError
+from app.agent.killswitch import CERT_GAP, KillEffect
 from app.agent.planner import Planner
 from app.agent.service import AgentError, AgentService, create_capability
 from app.agent.switch import is_killed
@@ -44,7 +45,7 @@ from app.models import (
     AgentTestRun,
     CredentialLease,
 )
-from app.runtime import agent_runtime_config
+from app.runtime import agent_runtime_config, kill_effects
 
 router = APIRouter(prefix="/api/agent", tags=["agent"], route_class=RedactingRoute)
 
@@ -169,6 +170,11 @@ class StatusOut(BaseModel):
     killed_by: str | None
     killed_reason: str | None
     killed_at: datetime | None
+    last_killed_at: datetime | None = None
+    effects: list[dict[str, Any]] = []
+    scanner_stopped_at: datetime | None = None
+    scanner_stopped: int | None = None
+    certificate_gap: str = CERT_GAP
     capability: CapabilityOut | None
     config: ConfigOut | None
     pending: list[ConfigOut]
@@ -241,6 +247,13 @@ def _service(
 ServiceDep = Annotated[AgentService, Depends(_service)]
 
 
+def get_kill_effects(settings: SettingsDep) -> list[KillEffect]:
+    return kill_effects(settings)
+
+
+KillEffectsDep = Annotated[list[KillEffect], Depends(get_kill_effects)]
+
+
 def _within_scope(guard: ScopeGuard, pattern: str) -> bool:
     config = guard.config
     try:
@@ -291,6 +304,10 @@ def agent_status(session: SessionDep) -> StatusOut:
         killed_by=switch.changed_by if switch and switch.killed else None,
         killed_reason=switch.reason if switch and switch.killed else None,
         killed_at=switch.changed_at if switch and switch.killed else None,
+        last_killed_at=switch.killed_at if switch else None,
+        effects=list(switch.effects or []) if switch else [],
+        scanner_stopped_at=switch.scanner_stopped_at if switch else None,
+        scanner_stopped=switch.scanner_stopped if switch else None,
         capability=CapabilityOut.model_validate(capability) if capability else None,
         config=ConfigOut.model_validate(live) if live else None,
         pending=[ConfigOut.model_validate(c) for c in configs if c.state == "pending_test"],
@@ -315,6 +332,8 @@ def create_capabilities(
     guard: ScopeGuardDep,
     dispatcher: DispatcherDep,
     settings: SettingsDep,
+    service: ServiceDep,
+    effects: KillEffectsDep,
     principal: Annotated[Principal, Depends(require("agent:configure"))],
 ) -> ConfigOut:
     """Nowa wersja zdolności. Wchodzi w życie dopiero po zaliczonym teście agenta."""
@@ -340,6 +359,8 @@ def create_capabilities(
         reason=f"Nowe zdolności v{row.version}: {payload.note}",
         actor=principal.actor,
     )
+    # Po kill switchu: klient agenta w Keycloak wraca, ale flaga blokuje go do zaliczenia testu.
+    service.restore_identity(actor=principal.actor, effects=effects)
     session.commit()
     dispatcher.run_agent_test("quick", "config_change", principal.actor, config.id)
     return ConfigOut.model_validate(config)
@@ -349,10 +370,11 @@ def create_capabilities(
 def kill_agent(
     payload: ReasonIn,
     service: ServiceDep,
+    effects: KillEffectsDep,
     principal: Annotated[Principal, Depends(require("agent:kill"))],
 ) -> dict[str, Any]:
-    """Kill switch: agent przestaje działać od razu (MCP odrzuca wywołania, zadania stają)."""
-    info = service.kill(actor=principal.actor, reason=payload.reason)
+    """Kill switch: flaga w bazie (od razu), klient w Keycloak, tokeny w OpenBao, mcp-scanner."""
+    info = service.kill(actor=principal.actor, reason=payload.reason, effects=effects)
     return {
         **info,
         "detail": "Agent wyłączony. Włączy go dopiero nowa wersja zdolności po teście.",

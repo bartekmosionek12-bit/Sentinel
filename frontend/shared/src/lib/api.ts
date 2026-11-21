@@ -601,11 +601,22 @@ export interface AgentTestRunDetail extends AgentTestRun {
   cases: AgentCaseResult[];
 }
 
+export interface KillEffect {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
 export interface AgentStatus {
   killed: boolean;
   killed_by: string | null;
   killed_reason: string | null;
   killed_at: string | null;
+  last_killed_at: string | null;
+  effects: KillEffect[];
+  scanner_stopped_at: string | null;
+  scanner_stopped: number | null;
+  certificate_gap: string;
   capability: AgentCapability | null;
   config: AgentConfig | null;
   pending: AgentConfig[];

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent.gateway import ToolGateway
+from app.agent.killswitch import KillEffect
 from app.agent.planner import Planner
 from app.agent.service import AgentService
 from app.agent_tests.gate import RuntimeConfig, config_ready, runtime_config
@@ -207,3 +208,38 @@ def agent_gateway(settings: Settings) -> ToolGateway:
             settings.oidc_token_url, settings.agent_client_id, settings.agent_client_secret
         ),
     )
+
+
+def kill_effects(settings: Settings) -> list[KillEffect]:
+    """Skutki kill switcha poza bazą. Brak konfiguracji jest widoczny, a nie przemilczany."""
+    from app.agent.killswitch import (
+        KeycloakClientSwitch,
+        KillEffectError,
+        NotConfigured,
+        OpenBaoLeaseRevoker,
+    )
+
+    effects: list[KillEffect] = []
+    try:
+        if not settings.killswitch_client_secret:
+            raise KillEffectError("KILLSWITCH_CLIENT_SECRET")
+        effects.append(
+            KeycloakClientSwitch(
+                base_url=settings.keycloak_url,
+                realm=settings.keycloak_realm,
+                client_id=settings.killswitch_client_id,
+                client_secret=settings.killswitch_client_secret,
+                target_client_id=settings.agent_client_id,
+            )
+        )
+    except KillEffectError as error:
+        effects.append(NotConfigured("keycloak", str(error)))
+    try:
+        if not settings.openbao_url or not settings.openbao_killswitch_file.exists():
+            raise KillEffectError("OPENBAO_URL i plik AppRole kill switcha")
+        effects.append(
+            OpenBaoLeaseRevoker.from_file(settings.openbao_url, settings.openbao_killswitch_file)
+        )
+    except (KillEffectError, OSError, ValueError, KeyError) as error:
+        effects.append(NotConfigured("openbao", str(error)))
+    return effects

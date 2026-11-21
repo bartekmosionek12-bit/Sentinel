@@ -9,9 +9,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.agent.killswitch import FakeEffect
 from app.agent.planner import Planner
 from app.agent.service import AgentService
 from app.agent_tests.gate import run_test
+from app.api.agent import get_kill_effects
 from app.core.scope_guard import ScopeConfig, ScopeGuard
 from app.models import AgentConfigVersion, AuditLog
 from tests.conftest import FakeResolver, MemoryAudit, RecordingDispatcher, TokenFactory
@@ -230,14 +232,27 @@ def test_kill_switch_via_api(
     tmp_path: Path,
 ) -> None:
     _activate_via_api(anon_client, tokens, session_factory, tmp_path)
+    keycloak, openbao = FakeEffect("keycloak"), FakeEffect("openbao", fail=True)
+    app = anon_client.app
+    app.dependency_overrides[get_kill_effects] = lambda: [keycloak, openbao]  # type: ignore[attr-defined]
     killed = anon_client.post(
         "/api/agent/kill", json={"reason": "Podejrzane zachowanie"}, headers=_admin(tokens)
     )
     assert killed.status_code == 200
+    body = killed.json()
+    assert [(e["name"], e["ok"]) for e in body["effects"]] == [
+        ("keycloak", True),
+        ("openbao", False),
+    ]
+    assert "15 minut" in body["certificate_gap"]
     status = anon_client.get("/api/agent/status", headers=_admin(tokens)).json()
     assert status["killed"] is True
     assert status["killed_by"] == "user:admin"
     assert status["capability"] is None
+    # Błąd jednego skutku jest widoczny w konsoli, a nie przemilczany.
+    assert status["effects"][1]["ok"] is False
+    assert status["scanner_stopped_at"] is None
+    assert "KRL" in status["certificate_gap"]
     refused = anon_client.post(
         "/api/agent/tasks", json={"command": "assessment 10.10.0.5"}, headers=_admin(tokens)
     )

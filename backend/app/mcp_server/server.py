@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import anyio
@@ -18,23 +20,44 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Tool as MCPTool
+from sqlalchemy.orm import Session
 
 from app.agent.catalog import CATALOG
 from app.agent.switch import is_killed
 from app.core.db import get_sessionmaker
 from app.iam.tokens import TokenError, TokenVerifier
 from app.mcp_server.runtime import ToolRequest, ToolRuntime, active_capability
+from app.mcp_server.watcher import KillWatcher
+from app.models import AgentSwitch
 
 logger = logging.getLogger("sentinel.mcp")
 AGENT_SCOPE = "agent"
 
 
-class AgentTokenVerifier:
-    """Akceptuje wyłącznie ważny token konta usługowego agenta."""
+def kill_state(session: Session) -> tuple[bool, datetime | None]:
+    switch = session.get(AgentSwitch, 1)
+    if switch is None:
+        return False, None
+    return bool(switch.killed), switch.killed_at
 
-    def __init__(self, verifier: TokenVerifier, client_id: str) -> None:
+
+class AgentTokenVerifier:
+    """Akceptuje wyłącznie ważny token konta usługowego agenta.
+
+    Po kill switchu odrzuca każdy token, a po ponownym włączeniu także tokeny wydane przed
+    ostatnim wyłączeniem (`iat` sprzed `killed_at`). Wyłączenie klienta w Keycloak blokuje
+    nowe tokeny, a ta reguła stare, które jeszcze nie wygasły (do 5 minut).
+    """
+
+    def __init__(
+        self,
+        verifier: TokenVerifier,
+        client_id: str,
+        state: Callable[[], tuple[bool, datetime | None]] | None = None,
+    ) -> None:
         self._verifier = verifier
         self._client_id = client_id
+        self._state = state or _db_kill_state
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
@@ -44,6 +67,11 @@ class AgentTokenVerifier:
             return None
         if principal.kind != "agent" or principal.client_id != self._client_id:
             return None
+        killed, killed_at = await anyio.to_thread.run_sync(self._state)
+        issued = datetime.fromtimestamp(int(claims["iat"]), UTC)
+        if killed or (killed_at is not None and issued <= _aware(killed_at)):
+            logger.warning("agent_token_rejected_after_kill")
+            return None
         return AccessToken(
             token=token,
             client_id=principal.client_id,
@@ -51,6 +79,15 @@ class AgentTokenVerifier:
             expires_at=int(claims["exp"]),
             subject=principal.subject,
         )
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _db_kill_state() -> tuple[bool, datetime | None]:
+    with get_sessionmaker()() as session:
+        return kill_state(session)
 
 
 class ScannerServer(FastMCP):
@@ -137,6 +174,8 @@ def main() -> None:  # pragma: no cover - uruchamiane w kontenerze
     settings = get_settings()
     configure_logging(settings.log_level)
     runtime = ToolRuntime(get_sessionmaker(), get_scope_guard(), mcp_toolbox(settings))
+    # Kill switch: przerywa trwające wywołania (procesy narzędzi, połączenia SSH).
+    KillWatcher(get_sessionmaker()).start()
     server = build_server(
         runtime,
         token_verifier=AgentTokenVerifier(get_token_verifier(), settings.agent_client_id),

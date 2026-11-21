@@ -181,6 +181,8 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
       # Sekret konta usługowego agenta (placeholder w realmie, tylko przy pierwszym imporcie).
       AGENT_CLIENT_SECRET: ${AGENT_CLIENT_SECRET:?Ustaw AGENT_CLIENT_SECRET w pliku .env}
+      # Sekret konta usługowego kill switcha (wyłącza klienta agenta przez admin API).
+      KILLSWITCH_CLIENT_SECRET: ${KILLSWITCH_CLIENT_SECRET:?Ustaw KILLSWITCH_CLIENT_SECRET w pliku .env}
       JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=30
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
@@ -206,9 +208,28 @@ services:
 
   api:
     <<: *backend
+    environment:
+      <<: *backend-env
+      # Kill switch: hurtowe odwołanie tokenów mcp-scanner (AppRole `killswitch`, polityka
+      # tylko revoke-prefix). Klienta agenta w Keycloak wyłącza przez sieć core.
+      OPENBAO_URL: http://openbao:8200
+      OPENBAO_KILLSWITCH_FILE: /run/openbao-killswitch/approle.json
+    volumes:
+      - ./data/feeds:/app/data/feeds:ro
+      - ./backend/tests/fixtures/feeds:/app/demo-feeds:ro
+      - ./demo-lab:/app/demo-lab:ro
+      - openbao-killswitch:/run/openbao-killswitch:ro
     networks:
       - core
       - llm
+      - vault
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      bao-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         - CMD
@@ -357,6 +378,7 @@ services:
       - ./infra/openbao:/policies:ro
       - openbao-init:/bao-state
       - openbao-approle:/out/approle
+      - openbao-killswitch:/out/killswitch
       - openbao-ca:/out/ca
     restart: "no"
     cap_drop:
@@ -517,6 +539,7 @@ volumes:
   openbao-data:
   openbao-init:
   openbao-approle:
+  openbao-killswitch:
   openbao-ca:
   lab-ssh-known:
   harness-key:

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.agent.capability import Capability, CapabilityError
 from app.agent.gateway import ToolGateway
+from app.agent.killswitch import CERT_GAP, KillEffect, run_effects
 from app.agent.planner import Plan, PlannedStep, Planner
 from app.agent.switch import is_killed
 from app.agent.validator import StepVerdict, validate_plan
@@ -374,13 +375,21 @@ class AgentService:
 
     # --- zdolności i kill switch -----------------------------------------------
 
-    def kill(self, *, actor: str, reason: str) -> dict[str, Any]:
+    def kill(
+        self, *, actor: str, reason: str, effects: Sequence[KillEffect] = ()
+    ) -> dict[str, Any]:
+        """Kill switch: najpierw flaga w bazie (blokuje od razu), potem skutki poza bazą."""
         session = self._session
+        now = self._clock()
         switch = session.get(AgentSwitch, 1) or AgentSwitch(id=1)
         switch.killed = True
         switch.changed_by = actor
         switch.reason = reason[:2000]
-        switch.changed_at = self._clock()
+        switch.changed_at = now
+        switch.killed_at = now
+        switch.effects = None
+        switch.scanner_stopped_at = None
+        switch.scanner_stopped = None
         session.add(switch)
         stopped = list(
             session.scalars(select(AgentTask.id).where(AgentTask.status.in_(ACTIVE_TASK_STATUSES)))
@@ -388,7 +397,7 @@ class AgentService:
         session.execute(
             update(AgentTask)
             .where(AgentTask.id.in_(stopped))
-            .values(status="killed", finished_at=self._clock())
+            .values(status="killed", finished_at=now)
         )
         session.execute(
             update(AgentStep)
@@ -396,7 +405,7 @@ class AgentService:
             .values(status="skipped", decision="agent_killed")
         )
         session.execute(update(AgentCapability).values(active=False))
-        info = {"tasks_killed": [str(t) for t in stopped]}
+        info: dict[str, Any] = {"tasks_killed": [str(t) for t in stopped]}
         audit.record(
             session,
             audit.AuditEvent(
@@ -408,8 +417,50 @@ class AgentService:
                 object_id="sentinel-agent",
             ),
         )
+        # Flaga jest zapisana, zanim zaczniemy rozmawiać z Keycloakiem i OpenBao.
         session.commit()
-        return info
+
+        results = [r.as_dict() for r in run_effects(effects, "kill")]
+        switch = session.get(AgentSwitch, 1) or switch
+        switch.effects = results
+        audit.record(
+            session,
+            audit.AuditEvent(
+                actor=actor,
+                action="agent_kill_effects",
+                reason=CERT_GAP,
+                inputs={"effects": results},
+                object_type="agent",
+                object_id="sentinel-agent",
+            ),
+        )
+        session.commit()
+        return {**info, "effects": results, "certificate_gap": CERT_GAP}
+
+    def restore_identity(
+        self, *, actor: str, effects: Sequence[KillEffect]
+    ) -> list[dict[str, Any]]:
+        """Po kill switchu: ponownie włącza klienta agenta przy zgłoszeniu nowych zdolności.
+
+        Agent nadal nic nie zrobi: flagę zdejmuje dopiero aktywacja wersji po zaliczonym teście.
+        """
+        session = self._session
+        switch = session.get(AgentSwitch, 1)
+        if switch is None or not switch.killed or not effects:
+            return []
+        results = [r.as_dict() for r in run_effects(effects, "restore")]
+        audit.record(
+            session,
+            audit.AuditEvent(
+                actor=actor,
+                action="agent_identity_restored",
+                reason="Nowe zdolności po kill switchu; flaga blokuje agenta do zaliczenia testu",
+                inputs={"effects": results},
+                object_type="agent",
+                object_id="sentinel-agent",
+            ),
+        )
+        return results
 
 
 def create_capability(

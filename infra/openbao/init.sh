@@ -4,7 +4,10 @@
 #   2. silnik `ssh` w trybie CA i rola `sentinel-scanner`: certyfikat na 15 minut, tylko
 #      użytkownik `sentinel-scan`, bez rozszerzeń (bez PTY i przekierowań),
 #   3. AppRole `mcp-scanner` z polityką „tylko podpis”, token na 15 minut,
-#   4. pliki dla usług: approle.json (tylko mcp-scanner) i ca.pub (hosty demo-lab).
+#   4. AppRole `killswitch` (osobny punkt montowania) z polityką „tylko revoke-prefix”
+#      dla tokenów mcp-scanner; używa go API przy kill switchu,
+#   5. pliki dla usług: approle.json (mcp-scanner), killswitch/approle.json (api) i ca.pub
+#      (hosty demo-lab).
 #
 # Klucz rozpieczętowania i token root leżą w wolumenie `openbao-init` dostępnym wyłącznie
 # dla tej usługi. To uproszczenie demo opisane w README (produkcja: auto-unseal, KMS/HSM).
@@ -13,6 +16,7 @@ set -eu
 export BAO_ADDR="${BAO_ADDR:-http://openbao:8200}"
 STATE=/bao-state
 APPROLE_OUT=/out/approle
+KILL_OUT=/out/killswitch
 CA_OUT=/out/ca
 
 echo "bao-init: czekam na OpenBao"
@@ -43,6 +47,7 @@ if ! bao read ssh-client-signer/config/ca >/dev/null 2>&1; then
 fi
 bao write ssh-client-signer/roles/sentinel-scanner - < /policies/ssh-role.json >/dev/null
 bao policy write mcp-scanner /policies/mcp-scanner.hcl >/dev/null
+bao policy write killswitch /policies/killswitch.hcl >/dev/null
 
 if ! bao auth list | grep -q '^approle/'; then
   bao auth enable approle >/dev/null
@@ -51,13 +56,25 @@ bao write auth/approle/role/mcp-scanner \
   token_policies=mcp-scanner token_ttl=15m token_max_ttl=15m \
   secret_id_ttl=0 secret_id_num_uses=0 >/dev/null
 
+if ! bao auth list | grep -q '^killswitch/'; then
+  bao auth enable -path=killswitch approle >/dev/null
+fi
+bao write auth/killswitch/role/killswitch \
+  token_policies=killswitch token_ttl=1m token_max_ttl=1m \
+  secret_id_ttl=0 secret_id_num_uses=0 >/dev/null
+
 ROLE_ID=$(bao read -field=role_id auth/approle/role/mcp-scanner/role-id)
 SECRET_ID=$(bao write -f -field=secret_id auth/approle/role/mcp-scanner/secret-id)
 umask 027
 printf '{"role_id": "%s", "secret_id": "%s"}\n' "$ROLE_ID" "$SECRET_ID" > "$APPROLE_OUT/approle.json.tmp"
 mv "$APPROLE_OUT/approle.json.tmp" "$APPROLE_OUT/approle.json"
 chmod 0444 "$APPROLE_OUT/approle.json"
+KILL_ROLE=$(bao read -field=role_id auth/killswitch/role/killswitch/role-id)
+KILL_SECRET=$(bao write -f -field=secret_id auth/killswitch/role/killswitch/secret-id)
+printf '{"role_id": "%s", "secret_id": "%s"}\n' "$KILL_ROLE" "$KILL_SECRET" > "$KILL_OUT/approle.json.tmp"
+mv "$KILL_OUT/approle.json.tmp" "$KILL_OUT/approle.json"
+chmod 0444 "$KILL_OUT/approle.json"
 bao read -field=public_key ssh-client-signer/config/ca > "$CA_OUT/ca.pub.tmp"
 chmod 0444 "$CA_OUT/ca.pub.tmp"
 mv -f "$CA_OUT/ca.pub.tmp" "$CA_OUT/ca.pub"
-echo "bao-init: gotowe (CA SSH, rola sentinel-scanner 15 min, AppRole mcp-scanner)"
+echo "bao-init: gotowe (CA SSH, rola sentinel-scanner 15 min, AppRole mcp-scanner i killswitch)"

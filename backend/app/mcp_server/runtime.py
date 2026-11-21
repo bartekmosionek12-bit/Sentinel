@@ -46,7 +46,7 @@ from app.models.base import utcnow
 from app.scanners.http_probe import HttpProber
 from app.scanners.nmap import NmapAdapter
 from app.scanners.nuclei import NucleiAdapter
-from app.scanners.runner import ToolError
+from app.scanners.runner import CANCELLATIONS, Cancellations, ToolError
 from app.scanners.ssh import SshConnector, check_level, collect_packages, new_keypair
 
 FULL_PORTS = "1-65535"
@@ -112,12 +112,14 @@ class ToolRuntime:
         *,
         caller: str = "agent:sentinel-agent",
         clock: Callable[[], datetime] = utcnow,
+        cancellations: Cancellations | None = None,
     ) -> None:
         self._sessions = sessions
         self._guard = guard
         self._tools = toolbox
         self._caller = caller
         self._clock = clock
+        self._cancellations = cancellations or CANCELLATIONS
 
     # --- wejście ----------------------------------------------------------
 
@@ -146,13 +148,24 @@ class ToolRuntime:
             except (ToolError, VaultError) as error:
                 session.rollback()
                 step = session.get(AgentStep, request.step_id) or step
+                killed = is_killed(session)
                 step.status = "failed"
                 step.finished_at = self._clock()
                 step.result = {"error": scrub(str(error), 300)}
+                if killed:
+                    step.decision = "agent_killed"
+                    step.decision_reason = "Wywołanie przerwane przez kill switch"
                 self._audit(
-                    session, task, "agent_tool_failed", scrub(str(error), 300), request, step
+                    session,
+                    task,
+                    "agent_tool_killed" if killed else "agent_tool_failed",
+                    scrub(str(error), 300),
+                    request,
+                    step,
                 )
                 session.commit()
+                if killed:
+                    return ToolResponse(False, "agent_killed", "Przerwane przez kill switch")
                 return ToolResponse(False, "tool_error", scrub(str(error), 300))
             filtered = for_agent(raw)
             step.status = "done"
@@ -388,10 +401,20 @@ class ToolRuntime:
                 private_key=private_key,
                 certificate=cert.certificate,
             )
+            stopped: list[bool] = []
+
+            def cancel() -> None:
+                stopped.append(True)
+                connection.close()
+
+            handle = self._cancellations.add(cancel)
             try:
                 manager, packages = collect_packages(connection)
             finally:
+                self._cancellations.remove(handle)
                 connection.close()
+            if stopped:
+                raise ToolError("ssh: połączenie przerwane przez kill switch")
         finally:
             del private_key
             try:
