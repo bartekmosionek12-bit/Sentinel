@@ -245,10 +245,16 @@ decyzja w audit logu.
 allowlisty), nie omija `scope_guard` ani polityk MCP, wpis w audycie z aktorem `seed_demo` i
 datą wygaśnięcia. Testy obejmują wszystkie warunki, w tym wygaśnięcie i L3.
 
-**Warstwa 2: sieć Dockera.** Do sieci z celami (`scan`, w demo: `demo-lab`) podłączony jest
-wyłącznie `mcp-scanner`. Worker `scans` traci ten dostęp (w wersji 1 go miał). API, baza,
-Ollama, Keycloak i pozostałe workery nie mają fizycznej drogi do skanowanych hostów.
-OpenBao jest w osobnej sieci `vault`, widocznej tylko dla `mcp-scanner`.
+**Warstwa 2: sieć Dockera.** Do sieci z celami (`scan`, w demo: `demo-lab`, `internal: true`)
+podłączone są wyłącznie dwa skanery: `mcp-scanner` (agent) i **nadal** `worker-scans`
+(pipeline skanów). Plan zakładał, że `worker-scans` straci ten dostęp z przejściem pipeline na
+MCP; to przejście jest w ROADMAP, więc do tego czasu pipeline skanuje bezpośrednio, zawsze
+przez `scope_guard`. API, baza, Ollama, Keycloak i pozostałe workery, **łącznie z workerem
+agenta** (`worker-agent`), nie mają fizycznej drogi do skanowanych hostów. OpenBao jest w
+osobnej sieci `vault`: widzą ją `mcp-scanner` (podpis certyfikatów) i od Etapu 6 `api`
+(wyłącznie kill switch, AppRole z polityką „tylko revoke-prefix”).
+Testy: `backend/tests/test_network_isolation.py` (Compose) i `scripts/check_isolation.sh` w
+CI (próba połączenia TCP z każdego kontenera do hosta demo-lab).
 
 **Testy, które to potwierdzają** (rozszerzone o MCP i agenta):
 
@@ -422,17 +428,37 @@ sequenceDiagram
 
 **Kill switch** (`POST /api/agent/kill`, uprawnienie `agent:kill`, jedno kliknięcie):
 
-1. flaga `AgentSwitch.killed` w bazie: polityka `ToolRuntime` w `mcp-scanner`, walidator
-   planu i wykonawca sprawdzają ją przed każdym krokiem i odrzucają wywołanie od razu,
-2. status `killed` dla aktywnych `AgentTask`, kroki `planned`/`approved` przechodzą w
-   `skipped` z decyzją `agent_killed`; wykonawca przerywa po bieżącym kroku,
-3. wszystkie wersje `AgentCapability` stają się nieaktywne,
-4. wpis w audycie. Ponowne włączenie wymaga nowej wersji zdolności (a ta przechodzi bramkę
-   testu agenta z sekcji 23).
+1. **flaga w bazie** (`AgentSwitch.killed`, `killed_at`), zapisana jako pierwsza: polityka
+   `ToolRuntime` w `mcp-scanner`, walidator planu i wykonawca odrzucają od razu każde kolejne
+   wywołanie; aktywne `AgentTask` dostają status `killed`, kroki `planned`/`approved` przechodzą
+   w `skipped` (`agent_killed`), wszystkie wersje `AgentCapability` stają się nieaktywne,
+2. **Keycloak**: API wyłącza klienta `sentinel-agent` przez admin API (konto usługowe
+   `sentinel-killswitch` z rolami wyłącznie `view-clients` i `manage-clients`), więc Keycloak
+   nie wyda nowego tokenu agenta. Tokeny wydane wcześniej (żyją do 5 min) odrzuca `mcp-scanner`:
+   po kill switchu każdy, a po ponownym włączeniu każdy z `iat` sprzed `killed_at`,
+3. **OpenBao**: API loguje się własnym AppRole (osobny punkt montowania `auth/killswitch`,
+   polityka `infra/openbao/killswitch.hcl`: tylko `sys/leases/revoke-prefix/auth/approle/login`)
+   i hurtowo odwołuje wszystkie tokeny, którymi `mcp-scanner` mógłby podpisać certyfikat,
+4. **mcp-scanner**: strażnik (`app/mcp_server/watcher.py`) co sekundę czyta flagę i zabija
+   procesy narzędzi oraz zamyka połączenia SSH trwających wywołań. Przerwany krok kończy się
+   jako `failed` z decyzją `agent_killed`. Potwierdzenie (czas i liczba przerwanych wywołań)
+   trafia do `agent_switch` i audytu (`agent_kill_scanner_stopped`),
+5. audyt każdego kroku (`agent_killed`, `agent_kill_effects` z wynikiem 2 i 3). Konsola pokazuje
+   wynik każdego skutku osobno, także błąd (np. Keycloak niedostępny); błąd jednego skutku nie
+   zatrzymuje pozostałych.
 
-**Czego kill switch w Etapie 5 nie robi** (ROADMAP): nie wyłącza klienta `sentinel-agent` w
-Keycloak, nie wysyła `revoke` do Celery i nie woła `sys/leases/revoke-prefix` w OpenBao.
-Flaga z punktu 1 blokuje każde kolejne wywołanie, a certyfikat SSH i tak wygasa po 15 min.
+Ponowne włączenie: nowa wersja zdolności. Przy jej zgłoszeniu API włącza klienta w Keycloak,
+ale flaga nadal blokuje agenta, dopóki wersja nie przejdzie bramki testu agenta (sekcja 23).
+
+**Luka nazwana wprost:** certyfikat SSH podpisany przed kill switchem działa do końca TTL,
+najwyżej 15 minut. Odwołanie tokenu OpenBao nie unieważnia wydanego certyfikatu, a hosty nie
+mają listy KRL (ROADMAP). Ten sam tekst widzi admin przy przycisku kill switcha. W praktyce
+klucz prywatny do certyfikatu żyje wyłącznie w pamięci `mcp-scanner` i ginie z przerwanym
+wywołaniem, ale granicą gwarantowaną jest TTL.
+
+Testy: `backend/tests/test_killswitch.py` (wszystkie trzy skutki, prawdziwy proces narzędzia
+przerwany przez strażnika, admin API Keycloaka i OpenBao przez `httpx.MockTransport`) oraz
+`scripts/check_killswitch.py` na żywo w CI (demo-lab, prawdziwy Keycloak i OpenBao).
 
 ---
 
@@ -449,7 +475,8 @@ Flaga z punktu 1 blokuje każde kolejne wywołanie, a certyfikat SSH i tak wygas
   (`TrustedUserCAKeys`).
 - **Odwołanie:** po zadaniu `mcp-scanner` odwołuje lease i token OpenBao oraz kasuje klucz
   prywatny. Certyfikatu SSH nie da się „odwołać” bez listy KRL na hoście, więc granicą jest TTL
-  15 min. KRL na hostach demo-lab nie powstała w Etapie 5 (ROADMAP).
+  15 min. KRL jest w ROADMAP (także dla demo-lab). Kill switch odwołuje hurtowo wszystkie
+  tokeny `mcp-scanner` (sekcja 5.2), ale wydane certyfikaty działają do końca TTL.
 - **Sekrety dynamiczne:** silnik `database` (konto tylko do odczytu na czas zadania) i konta
   chmurowe są w ROADMAP. W Etapie 5 jedynym poświadczeniem JIT jest certyfikat SSH.
 - `CredentialLease` w bazie: zadanie, typ, TTL, wydano, odwołano, przez kogo. **Bez sekretów.**
@@ -1025,8 +1052,9 @@ lokalności, ograniczony do testów:
   zakazane polecenia, prośby o sekrety, zmiana oceny ryzyka. Sędzia LLM tylko tam, gdzie reguła
   nie wystarczy, a jego werdykt jest w wynikach oddzielony od werdyktów deterministycznych.
 
-**Stan po Etapie 5:** generator to skrypt `ai-tests/redteam/generate.py`, a nie
-`promptfoo redteam generate` (ten wymaga zdalnej generacji promptfoo). Kategorie OWASP LLM:
+**Stan po Etapie 5 (zaakceptowane 2026-11-21):** generator to własny skrypt
+`ai-tests/redteam/generate.py`, a nie `promptfoo redteam generate` (ten wymaga zdalnej
+generacji promptfoo). **promptfoo jest runnerem**: uruchamia wygenerowane testy i asercje. Kategorie OWASP LLM:
 LLM01 (obniżenie ryzyka), LLM09 (dezinformacja), LLM02 (sekrety) na raporcie „W skrócie”,
 LLM05 (obsługa wyjścia) i LLM07 (wyciek promptu) na wyjaśnieniu CVE, LLM06 (wyjście agenta
 poza zakres) na planiście. promptfoo uruchamia ewaluację wygenerowanych testów na prawdziwej
@@ -1244,8 +1272,8 @@ Pytania do decyzji są oznaczone **[pytanie]**.
    wtedy inny model (do ustalenia w Etapie 4b, z uwzględnieniem prywatności danych testowych).
 6. **Odwołanie certyfikatu SSH.** OpenSSH nie sprawdza odwołania certyfikatu bez listy KRL na
    hoście. Odwołujemy lease i token w OpenBao i niszczymy klucz prywatny; ważność certyfikatu
-   ogranicza TTL 15 min. W demo-lab dodam KRL aktualizowaną przez `mcp-scanner`, żeby pokazać
-   pełne odwołanie, i opiszę to ograniczenie w README.
+   ogranicza TTL 15 min. **Decyzja z 2026-11-21:** KRL w ROADMAP (także w demo-lab); luka
+   jest nazwana wprost w sekcji 5.2, w README i w UI kill switcha.
 7. **Termin oddania.** Według Bartka (2026-11-20) czasu jest dużo; konkretnej daty brak.
    Planujemy wszystkie Etapy 4–9, a linia cięcia z ROADMAP.md działa jako plan awaryjny.
 8. **OpenBao w demo** trzyma klucz rozpieczętowania w `.env`. To świadome ograniczenie trybu
@@ -1408,7 +1436,7 @@ Zbudowane zgodnie z 23.1–23.5, z tymi uściśleniami:
 - Bramka: wersja przechodzi w `active`, gdy **kod** zablokował wszystko (`code_failed == 0`).
   Porażki modelu są informacją w wyniku, nie blokują zmiany. Stany wersji: `pending_test`,
   `active`, `forced`, `rejected`, `superseded`. Wymuszenie wymaga uzasadnienia ≥ 20 znaków.
-- 11 własnych przypadków w `ai-tests/agent/cases.yaml` (sześć kategorii z 23.2 plus przypadek
+- 12 własnych przypadków w `ai-tests/agent/cases.yaml` (sześć kategorii z 23.2 plus przypadek
   kontrolny), szybki zestaw to ich podzbiór. Pełny zestaw w CI: `ai-tests/agent/run.py`.
 - Raport dla menedżera (23.4, druga część) jest w Etapie 6.
 

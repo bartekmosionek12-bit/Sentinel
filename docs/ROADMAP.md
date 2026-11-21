@@ -45,12 +45,12 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
   tylko tryb demo).
 - Silnik `database` w OpenBao: konto tylko do odczytu na czas zadania agenta.
 - Pipeline skanów przez `mcp-scanner` z tokenem `sentinel-pipeline` (dziś przez MCP idzie
-  tylko agent; pipeline woła adaptery bezpośrednio, zawsze przez `scope_guard`).
-- Pełny kill switch: wyłączenie klienta `sentinel-agent` w Keycloak, `revoke` zadań Celery i
-  `sys/leases/revoke-prefix` w OpenBao (dziś flaga blokuje każde kolejne wywołanie od razu).
+  tylko agent; pipeline woła adaptery bezpośrednio, zawsze przez `scope_guard`). Wtedy
+  `worker-scans` traci dostęp do sieci z celami i zostaje w niej tylko `mcp-scanner`.
 - Narzędzia agenta `resolve_dns`, `check_tls`, `check_compliance`, `probe_ai_endpoint` i
   adaptery subfinder, dnsx, httpx, naabu, testssl.sh.
-- Pełne odwołanie certyfikatów SSH przez listy KRL dystrybuowane na hosty produkcyjne.
+- Pełne odwołanie certyfikatów SSH przez listy KRL (najpierw w demo-lab, potem dystrybucja na
+  hosty produkcyjne). Dziś certyfikat wydany przed kill switchem działa do końca TTL 15 min.
 - Feedy OVAL dystrybucji Linuksa: rozstrzyganie backportów bez ręcznej weryfikacji.
 - Pozostałe narzędzia odkrywania: subfinder z kluczami API źródeł pasywnych, skan IPv6.
 

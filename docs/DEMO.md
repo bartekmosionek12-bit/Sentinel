@@ -36,9 +36,13 @@ narzędzia, sieć demo-lab, maks. L2) i od razu uruchamia szybki test agenta (br
 5. Wynik zadania: pakiety trafiły do inwentarza, matching utworzył findingi. W Dzienniku
    audytu: `agent_task_created`, `agent_task_approved`, `agent_tool_called`,
    `credential_issued`, `credential_revoked`.
-6. **Kill switch** (czerwony przycisk, powód obowiązkowy): aktywne zadania przechodzą w
-   `killed`, zdolności wyłączone, każde kolejne wywołanie odrzucone. Ponowne włączenie to nowe
-   zdolności, które znów przechodzą test agenta.
+6. **Kill switch** (czerwony przycisk, powód obowiązkowy). Najlepiej w trakcie długiego kroku,
+   np. „Pełny skan portów 172.30.99.12”. Karta „Stan agenta” pokazuje każdy skutek osobno:
+   flaga w bazie (od razu), Keycloak (klient `sentinel-agent` wyłączony), OpenBao (tokeny
+   `mcp-scanner` odwołane hurtowo), mcp-scanner (potwierdzenie i liczba przerwanych wywołań).
+   Przerwany krok kończy się jako „agent_killed”. Pod spodem czerwona linia z luką: certyfikaty
+   SSH wydane wcześniej działają do 15 minut (brak KRL). Ponowne włączenie to nowe zdolności,
+   które znów przechodzą test agenta.
 
 ## 5. Odmowa dostępu menedżera (gotowy od Etapu 4)
 

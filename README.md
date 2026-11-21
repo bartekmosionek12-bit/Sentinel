@@ -197,7 +197,7 @@ kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 | Testy własnego AI | [promptfoo w `ai-tests/`](ai-tests/README.md): pośrednie prompt injection przez opisy CVE na prawdziwej ścieżce aplikacji, z posłuszną atrapą (każdy PR) i z Qwen3 4B (9 przypadków w każdym PR, pełny zestaw nocą), wyniki osobno. Nocą także generowany red team OWASP LLM Top 10 (generator i sędzia przez API na syntetycznych danych, bez klucza Bielik 4.5B). |
 | Agent AI | Polecenie → plan (model albo szablon) → walidacja kodem → zatwierdzenie przez admina → wykonanie przez serwer MCP `mcp-scanner` (polityka zdolności → `scope_guard` → adapter). Sześć narzędzi: `discover_hosts`, `scan_services`, `probe_http` (L1), `scan_all_ports`, `verify_cve` z nuclei (szablony detekcyjne), `collect_software_authenticated` (L2). Jedna runda kroków uzupełniających, też do zatwierdzenia. Kill switch jednym kliknięciem. |
 | Poświadczenia JIT | OpenBao: certyfikat SSH podpisywany na zadanie z TTL 15 min, klucz tylko w pamięci, odwołanie leasu po zadaniu. Sekret nie trafia do modelu, logów, API ani audytu (testy z kanarkami). |
-| Test agenta (moduł 19) | Niezależny harness na osobnej kolejce i osobnym użytkowniku bazy, tryb dry-run z atrapami narzędzi i kanarkami, 11 przypadków w sześciu kategoriach, dwie oceny (model i kod), wynik podpisany Ed25519 i w audycie. Bramka zmian konfiguracji agenta z wymuszeniem wymagającym uzasadnienia. Nocny przebieg w CI. |
+| Test agenta (moduł 19) | Niezależny harness na osobnej kolejce i osobnym użytkowniku bazy, tryb dry-run z atrapami narzędzi i kanarkami, 12 przypadków w sześciu kategoriach, dwie oceny (model i kod), wynik podpisany Ed25519 i w audycie. Bramka zmian konfiguracji agenta z wymuszeniem wymagającym uzasadnienia. Nocny przebieg w CI. |
 | Sygnały bez CPE | Wpis KEV bez zakresu wersji w NVD trafia do kolejki weryfikacji jako sygnał; finding powstaje wyłącznie po decyzji człowieka. |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz), `agent`, `agent_tests`. |
 | Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
@@ -261,9 +261,11 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
   potwierdza podatność po wersji; nic nie jest eksploatowane.
 - Przez serwer MCP idzie tylko agent. Pipeline skanów woła adaptery bezpośrednio, zawsze
   przez `scope_guard` (przejście na MCP w [ROADMAP](docs/ROADMAP.md)).
-- Certyfikatu SSH nie da się odwołać przed czasem bez listy KRL na hoście: granicą jest TTL
-  15 min. Kill switch blokuje każde kolejne wywołanie agenta od razu, ale nie wyłącza klienta
-  w Keycloak i nie odwołuje leasów OpenBao hurtowo (ROADMAP).
+- Kill switch blokuje agenta od razu, wyłącza jego klienta w Keycloak, hurtowo odwołuje tokeny
+  `mcp-scanner` w OpenBao i przerywa trwające skany. **Luka:** certyfikaty SSH wydane przed
+  wyłączeniem działają do końca TTL (najwyżej 15 minut), bo hosty nie mają listy KRL (ROADMAP).
+- Do sieci demo-lab podłączone są dwa skanery: `mcp-scanner` (agent) i `worker-scans`
+  (pipeline, dopóki nie przejdzie na MCP). Worker agenta i pozostałe usługi nie mają tam drogi.
 - OpenBao w demo trzyma klucz rozpieczętowania w wolumenie `openbao-init`, dostępnym tylko
   dla usługi inicjalizującej. Produkcja: auto-unseal przez KMS/HSM.
 - Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka, e-mail i PDF raportów
