@@ -133,7 +133,12 @@ def main() -> int:
     assets = {a["name"]: a for a in get(base, "/assets?limit=500")["items"]}  # type: ignore[index]
     actions = get(base, "/scan-actions")
     audit = get(base, "/audit-log/verify")
-    by_cve = {(f["vulnerability"]["cve_id"], f["asset"]["name"]): f for f in findings}
+    # Findingi bez CVE (np. „nieznane urządzenie” z reguły shadow IT, Etap 6) pomijamy.
+    by_cve = {
+        (f["vulnerability"]["cve_id"], f["asset"]["name"]): f
+        for f in findings
+        if f.get("vulnerability") and f.get("asset")
+    }
     web = by_cve.get(("CVE-2021-41773", "web-01"), {})
     explanation = get(base, f"/findings/{web['id']}/explanation?audience=technical") if web else {}
     llm = get(base, "/llm/status")
