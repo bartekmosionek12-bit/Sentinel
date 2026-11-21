@@ -36,8 +36,14 @@ from app.core.scope_guard import (
     ScopeGuard,
 )
 from app.discovery.fingerprint import HttpFingerprinter, flags_for, web_ports
-from app.discovery.signatures import Signature, load_signatures
-from app.models import DiscoveryBatch, DiscoveryRun, Observation
+from app.discovery.signatures import (
+    Signature,
+    SignatureError,
+    combine,
+    load_raw,
+    load_signatures,
+)
+from app.models import CustomSignature, DiscoveryBatch, DiscoveryRun, Observation
 from app.models.base import utcnow
 from app.scanners.models import DiscoveredHost, HostScan
 from app.scanners.nmap import NmapAdapter
@@ -70,6 +76,7 @@ class DiscoveryConfig:
     window: int = 5
     # Własne sygnatury z rules/signatures.yaml (ten sam katalog co discovery.yaml).
     signatures: tuple[Signature, ...] = ()
+    builtin_signatures: tuple[dict[str, Any], ...] = ()
 
     @classmethod
     def from_file(cls, path: Path) -> DiscoveryConfig:
@@ -84,6 +91,7 @@ class DiscoveryConfig:
             inactive_after_runs=int(state.get("inactive_after_runs", 3)),
             window=int(state.get("window", 5)),
             signatures=load_signatures(path.parent / "signatures.yaml"),
+            builtin_signatures=tuple(load_raw(path.parent / "signatures.yaml")),
         )
 
     def settings(self, overrides: dict[str, Any] | None = None) -> DiscoverySettings:
@@ -219,6 +227,17 @@ class DiscoveryEngine:
         self._config = config
         self._nmap = nmap or NmapAdapter()
         self._fingerprinter = fingerprinter
+        self._signatures = config.signatures
+
+    def _load_custom_signatures(self) -> None:
+        """Własne sygnatury z konsoli dołączone do wbudowanych; błąd = tylko wbudowane."""
+        custom = [row.definition for row in self._session.scalars(select(CustomSignature))]
+        if not custom:
+            return
+        try:
+            self._signatures = combine(list(self._config.builtin_signatures), custom)
+        except SignatureError as error:
+            logger.warning("Własne sygnatury pominięte: %s", error)
 
     # --- kroki wykonywane w workerach (bez bazy i bez bramy) -------------------------
 
@@ -254,7 +273,7 @@ class DiscoveryEngine:
         http: list[dict[str, Any]] = []
         if http_target is not None and settings.fingerprint:
             prober = self._fingerprinter or HttpFingerprinter(
-                list(settings.http_paths), signatures=self._config.signatures
+                list(settings.http_paths), signatures=self._signatures
             )
             try:
                 for port, scheme in web_ports(service_dicts(scan)):
@@ -272,6 +291,7 @@ class DiscoveryEngine:
         if run is None:
             raise LookupError("Nie ma takiego przebiegu")
         settings = self._config.settings(run.settings)
+        self._load_custom_signatures()
         run.settings = {**asdict(settings), "http_paths": list(settings.http_paths)}
         parsed = parse_targets(list(run.targets))
         run.status = "running"

@@ -70,3 +70,28 @@ test("rola Odczyt ma skrzynkę raportów w konsoli zespołu IT", async ({ page }
   await expect(page.getByRole("heading", { name: "Skrzynka" })).toBeVisible();
   await expect(page.getByText("Ocena stanu bezpieczeństwa (2026-11-21)")).toBeVisible();
 });
+
+test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczytu", async ({
+  page,
+}) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/sygnatury");
+  await expect(page.getByRole("heading", { name: "Sygnatury detekcyjne" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "wordpress-login" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "intranet-demo" })).toBeVisible();
+  await page.getByRole("button", { name: "Sprawdź" }).click();
+  await expect(page.getByText("Sygnatura „moja-aplikacja” jest poprawna.")).toBeVisible();
+  await page.getByRole("button", { name: "Zapisz" }).click();
+  await expect(page.getByText("Zapisano „moja-aplikacja”.")).toBeVisible();
+  const put = sent.find((s) => s.method === "PUT");
+  expect(put?.path).toBe("/api/discovery/signatures/moja-aplikacja");
+  expect((put?.body as { yaml: string }).yaml).toContain("kind: technology");
+});
+
+test("rola Odczyt widzi sygnatury, ale bez edytora", async ({ page }) => {
+  await stubApi(page, { role: "viewer" });
+  await page.goto("/admin/discovery/sygnatury");
+  await expect(page.getByRole("cell", { name: "gitea", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Sygnatura w YAML")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Usuń" })).toHaveCount(0);
+});

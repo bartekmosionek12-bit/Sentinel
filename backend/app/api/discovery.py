@@ -7,6 +7,7 @@ import uuid
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -26,10 +27,12 @@ from app.discovery.analysis import (
 from app.discovery.defectdojo import DojoClient, DojoConfig, DojoError, findings_for
 from app.discovery.engine import DiscoveryConfig, parse_targets
 from app.discovery.io import ImportError_, hosts_csv, nmap_xml, parse_import, rows_csv
+from app.discovery.signatures import KINDS, MATCH_TYPES, MAX_PATHS, SignatureError, combine
 from app.iam.deps import require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
 from app.models import (
+    CustomSignature,
     DefectDojoExport,
     DiscoveryBatch,
     DiscoveryRun,
@@ -560,3 +563,137 @@ def dojo_export(
     )
     session.commit()
     return {"sent": len(findings), **result}
+
+
+# --- własne sygnatury detekcyjne (brief R10) ---------------------------------------------
+
+
+class SignatureIn(BaseModel):
+    """Jedna sygnatura w YAML, w tym samym kształcie co pozycja w rules/signatures.yaml."""
+
+    yaml: str = Field(max_length=20_000)
+
+
+def _signature_definition(text: str) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Błędny YAML: {error}"
+        ) from error
+    if isinstance(data, list) and len(data) == 1:
+        data = data[0]
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Podaj jedną sygnaturę (słownik YAML)"
+        )
+    return data
+
+
+def _validate_with(
+    session: SessionDep, definition: dict[str, Any], replace_id: str | None = None
+) -> None:
+    builtin = list(discovery_config().builtin_signatures)
+    if any(item.get("id") == definition.get("id") for item in builtin):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ten identyfikator ma sygnatura wbudowana; wybierz inny",
+        )
+    custom = [
+        row.definition
+        for row in session.scalars(select(CustomSignature))
+        if row.signature_id != replace_id
+    ]
+    try:
+        combine(builtin, [*custom, definition])
+    except SignatureError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+
+
+@router.get("/signatures")
+def list_signatures(session: SessionDep, principal: Reader) -> dict[str, Any]:
+    """Wbudowane (z pliku, tylko odczyt) i własne (z konsoli) sygnatury oraz ich zasady."""
+    custom = session.scalars(select(CustomSignature).order_by(CustomSignature.signature_id))
+    return {
+        "builtin": list(discovery_config().builtin_signatures),
+        "custom": [
+            {
+                "id": row.signature_id,
+                "definition": row.definition,
+                "updated_by": row.updated_by,
+                "updated_at": row.updated_at,
+            }
+            for row in custom
+        ],
+        "rules": {
+            "kinds": sorted(KINDS),
+            "match_types": sorted(MATCH_TYPES),
+            "max_paths": MAX_PATHS,
+        },
+    }
+
+
+@router.post("/signatures/check")
+def check_signature(payload: SignatureIn, session: SessionDep, principal: Runner) -> dict[str, Any]:
+    """Walidacja bez zapisu: te same zasady co przy skanie (tylko GET, typy z briefu)."""
+    definition = _signature_definition(payload.yaml)
+    _validate_with(session, definition, replace_id=str(definition.get("id") or ""))
+    return {"ok": True, "definition": definition}
+
+
+@router.put("/signatures/{signature_id}")
+def save_signature(
+    signature_id: str, payload: SignatureIn, session: SessionDep, principal: Runner
+) -> dict[str, Any]:
+    definition = _signature_definition(payload.yaml)
+    if definition.get("id") != signature_id:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Pole id musi być takie samo jak w adresie"
+        )
+    _validate_with(session, definition, replace_id=signature_id)
+    row = session.scalar(
+        select(CustomSignature).where(CustomSignature.signature_id == signature_id)
+    )
+    before = row.definition if row else None
+    if row is None:
+        row = CustomSignature(signature_id=signature_id, updated_by=principal.actor)
+        session.add(row)
+    row.definition = definition
+    row.updated_by = principal.actor
+    row.updated_at = utcnow()
+    audit.record(
+        session,
+        audit.AuditEvent(
+            actor=principal.actor,
+            action="signature_saved",
+            reason="Własna sygnatura detekcyjna",
+            inputs={"before": before, "after": definition},
+            object_type="signature",
+            object_id=signature_id,
+        ),
+    )
+    session.commit()
+    return {"id": signature_id, "definition": definition}
+
+
+@router.delete("/signatures/{signature_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_signature(signature_id: str, session: SessionDep, principal: Runner) -> Response:
+    row = session.scalar(
+        select(CustomSignature).where(CustomSignature.signature_id == signature_id)
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie ma takiej własnej sygnatury")
+    audit.record(
+        session,
+        audit.AuditEvent(
+            actor=principal.actor,
+            action="signature_deleted",
+            reason="Własna sygnatura detekcyjna",
+            inputs={"before": row.definition},
+            object_type="signature",
+            object_id=signature_id,
+        ),
+    )
+    session.delete(row)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

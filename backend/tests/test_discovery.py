@@ -112,3 +112,60 @@ def test_viewer_cannot_run_or_export_to_dojo(anon_client: TestClient, tokens: An
     anon_client.headers.update(tokens.headers(["viewer"], username="v"))
     assert anon_client.post("/api/discovery/runs", json={"items": ["10.10.0.1"]}).status_code == 403
     assert anon_client.get("/api/discovery/runs").status_code == 200
+
+
+SIGNATURE = """
+id: intranet-portal
+name: Portal intranetowy
+kind: panel
+match:
+  - {type: title, pattern: "intranet"}
+  - {type: path, path: /portal/version, status: [200], pattern: "build"}
+"""
+
+
+def test_custom_signatures_crud_validation_and_audit(
+    client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    listing = client.get("/api/discovery/signatures").json()
+    assert {s["id"] for s in listing["builtin"]} >= {"gitea", "rabbitmq-management"}
+    assert listing["custom"] == []
+
+    ok = client.post("/api/discovery/signatures/check", json={"yaml": SIGNATURE})
+    assert ok.status_code == 200, ok.text
+    unsafe = SIGNATURE.replace("status: [200]", "status: [200], method: POST")
+    assert client.post("/api/discovery/signatures/check", json={"yaml": unsafe}).status_code == 422
+    builtin_id = SIGNATURE.replace("intranet-portal", "gitea")
+    clash = client.put("/api/discovery/signatures/gitea", json={"yaml": builtin_id})
+    assert clash.status_code == 409
+    mismatch = client.put("/api/discovery/signatures/inny", json={"yaml": SIGNATURE})
+    assert mismatch.status_code == 422
+
+    saved = client.put("/api/discovery/signatures/intranet-portal", json={"yaml": SIGNATURE})
+    assert saved.status_code == 200, saved.text
+    custom = client.get("/api/discovery/signatures").json()["custom"]
+    assert [c["id"] for c in custom] == ["intranet-portal"]
+
+    # Własna sygnatura działa w przebiegu: silnik dołącza ją do wbudowanych.
+    guard = ScopeGuard(
+        ScopeConfig.from_dict({"allow": {"cidrs": ["10.10.0.0/24"]}}),
+        audit=DbAuditSink(session_factory),
+        resolver=FakeResolver(),
+    )
+    with session_factory() as session:
+        engine = DiscoveryEngine(session, guard, DiscoveryConfig.from_file(RULES))
+        engine._load_custom_signatures()
+        assert "intranet-portal" in {s.id for s in engine._signatures}
+        assert "gitea" in {s.id for s in engine._signatures}
+
+    assert client.delete("/api/discovery/signatures/intranet-portal").status_code == 204
+    assert client.get("/api/discovery/signatures").json()["custom"] == []
+    actions = [e["action"] for e in client.get("/api/audit-log").json()["items"]]
+    assert {"signature_saved", "signature_deleted"} <= set(actions)
+
+
+def test_viewer_cannot_change_signatures(anon_client: TestClient, tokens: Any) -> None:
+    anon_client.headers.update(tokens.headers(["viewer"], username="v"))
+    assert anon_client.get("/api/discovery/signatures").status_code == 200
+    put = anon_client.put("/api/discovery/signatures/x1", json={"yaml": SIGNATURE})
+    assert put.status_code == 403

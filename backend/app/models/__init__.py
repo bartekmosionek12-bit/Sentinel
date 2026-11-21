@@ -12,6 +12,7 @@ from app.models.agent import (
 )
 from app.models.base import Base
 from app.models.discovery import (
+    CustomSignature,
     DefectDojoExport,
     DiscoveryBatch,
     DiscoveryRun,
@@ -61,6 +62,7 @@ __all__ = [
     "CpeProduct",
     "CredentialLease",
     "CustomRole",
+    "CustomSignature",
     "DefectDojoExport",
     "DiscoveryBatch",
     "DiscoveryRun",

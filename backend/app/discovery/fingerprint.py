@@ -28,8 +28,35 @@ MAX_REDIRECTS = 5
 # Typowe porty aplikacji WWW (także te, które nmap nazywa inaczej, np. Gitea na 3001 jako
 # „nessus”, panel RabbitMQ na 15672). Na nich zawsze próbujemy GET, niezależnie od nazwy usługi.
 WEB_PORTS = {
-    80, 81, 443, 3000, 3001, 4000, 5000, 5601, 8000, 8008, 8080, 8081, 8082, 8083, 8085,
-    8086, 8088, 8089, 8090, 8181, 8443, 8787, 8888, 9000, 9090, 9200, 9443, 15672, 15673,
+    80,
+    81,
+    443,
+    3000,
+    3001,
+    4000,
+    5000,
+    5601,
+    8000,
+    8008,
+    8080,
+    8081,
+    8082,
+    8083,
+    8085,
+    8086,
+    8088,
+    8089,
+    8090,
+    8181,
+    8443,
+    8787,
+    8888,
+    9000,
+    9090,
+    9200,
+    9443,
+    15672,
+    15673,
 }
 TLS_PORTS = {443, 8443}
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)

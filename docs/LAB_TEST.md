@@ -33,6 +33,9 @@ sprawdza nierozpoznane usługi), a ok. 7–12 s bez nich.
    HTML, tytuł, meta generator, ścieżka GET bez logowania), żadnych metod, treści żądań ani
    poświadczeń, najwyżej 10 dodatkowych ścieżek. Ścieżka może wymagać fragmentu treści, bo
    aplikacje SPA (np. Nginx Proxy Manager) odpowiadają 200 na każdą ścieżkę.
+5. **Edytor sygnatur w konsoli** (Discovery → Sygnatury detekcyjne): własne sygnatury w
+   YAML, przycisk „Sprawdź” (ten sam walidator), zapis i usunięcie w dzienniku audytu.
+   Zmiana wymaga `scan:run`; rola Odczyt widzi listę bez edytora.
 
 ## Znane ograniczenia
 

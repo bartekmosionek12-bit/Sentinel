@@ -7,7 +7,7 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
 | Kategoria oceny | Pokrycie | Stan |
 |---|---:|---|
 | A. Discovery i skala | 75% | IP/CIDR/domeny w liście celów, adaptacyjne paczki, dwa workery, nmap T3 i limit pakietów/s, postęp oraz ETA. Test /18 objął 16 384 adresy i 40 hostów z symulowanym adapterem; pomiar rzeczywistego /18 w demo-lab nie powstał. |
-| B. Fingerprint WWW, flagi i własne sygnatury | 90% | Biblioteka Python `httpx`: tytuł, status, nagłówki, nazwy ciasteczek, certyfikat TLS, przekierowanie, hash favicony, `/admin` i `/login`, staging, reguły ciekawych nagłówków i ciasteczek, liczba dowodów. Własne sygnatury w `rules/signatures.yaml` z walidatorem (tylko GET, typy z briefu). Na labie mentorów rozpoznane WordPress, DVWA, Gitea, RabbitMQ, phpMyAdmin, Nginx Proxy Manager, Traefik, httpbin. Wbudowana detekcja technologii binarki ProjectDiscovery `httpx` nie jest podłączona. |
+| B. Fingerprint WWW, flagi i własne sygnatury | 90% | Biblioteka Python `httpx`: tytuł, status, nagłówki, nazwy ciasteczek, certyfikat TLS, przekierowanie, hash favicony, `/admin` i `/login`, staging, reguły ciekawych nagłówków i ciasteczek, liczba dowodów. Wbudowane sygnatury w `rules/signatures.yaml` i własne z konsoli (Discovery → Sygnatury detekcyjne: sprawdzenie, zapis, usunięcie, audyt, RBAC `scan:run`), ten sam walidator (tylko GET, typy z briefu). Na labie mentorów rozpoznane WordPress, DVWA, Gitea, RabbitMQ, phpMyAdmin, Nginx Proxy Manager, Traefik, httpbin. Wbudowana detekcja technologii binarki ProjectDiscovery `httpx` nie jest podłączona. |
 | C. Porównanie i stan hostów | 100% | Dowolne dwa przebiegi, zmiany hostów, usług, technologii i nagłówków; stany aktywny, niestabilny, niepotwierdzony, nieaktywny po domyślnie trzech brakach; widok i JSON/CSV. |
 | D. Import, eksport, nadpisania | 100% | Formularz celów z walidacją i podglądem, ręcznie/CSV/JSON; import wyników JSON/CSV/nmap XML; eksport wyników i różnic JSON/CSV; nadpisania w osobnej tabeli scalane przy odczycie. |
 | E. Lokalny DefectDojo | 100% | Profil Docker Compose uruchomiony lokalnie; API v2 zweryfikowane przez utworzenie findingu `Info` i pominięcie duplikatu. Eksport nmap XML stanowi drogę awaryjną. |
@@ -36,6 +36,6 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
 2. Detekcja technologii przez ProjectDiscovery `httpx` i jej włączenie do porównań.
 3. Pełna próba scenariusza demo z wyłączeniem usługi między dwoma skanami.
 4. Modułu organizacji i dashboardu menedżera nie ma w tej wersji (usunięte w c1299e6 jako
-   spoza briefu). Edycja sygnatur odbywa się w `rules/signatures.yaml`, bez edytora w UI.
+   spoza briefu).
 
 Test na laboratorium od mentorów i instrukcja odtworzenia: [docs/LAB_TEST.md](docs/LAB_TEST.md).

@@ -156,6 +156,10 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/discovery/runs/{run_id}/hosts` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/runs/{run_id}/stop` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/discovery/settings` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/signatures` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/signatures/check` | `scan:run` | ✓ | ✓ | · | · |
+| DELETE | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
+| PUT | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/discovery/states` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/targets/preview` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/explanations/jobs/{job_id}/events` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
