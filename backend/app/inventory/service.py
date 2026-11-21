@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core import audit
 from app.core.scope_guard import ScopedNetwork
+from app.inventory.sources import touch_source
 from app.matching.cpe import parse_cpe
 from app.models import Asset, AssetHistory, Software
 from app.models.base import utcnow
@@ -125,9 +126,11 @@ def import_assets(
             )
             session.add(asset)
             session.flush()
+            touch_source(session, asset, "csv")
             _history(session, asset, "imported", {"source": source, **declared})
             result.created += 1
             continue
+        touch_source(session, asset, "csv")
         diff = {
             key: {"before": getattr(asset, key), "after": value}
             for key, value in declared.items()
@@ -222,6 +225,7 @@ def record_discovery(
             )
             session.add(asset)
             session.flush()
+            touch_source(session, asset, "scan", now=now)
             _history(
                 session,
                 asset,
@@ -232,6 +236,7 @@ def record_discovery(
             result.new.append(asset)
         else:
             asset.last_seen = now
+            touch_source(session, asset, "scan", now=now)
             if asset.status == "missing":
                 asset.status = "active"
                 _history(
@@ -387,6 +392,7 @@ def host_asset(session: Session, address: str, hostname: str | None = None) -> A
     )
     session.add(asset)
     session.flush()
+    touch_source(session, asset, "scan", now=now)
     _history(session, asset, "discovered", {"address": address, "note": "Host z zadania agenta"})
     return asset
 

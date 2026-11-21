@@ -56,6 +56,8 @@ class ReportsConfig:
     plain_language: PlainLanguage = field(default_factory=PlainLanguage)
     contradictions: dict[str, tuple[str, ...]] = field(default_factory=dict)
     glossary: tuple[GlossaryTerm, ...] = ()
+    # Dane ze skanu starsze niż tyle godzin dostają ostrzeżenie (moduł 21, §25.1).
+    freshness_hours: int = 24
 
     @property
     def abbreviations(self) -> frozenset[str]:
@@ -104,6 +106,7 @@ class ReportsConfig:
             plain_language=PlainLanguage(**(data.get("plain_language") or {})),
             contradictions=contradictions,
             glossary=terms,
+            freshness_hours=int(data.get("freshness_hours", 24)),
         )
 
     @classmethod

@@ -5,6 +5,7 @@
 # when.in_kev   podatność w katalogu CISA KEV
 # when.exposure ekspozycja zasobu: internet albo internal
 # when.min_level najniższy poziom ryzyka: krytyczny, wysoki, średni, niski
+# when.finding_type typ findingu: cve, misconfig, compliance, eol, exposure, signal
 # delivery      immediate = od razu, digest = zbiorczo (digest raz na dobę i `python -m app.cli digest`, Etap 6)
 # channels      in_app zawsze działa; email, slack i teams tylko po skonfigurowaniu w .env
 
@@ -12,6 +13,15 @@
 dedup_window_hours: 24
 
 rules:
+  # Shadow IT (#18): urządzenie widoczne w sieci, którego nie ma w CMDB, AD ani MDM.
+  - name: nieznane_urzadzenie
+    description: Nieznane urządzenie w sieci (shadow IT)
+    when:
+      events: [created, reopened]
+      finding_type: exposure
+    delivery: immediate
+    channels: [in_app]
+
   - name: kev_na_zasobie_z_internetu
     description: Aktywnie wykorzystywana podatność na zasobie dostępnym z internetu
     when:

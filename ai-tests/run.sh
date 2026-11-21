@@ -8,10 +8,12 @@
 #   ./run.sh redteam generowane ataki OWASP na prawdziwy model (nocą i ręcznie): generator i
 #                    sędzia z REDTEAM_API_KEY, bez klucza lokalny Bielik (redteam/generate.py)
 #   ./run.sh redteam-mock  ta sama ścieżka bez modeli (stałe ataki, atrapy), każdy PR
+#   ./run.sh assistant-mock  Sentek z wrogą atrapą modelu (każdy PR)
+#   ./run.sh assistant       Sentek z prawdziwym modelem (nocą i ręcznie)
 set -euo pipefail
 cd "$(dirname "$0")"
 suite=${1:-mock}
-case "$suite" in mock | qwen | full | redteam | redteam-mock) ;; *) echo "Nieznany zestaw: $suite" >&2; exit 2 ;; esac
+case "$suite" in mock | qwen | full | redteam | redteam-mock | assistant | assistant-mock) ;; *) echo "Nieznany zestaw: $suite" >&2; exit 2 ;; esac
 
 export PROMPTFOO_DISABLE_TELEMETRY=1
 export PROMPTFOO_DISABLE_REMOTE_GENERATION=true

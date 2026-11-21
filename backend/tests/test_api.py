@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.inventory.service import asset_fingerprint
+from app.models import Asset
 
 
 def test_openapi_is_served(client: TestClient) -> None:
@@ -76,3 +80,24 @@ def test_scope_endpoint_reports_configuration(client: TestClient) -> None:
     scope = client.get("/api/scope").json()
     assert scope["allowed_cidrs"] == ["10.10.0.0/24"]
     assert scope["demo_mode"] is False
+
+
+def test_assets_list_shows_device_types_from_org_sources(
+    client: TestClient, session: Session
+) -> None:
+    """Urządzenia z AD, MDM i CMDB (np. `network`) nie mogą psuć listy zasobów (HTTP 500)."""
+    session.add(
+        Asset(
+            type="network",
+            name="switch-core-01",
+            exposure="internal",
+            fingerprint=asset_fingerprint("network", "switch-core-01"),
+        )
+    )
+    session.commit()
+    listing = client.get("/api/assets", params={"limit": 500})
+    assert listing.status_code == 200
+    assert [item["type"] for item in listing.json()["items"]] == ["network"]
+    assert client.get("/api/assets", params={"type": "network"}).json()["total"] == 1
+    # Ręcznie i z CSV nadal tylko typy zasobów, nie urządzeń.
+    assert client.post("/api/assets", json={"type": "network", "name": "x"}).status_code == 422

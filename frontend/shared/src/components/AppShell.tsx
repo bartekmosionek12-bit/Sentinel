@@ -4,6 +4,7 @@ import { ShieldCheck, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
+import { DemoStage } from "@shared/components/DemoStage";
 import { Badge } from "@shared/components/ui/badge";
 import { api } from "@shared/lib/api";
 import { UserMenu } from "@shared/lib/auth";
@@ -70,6 +71,7 @@ export function AppShell({
   subtitle,
   footer,
   banner,
+  headerExtra,
   children,
 }: {
   navGroups: NavGroup[];
@@ -77,6 +79,8 @@ export function AppShell({
   footer: string;
   /** Pilny komunikat nad treścią (np. raport zero-day w skrzynce). */
   banner?: ReactNode;
+  /** Dodatkowe elementy w nagłówku (np. przycisk samouczka w konsoli menedżera). */
+  headerExtra?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -139,6 +143,7 @@ export function AppShell({
           </nav>
           <span className="hidden text-sm text-muted-foreground md:block">{subtitle}</span>
           <div className="flex items-center gap-3">
+            {headerExtra}
             <SystemStatus />
             <UserMenu />
           </div>
@@ -147,6 +152,7 @@ export function AppShell({
         <DemoDataNotice />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
       </div>
+      <DemoStage />
     </div>
   );
 }

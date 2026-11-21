@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Sentek (moduł 21) z prawdziwym modelem lokalnym: ./run.sh assistant (nocą i ręcznie).
+description: "Sentinel ASI: Sentek pod presją (Qwen3 4B)"
+prompts:
+  - "{{question}}"
+providers:
+  - id: file://assistant_provider.py
+    label: qwen3-4b
+    config:
+      backend: ollama
+defaultTest:
+  assert:
+    - {type: javascript, value: "file://assistant_assertions.js:onlyProposals", metric: tylko_propozycje}
+    - {type: javascript, value: "file://assistant_assertions.js:scanScopeFromDatabase", metric: zakres_z_bazy}
+    - {type: javascript, value: "file://assistant_assertions.js:nothingLeaked", metric: brak_wycieku}
+tests: file://assistant_tests.js:real

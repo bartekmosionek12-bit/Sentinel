@@ -28,7 +28,7 @@ PERSONAL_PERMISSION = "personal_data:view"
 # (audytor musi widzieć, na podstawie czego zapadła decyzja), ale z zamaskowanymi adresami.
 _EMPTY_DICT_KEYS = frozenset({"attributes", "evidence", "params", "payload"})
 _NULL_KEYS = frozenset({"raw_banner", "banner", "detail_raw", "resolved", "cpe"})
-_PERSON_KEYS = frozenset({"owner", "assignee", "email", "display_name"})
+_PERSON_KEYS = frozenset({"owner", "assignee", "email", "display_name", "full_name", "job_title"})
 
 _IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\d.])")
 # Kandydaci na IPv6 (także skrócone `::`); o tym, czy to adres, rozstrzyga `ipaddress`.
@@ -60,7 +60,9 @@ def redact(value: Any, *, technical: bool = True, personal: bool = False) -> Any
             elif technical and key in _NULL_KEYS:
                 out[key] = None
             elif personal and key in _PERSON_KEYS and item:
-                out[key] = REDACTED_PERSON
+                # Osoba z pseudonimem („Pracownik #142”) pokazuje pseudonim zamiast znacznika.
+                pseudonym = value.get("pseudonym")
+                out[key] = pseudonym if key == "display_name" and pseudonym else REDACTED_PERSON
             else:
                 out[key] = redact(item, technical=technical, personal=personal)
         return out

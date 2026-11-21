@@ -246,11 +246,24 @@ export function ReportView({
               <p className="text-sm text-muted-foreground">
                 {data.light_reason}
               </p>
+              {typeof (data.scope.freshness as { label?: unknown } | undefined)?.label ===
+                "string" && (
+                <p
+                  className={
+                    (data.scope.freshness as { stale?: boolean }).stale
+                      ? "text-xs text-amber-800"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  „Aktualny obraz” z bazy, bez nowego skanowania.{" "}
+                  {(data.scope.freshness as { label: string }).label}
+                </p>
+              )}
             </div>
             {actions}
           </div>
 
-          <Card>
+          <Card data-demo="report-summary">
             <CardHeader>
               <CardTitle>W skrócie</CardTitle>
             </CardHeader>
@@ -386,6 +399,7 @@ export function ZeroDayBanner({ basePath }: { basePath: string }) {
   if (!urgent) return null;
   return (
     <div
+      data-demo="zero-day-banner"
       role="alert"
       className="flex flex-wrap items-center gap-3 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 md:px-8"
     >

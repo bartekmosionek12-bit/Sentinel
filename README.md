@@ -91,6 +91,40 @@ audytu wpis jest oznaczony jako syntetyczny.
 ![Skany](docs/screenshots/etap2-skany.png)
 ![Kolejka weryfikacji](docs/screenshots/etap2-weryfikacja.png)
 
+### Konsola menedżera i Sentek (Etap 6)
+
+Konto `manager` w `/dashboard/` widzi organizację, nie adresy IP: strona główna ze stanem
+bezpieczeństwa i pokryciem inwentarza, urządzenia z działem i właścicielem, „Nieznane i
+niepotwierdzone” (możliwe shadow IT), ludzie i urządzenia, karta urządzenia z historią oraz
+mapa organizacji (`/dashboard/mapa`). Organizacja pochodzi z atrap AD, MDM, CMDB i DHCP
+(`python -m app.cli sync-org`, wołane przez `seed-demo`), nazwiska są fikcyjne, a przełącznik
+„Pokaż pseudonimy” zamienia je na „Pracownik #N” ([PRIVACY.md](docs/PRIVACY.md)).
+
+- **Aktualny obraz**: raport z bieżącego stanu bazy w kilka sekund, bez nowego skanu. Przy
+  danych starszych niż próg widać ostrzeżenie i przycisk „Poproś o nowe skanowanie”: prośba
+  czeka w kolejce admina, a menedżer sam niczego nie skanuje.
+- **Samouczek** przy pierwszym logowaniu (9 kroków), do powtórzenia przyciskiem w nagłówku.
+- **Sentek** („Zapytaj Sentka”): asystent, który pomaga czytać dane. Nie skanuje sieci i nie
+  zmienia ustawień. Lokalny model tylko rozpoznaje intencję (najważniejsze zagrożenia,
+  urządzenia, historia urządzenia, wyjaśnienie, „czy jesteśmy podatni”, terminy, prośba o skan,
+  oprowadzenie); odpowiedź buduje kod z bazy, z tymi samymi uprawnieniami i redakcją co
+  konsola. Bez modelu działa dopasowanie słów kluczowych. Polecenia typu „wyłącz skaner”
+  dostają odmowę. Sentka można wyłączyć przyciskiem w nagłówku.
+
+![Strona główna menedżera](docs/screenshots/etap6-strona-glowna.png)
+![Karta urządzenia](docs/screenshots/etap6-karta-urzadzenia.png)
+![Mapa organizacji](docs/screenshots/etap6-mapa.png)
+![Sentek](docs/screenshots/etap6-sentek.png)
+
+### Film demo 60 s
+
+Zmontowany film z prawdziwej aplikacji, prowadzony przez Sentka, z lokalnym lektorem (Piper,
+głos CC0) i napisami: `seed_demo.sh` → `scripts/demo_stage.py` → `scripts/demo_tts.sh` →
+`scripts/record_demo.sh` → `scripts/assemble_demo.sh`. Szczegóły, licencja głosu i plan B:
+[docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md). Film i klipy są poza Gitem.
+
+![Scena zero-day w trybie nagrywania](docs/screenshots/etap6-film-zero-day.png)
+
 ### Feedy: snapshoty i tryb online
 
 Domyślnie (`FEEDS_MODE=offline`) system czyta feedy z plików w `data/feeds/`, które nie
@@ -201,7 +235,10 @@ kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 | Sygnały bez CPE | Wpis KEV bez zakresu wersji w NVD trafia do kolejki weryfikacji jako sygnał; finding powstaje wyłącznie po decyzji człowieka. |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz), `agent`, `agent_tests`. |
 | Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
-| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Konsola operacyjna ma też Raporty (nowy raport o stanie, ponowne zlecenie „W skrócie”). Dashboard `/dashboard/`: strona główna, najważniejsze zagrożenia, Skrzynka, Raporty i baner zero-day (pełna konsola menedżera w Etapie 6). |
+| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany (z prośbami menedżera o skan), Zakres skanowania, Raporty, Agent AI, Test agenta, Dziennik audytu. Konsola menedżera `/dashboard/`: strona główna, najważniejsze zagrożenia, urządzenia, nieznane i niepotwierdzone, ludzie i urządzenia, karta urządzenia, mapa organizacji, Skrzynka, Raporty, baner zero-day, „Aktualny obraz” i samouczek. |
+| Organizacja i prywatność | Atrapy AD, MDM, CMDB i DHCP, scalanie urządzeń, reguła shadow IT, metryka pokrycia z trendem. Nazwiska tylko z `personal_data:view` i z wpisem w audycie, pseudonimy w eksportach, retencja ([PRIVACY.md](docs/PRIVACY.md)). |
+| Sentek | Asystent menedżera: model rozpoznaje tylko intencję (limit 4 s, potem słowa kluczowe), odpowiedź buduje kod z bazy z RBAC i redakcją, odmowa poleceń zmieniających cokolwiek, audyt bez treści pytania. Eval 39 wypowiedzi, promptfoo z wrogą atrapą w każdym PR. |
+| Film demo | Tryb nagrywania `?demo=record` (tylko `DEMO_MODE`), scenariusz w `demo/script.yaml` sprawdzany w CI, nagranie Playwright 1080p, lektor Piper lokalnie, montaż ffmpeg ([DEMO_GUIDE.md](docs/DEMO_GUIDE.md)). |
 
 ## Zakres skanowania
 

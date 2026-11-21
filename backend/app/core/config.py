@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     demo_feeds_dir: Path = Path("/app/demo-feeds")
     # Fikcyjny inwentarz demo-lab importowany przez seed-demo.
     demo_assets_file: Path = Path("/app/demo-lab/assets.csv")
+    # Fikcyjna organizacja (atrapy AD, MDM, CMDB, DHCP), tylko DEMO_MODE (#18).
+    demo_org_dir: Path = Path("/app/demo-lab/org")
+    # Retencja danych osobowych po odejściu pracownika (ARCHITECTURE §15).
+    personal_data_retention_days: int = 90
     nvd_api_key: str = ""
 
     # Powiadomienia: puste wartości oznaczają kanał wyłączony.
@@ -63,6 +67,9 @@ class Settings(BaseSettings):
     llm_num_thread: int = 0
     ollama_keep_alive: str = "-1"
     llm_timeout_seconds: float = 300.0
+    # Sentek (moduł 21): model tylko rozpoznaje intencję; po tym czasie słowa kluczowe.
+    assistant_use_model: bool = True
+    assistant_timeout_seconds: float = 4.0
     # Zewnętrzny LLM: domyślnie WYŁĄCZONY. Dostaje wyłącznie dane zanonimizowane.
     external_llm_enabled: bool = False
     external_llm_url: str = ""

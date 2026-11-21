@@ -1,6 +1,17 @@
 /** Klient REST API. Typy odpowiadają schematom z backend/app/api/schemas.py. */
 
 export type AssetType = "host" | "domain" | "ip" | "service" | "application";
+/** Typy w odpowiedziach: także urządzenia z AD, MDM i CMDB (Etap 6). */
+export type AnyAssetType =
+  | AssetType
+  | "workstation"
+  | "laptop"
+  | "server"
+  | "network"
+  | "printer"
+  | "iot"
+  | "cloud"
+  | "ai_system";
 export type Exposure = "internet" | "internal";
 
 export interface Health {
@@ -13,7 +24,7 @@ export interface Health {
 
 export interface Asset {
   id: string;
-  type: AssetType;
+  type: AnyAssetType;
   name: string;
   exposure: Exposure;
   criticality: number;
@@ -91,7 +102,7 @@ export type FindingStatus =
 export interface AssetRef {
   id: string;
   name: string;
-  type: AssetType;
+  type: AnyAssetType;
   exposure: Exposure;
   criticality: number;
   status: Asset["status"];
@@ -699,6 +710,145 @@ export interface CredentialLease {
   revoked_by: string | null;
 }
 
+
+// --- organizacja (Etap 6, #18) ---
+
+export interface Coverage {
+  day: string;
+  assets_total: number;
+  unknown_devices: number;
+  open_findings: number;
+  critical_findings: number;
+  with_owner_pct: number;
+  scanned_recently_pct: number;
+  known_version_pct: number;
+}
+
+export interface OrgUnitSummary {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  devices: number;
+  unknown: number;
+  open_findings: number;
+  critical: number;
+  worst_level: RiskLevel | null;
+}
+
+export interface OrgOverview {
+  demo: boolean;
+  demo_label: string | null;
+  units: OrgUnitSummary[];
+  locations: { id: string; name: string; devices: number }[];
+  coverage: Coverage;
+  trend: Coverage[];
+  unassigned_devices: number;
+}
+
+export interface OrgPerson {
+  id: string;
+  pseudonym: string;
+  display_name: string;
+  job_title: string | null;
+  active: boolean;
+  left_at: string | null;
+}
+
+export interface OrgPeopleRow extends OrgPerson {
+  unit: string | null;
+  devices: number;
+}
+
+export interface Device {
+  id: string;
+  name: string;
+  type: string;
+  status: "active" | "missing" | "retired" | "shadow";
+  exposure: Exposure;
+  criticality: number;
+  unit: string | null;
+  unit_id: string | null;
+  location: string | null;
+  segment: string | null;
+  owners: OrgPerson[];
+  users: OrgPerson[];
+  sources: string[];
+  in_cmdb: boolean;
+  confirmed: boolean;
+  open_findings: number;
+  worst_level: RiskLevel | null;
+  max_score: number;
+  first_seen: string;
+  last_seen: string;
+  last_scan: string | null;
+}
+
+export interface DeviceList {
+  items: Device[];
+  total: number;
+  demo_label: string | null;
+}
+
+export interface DeviceFilter {
+  unit?: string;
+  unknown?: boolean;
+  pseudonyms?: boolean;
+}
+
+function query(params: Record<string, string | boolean | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== false);
+  if (!entries.length) return "";
+  return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
+}
+
+// --- moduł 21: świeżość danych, „Aktualny obraz”, prośby o skanowanie ---
+
+export interface Freshness {
+  last_scan_at: string | null;
+  last_feeds_at: string | null;
+  age_hours: number | null;
+  threshold_hours: number;
+  stale: boolean;
+  label: string;
+}
+
+export type ScanRequestScope = "organization" | "unit" | "device";
+
+/** Odpowiedź Sentka (moduł 21): tekst z danych, linki i ewentualna propozycja akcji. */
+export interface AssistantAction {
+  kind: "scan_request" | "tour";
+  scope_kind?: ScanRequestScope;
+  scope_ref?: string | null;
+  label?: string;
+}
+
+export interface AssistantAnswer {
+  intent: string;
+  source: "model" | "keywords";
+  text: string[];
+  links: { label: string; to: string }[];
+  suggestions: string[];
+  action: AssistantAction | null;
+  pose: string;
+  freshness: string | null;
+  disclaimer: string;
+}
+
+export interface ScanRequest {
+  id: string;
+  requested_by: string;
+  scope_kind: ScanRequestScope;
+  scope_label: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "done" | "failed";
+  decided_by: string | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+  scan_run_id: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 export const api = {
   health: () => request<Health>("/health"),
   me: () => request<Me>("/me"),
@@ -717,6 +867,8 @@ export const api = {
     }),
   stats: () => request<Stats>("/stats"),
   findings: (status: string) => request<Page<Finding>>(`/findings?status=${status}&limit=500`),
+  deviceFindings: (assetId: string) =>
+    request<Page<Finding>>(`/findings?status=active&asset_id=${assetId}&limit=100`),
   finding: (id: string) => request<FindingDetail>(`/findings/${id}`),
   updateFinding: (id: string, patch: FindingPatch) =>
     request<FindingDetail>(`/findings/${id}`, {
@@ -778,6 +930,32 @@ export const api = {
   inbox: () => request<Inbox>("/inbox"),
   downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
+  orgOverview: () => request<OrgOverview>("/org/overview"),
+  freshness: () => request<Freshness>("/freshness"),
+  currentReport: () => request<Report>("/reports/current", { method: "POST" }),
+  scanRequests: (status?: string) =>
+    request<ScanRequest[]>(`/scan-requests${status ? `?status=${status}` : ""}`),
+  requestScan: (scope_kind: ScanRequestScope, scope_ref: string | null, reason: string) =>
+    request<ScanRequest>("/scan-requests", {
+      method: "POST",
+      body: JSON.stringify({ scope_kind, scope_ref, reason }),
+    }),
+  assistant: (question: string, pseudonyms = false) =>
+    request<AssistantAnswer>("/assistant", {
+      method: "POST",
+      body: JSON.stringify({ question, pseudonyms }),
+    }),
+  decideScanRequest: (id: string, approve: boolean, reason: string) =>
+    request<ScanRequest>(`/scan-requests/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ approve, reason }),
+    }),
+  devices: (filter: DeviceFilter = {}) =>
+    request<DeviceList>(`/org/devices${query({ ...filter })}`),
+  device: (id: string, pseudonyms = false) =>
+    request<Device>(`/org/devices/${id}${query({ pseudonyms })}`),
+  people: (pseudonyms = false) => request<OrgPeopleRow[]>(`/org/people${query({ pseudonyms })}`),
+  confirmDevice: (id: string) => request<Device>(`/org/devices/${id}/confirm`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>
     request<{ task_id: string }>(`/reports/${id}/summary`, { method: "POST" }),

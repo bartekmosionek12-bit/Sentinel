@@ -8,6 +8,8 @@ name: AI tests (promptfoo)
 # - redteam: generowane ataki OWASP na Qwen3 4B, nocą i ręcznie. Generator i sędzia:
 #   zewnętrzny model z sekretem REDTEAM_API_KEY (wyjątek od lokalności, tylko dane
 #   syntetyczne, ARCHITECTURE §13.1); bez klucza lokalny Bielik 4.5B z adnotacją
+# - assistant-mock: Sentek (moduł 21) z wrogą atrapą modelu, każdy PR (wywołanie z ci.yml)
+# - assistant: Sentek z Qwen3 4B, nocą i ręcznie
 # - agent: moduł 19 (ai-tests/agent/cases.yaml) na planiście Qwen3 4B, nocą i ręcznie
 on:
   workflow_call:
@@ -19,7 +21,7 @@ on:
     inputs:
       suite:
         type: choice
-        options: [full, qwen, mock, redteam, redteam-mock, agent]
+        options: [full, qwen, mock, redteam, redteam-mock, agent, assistant, assistant-mock]
         default: full
   schedule:
     - cron: "17 2 * * *"
@@ -48,12 +50,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Nocą trzy zestawy z prawdziwym modelem, inaczej ten wskazany w wywołaniu.
-        suite: ${{ fromJSON(github.event_name == 'schedule' && '["full","redteam","agent"]' || format('["{0}"]', inputs.suite || 'full')) }}
-    timeout-minutes: ${{ (matrix.suite == 'mock' || matrix.suite == 'redteam-mock') && 15 || (matrix.suite == 'qwen' && 60 || 240) }}
+        # Nocą cztery zestawy z prawdziwym modelem, inaczej ten wskazany w wywołaniu.
+        suite: ${{ fromJSON(github.event_name == 'schedule' && '["full","redteam","agent","assistant"]' || format('["{0}"]', inputs.suite || 'full')) }}
+    timeout-minutes: ${{ endsWith(matrix.suite, 'mock') && 15 || (matrix.suite == 'qwen' && 60 || 240) }}
     env:
       SUITE: ${{ matrix.suite }}
-      NEEDS_MODEL: ${{ matrix.suite != 'mock' && matrix.suite != 'redteam-mock' }}
+      NEEDS_MODEL: ${{ !endsWith(matrix.suite, 'mock') }}
       HAS_REDTEAM_KEY: ${{ secrets.REDTEAM_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v7

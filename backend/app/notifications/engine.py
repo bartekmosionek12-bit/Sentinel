@@ -17,6 +17,7 @@ from app.core import audit
 from app.matching.engine import FindingChange
 from app.models import Asset, Finding, Notification, Vulnerability
 from app.models.base import utcnow
+from app.models.finding import FINDING_TYPES
 from app.notifications.channels import EXTERNAL_CHANNELS, ChannelError, Sender
 from app.scoring.engine import LEVEL_ORDER
 
@@ -40,6 +41,7 @@ class NotificationRule:
     in_kev: bool | None = None
     exposure: str | None = None
     min_level: str | None = None
+    finding_type: str | None = None
 
     def matches(self, change: FindingChange, asset: Asset, vuln: Vulnerability | None) -> bool:
         if change.kind not in self.events:
@@ -49,6 +51,8 @@ class NotificationRule:
         ):
             return False
         if self.in_kev is not None and bool(vuln and vuln.in_kev) != self.in_kev:
+            return False
+        if self.finding_type is not None and change.finding.type != self.finding_type:
             return False
         if self.exposure is not None and asset.exposure != self.exposure:
             return False
@@ -74,6 +78,7 @@ class NotificationConfig:
                 in_kev=when.get("in_kev"),
                 exposure=when.get("exposure"),
                 min_level=when.get("min_level"),
+                finding_type=when.get("finding_type"),
             )
             if (
                 set(rule.events) - set(EVENTS)
@@ -81,6 +86,7 @@ class NotificationConfig:
                 or set(rule.channels) - set(CHANNELS)
                 or (rule.min_level is not None and rule.min_level not in LEVEL_ORDER)
                 or rule.exposure not in (None, "internet", "internal")
+                or rule.finding_type not in (None, *FINDING_TYPES)
             ):
                 raise ValueError(f"Nieprawidłowa reguła powiadomień: {rule.name}")
             rules.append(rule)

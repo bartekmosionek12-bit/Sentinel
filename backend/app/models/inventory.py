@@ -11,7 +11,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAt, UuidPk, utcnow
 
-ASSET_TYPES = ("host", "domain", "ip", "service", "application")
+ASSET_TYPES = (
+    "host",
+    "domain",
+    "ip",
+    "service",
+    "application",
+    # Etap 6 (§7.1): typy urządzeń z AD, MDM i CMDB.
+    "workstation",
+    "laptop",
+    "server",
+    "network",
+    "printer",
+    "iot",
+    "cloud",
+    "ai_system",
+)
 ASSET_EXPOSURES = ("internet", "internal")
 ASSET_STATUSES = ("active", "missing", "retired", "shadow")
 RELATION_TYPES = ("resolves_to", "runs", "hosts", "depends_on")
@@ -38,7 +53,21 @@ class Asset(Base):
     fingerprint: Mapped[str] = mapped_column(String(512), unique=True)
     exposure: Mapped[str] = mapped_column(String(20), default="internal")
     criticality: Mapped[int] = mapped_column(default=3)
+    # Przestarzałe (tekst z importu CSV); zostaje do końca Etapu 6 obok `org_unit_id`.
     owner: Mapped[str | None] = mapped_column(String(255))
+    org_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("org_unit.id", ondelete="SET NULL"), index=True
+    )
+    location_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("location.id", ondelete="SET NULL"), index=True
+    )
+    segment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("network_segment.id", ondelete="SET NULL"), index=True
+    )
+    # W CMDB (albo innym źródle „organizacja wie o tym”, patrz KNOWN_SOURCES).
+    in_cmdb: Mapped[bool] = mapped_column(default=False)
+    # Potwierdzony przez człowieka (np. właściciel urządzenia z „Nieznane i niepotwierdzone”).
+    confirmed: Mapped[bool] = mapped_column(default=False)
     tags: Mapped[list[str]] = mapped_column(default=list)
     attributes: Mapped[dict[str, Any]] = mapped_column(default=dict)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)

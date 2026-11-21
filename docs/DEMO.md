@@ -6,6 +6,10 @@ sieci powstaje w Etapie 9 (issue #7).
 
 Przygotowanie (raz): w `.env` ustaw `DEMO_MODE=true`, potem `./scripts/seed_demo.sh`. Na końcu
 skrypt wypisuje konta `admin` (z TOTP), `manager` i `auditor`.
+Fikcyjną organizację (działy, osoby, urządzenia z atrap AD, MDM, CMDB i DHCP) wczytuje
+`seed-demo` przez `python -m app.cli sync-org`; po zmianie plików w `demo-lab/org/` wystarczy
+`docker compose exec -T worker-scans python -m app.cli sync-org`. Film 60 s i pokaz na żywo
+krok po kroku: [DEMO_GUIDE.md](DEMO_GUIDE.md).
 
 ## 1. Zero-day (gotowy od Etapu 4b)
 
