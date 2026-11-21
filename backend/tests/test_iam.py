@@ -304,7 +304,7 @@ def test_admin_without_mfa_keeps_read_but_loses_operations(
 
 
 def test_mfa_comes_from_amr_not_from_client(anon_client: TestClient, tokens: TokenFactory) -> None:
-    """Sam klient konsoli operacyjnej nie oznacza MFA: menedżer loguje się tam bez TOTP."""
+    """O MFA decyduje `amr` w tokenie, a nie klient OIDC, przez który się zalogowano."""
     with_otp = tokens.headers(["administrator"], client=DASHBOARD_CLIENT, amr=["pwd", "otp"])
     assert anon_client.post("/api/scans", headers=with_otp).status_code == 202
     password_only = tokens.headers(["administrator"], client=ADMIN_CLIENT, amr=["pwd"])

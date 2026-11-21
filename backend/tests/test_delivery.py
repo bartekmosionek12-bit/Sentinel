@@ -1,4 +1,4 @@
-"""Etap 6: digest z powiadomień i e-mail raportu (wersja menedżera z PDF)."""
+"""Etap 6: digest z powiadomień i e-mail raportu (wersja „W skrócie” z PDF)."""
 
 from __future__ import annotations
 

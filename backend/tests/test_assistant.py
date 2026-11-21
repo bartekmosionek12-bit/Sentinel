@@ -19,13 +19,11 @@ from app.assistant.text import Named, best_match, find_cve, normalize
 from app.explainer.providers import FakeProvider, ProviderError
 from app.iam.deps import get_role_catalog
 from app.iam.tokens import Principal
-from app.inventory.service import asset_fingerprint
-from app.inventory.sources import touch_source
-from app.models import Asset, AuditLog
+from app.models import AuditLog
 from app.pipeline import Rulebook, analyze
 from app.reports.config import ReportsConfig
 from tests.conftest import TokenFactory
-from tests.pipeline_helpers import RULES, seed_feeds, seed_inventory
+from tests.pipeline_helpers import RULES, seed_feeds, seed_inventory, seed_new_host
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ReportsConfig.from_dir(RULES)
@@ -50,24 +48,11 @@ def _principal(role: str, username: str | None = None) -> Principal:
     )
 
 
-def _new_host(session: Session) -> None:
-    """Host, który odpowiedział w skanie, a nie było go w inwentarzu (status `shadow`)."""
-    asset = Asset(
-        type="workstation",
-        name="DESKTOP-7Q2KD1",
-        fingerprint=asset_fingerprint("workstation", "DESKTOP-7Q2KD1"),
-        status="shadow",
-    )
-    session.add(asset)
-    session.flush()
-    touch_source(session, asset, "scan")
-
-
 @pytest.fixture
 def world(session: Session) -> Session:
     seed_feeds(session)
     seed_inventory(session)
-    _new_host(session)
+    seed_new_host(session)
     analyze(session, RULEBOOK)
     session.commit()
     return session
