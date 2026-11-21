@@ -1232,7 +1232,7 @@ R1–R15 z wersji 1 obowiązują. Nowe:
 | **4** | Keycloak, MFA admina, model uprawnień, szkielety dwóch konsol (przeniesienie widoków), macierz rola × endpoint | #8 |
 | **4b** | `ai-tests/` z promptfoo + zadanie CI; raporty dwuwarstwowe i skrzynka menedżera; scenariusz zero-day | #4, #14, #15 |
 | **5** | serwer MCP + agent (plan → zatwierdzenie → wykonanie) + OpenBao i SSH 15 min + skan uwierzytelniony w demo-lab + kill switch + nuclei w L2; **moduł 19** (test bezpieczeństwa agenta: dry-run, atrapy narzędzi, kanarki, przycisk w konsoli, bramka zmian, zatruty host w demo-lab); dopasowanie sygnałów bez CPE; przypadki raportów i planów w `eval/` | #16, #17, #11, #4, #15, moduł 19 |
-| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?” | #6, #18, #15, moduł 19 |
+| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?”; **moduł 21** („Aktualny obraz”, świeżość danych, asystent Sentek, samouczek, §25) | #6, #18, #15, moduł 19, #28 |
 | **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5 |
 | **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab; **moduł 20** (widok z zewnątrz: Artemis, moje.cert.pl, korelacja outside-in / inside-out, §24) | #19, #26 |
 | **9** | scenariusze demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline; jeśli zostanie czas: pipeline skanów przez `mcp-scanner` | #7, #27 |
@@ -1547,3 +1547,55 @@ Jeśli zabraknie czasu: import z pliku (mock moje.cert.pl) i korelacja zamiast p
 integracji Artemisa; `artemis_local`, `artemis_probe` z kanałem mTLS i narzędzie MCP
 `external_scan` trafiają do ROADMAP. Korelacji i oznaczenia perspektywy nie tniemy, bo to
 najważniejsza część modułu.
+
+---
+
+## 25. Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)
+
+Druga połowa **Etapu 6** (konsola menedżera), w kolejności: strona główna i tabele → karta
+urządzenia → „Aktualny obraz” i świeżość danych → samouczek → asystent z intencjami → mapa
+interaktywna. Issue: #28.
+
+### 25.1 Raport na żądanie i świeżość danych
+
+- Przycisk „Aktualny obraz” w konsoli menedżera tworzy raport `assessment` z bieżącego stanu
+  bazy w kilka sekund: fakty i światło liczy kod (§12.3), wyjaśnienia z `LLM_CACHE`, bez
+  nowego skanowania. Raport trafia do skrzynki i jest dostępny jako PDF (§8.5).
+- Świeżość danych przy każdym raporcie, karcie i tabeli („dane ze skanu sprzed 2 godzin”);
+  dane starsze niż próg z `rules/reports.yaml` dostają ostrzeżenie.
+- „Poproś o nowe skanowanie” tworzy prośbę w kolejce zatwierdzeń admina (zakres: cała
+  organizacja, dział albo urządzenie). Menedżer **nie** uruchamia skanu: nowe uprawnienie
+  `scan:request` pozwala tylko złożyć prośbę; skan po zatwierdzeniu przechodzi zwykłą ścieżką
+  (`scope_guard`, poziomy, limity). Gdy wyniki są gotowe, menedżer dostaje powiadomienie.
+- Widoki odświeżają się istniejącym odpytywaniem (jak skrzynka, co 5 s).
+
+### 25.2 Asystent menedżera „Sentek”
+
+To **nie jest** agent skanujący i nie ma żadnych narzędzi sieciowych. W UI zawsze widać:
+„Sentek pomaga czytać dane. Nie skanuje sieci i nie zmienia ustawień.” Imię w konfiguracji,
+postać oryginalna (tarcza z oczkami), dymek w rogu, do wyłączenia.
+
+- **Rozpoznanie intencji**: lokalny model zwraca JSON według schematu (zamknięta lista intencji
+  i parametrów). Gdy model zawiedzie albo zwróci coś spoza schematu, działa dopasowanie słów
+  kluczowych. Model niczego nie odpowiada wprost: odpowiedź buduje **kod** z bazy i szablonów.
+- **Uprawnienia**: każda intencja wywołuje istniejące API jako zalogowany menedżer, więc RBAC i
+  redakcja działają jak w konsoli. Asystent nie ma własnych uprawnień.
+- **Intencje (MVP)**: najważniejsze dziś (top ryzyka), urządzenia z filtrem (dział, osoba,
+  typ), opowieść o urządzeniu (karta), wyjaśnienie (cache albo słownik), „czy jesteśmy podatni
+  na CVE lub produkt”, terminy ustawowe (oś compliance), prośba o skanowanie (z potwierdzeniem
+  w UI, przez `scan:request`), „oprowadź mnie” (samouczek).
+- Poza zakresem: uprzejma odmowa i przyciski podpowiedzi. Pod polem zawsze szybkie pytania,
+  odpowiedzi linkują do ekranów.
+- **Samouczek** przy pierwszym logowaniu menedżera (strona główna, „Nieznane i
+  niepotwierdzone”, mapa, karta urządzenia, skrzynka, „Aktualny obraz”), do powtórzenia;
+  lekka biblioteka (driver.js). Dostępność: klawiatura, nie zasłania treści.
+
+### 25.3 Testy
+
+- `eval/`: 30–40 wypowiedzi (z literówkami i potocznym językiem) → oczekiwana intencja i
+  parametry.
+- `ai-tests/` (promptfoo): próby wymuszenia działań spoza listy, danych spoza uprawnień
+  menedżera, podszycia się pod agenta skanującego; oczekiwany wynik: odmowa albo intencja tylko
+  do odczytu.
+- Playwright: samouczek, 3 intencje od pytania do właściwego ekranu, prośba o skanowanie w
+  kolejce admina.
