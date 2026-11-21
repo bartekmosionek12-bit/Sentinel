@@ -1,0 +1,118 @@
+# Własne sygnatury detekcyjne (brief: „Umożliwienie tworzenia własnych sygnatur detekcyjnych”).
+#
+# Sygnatura mówi tylko, czego szukać w odpowiedziach GET, które fingerprinter i tak pobiera.
+# Nie ma w niej metody, treści żądania, poświadczeń ani parametrów: walidator
+# (backend/app/discovery/signatures.py) odrzuca cały plik przy nieznanym polu albo złej ścieżce.
+#
+# kind:   technology (lista technologii) | panel | staging (dowód do flagi)
+# match:  lista dopasowań, wystarczy jedno:
+#   {type: header, name: x-nazwa, pattern: "regex"}   obecność nagłówka (pattern opcjonalny)
+#   {type: cookie, pattern: "regex"}                  nazwa ciasteczka
+#   {type: favicon_hash, value: 123}                  hash favicony (MurmurHash3, jak Shodan)
+#   {type: html, pattern: "regex"}                    fragment HTML
+#   {type: title, pattern: "regex"}                   tytuł strony
+#   {type: generator, pattern: "regex"}               <meta name="generator">, wersja CMS-a
+#   {type: path, path: /version, status: [200], pattern: "regex"}
+#                                                     jedno GET, bez logowania; limit 10 ścieżek;
+#                                                     pattern sprawdza treść (aplikacje SPA dają 200
+#                                                     na każdą ścieżkę, więc sam kod to za mało)
+# Wzorce są bez rozróżniania wielkości liter. Zmiana pliku działa od następnego przebiegu.
+
+signatures:
+  - id: gitea
+    name: Gitea
+    kind: technology
+    match:
+      - {type: title, pattern: "\\bgitea\\b"}
+      - {type: cookie, pattern: "^i_like_gitea$"}
+      - {type: html, pattern: "gitea\\.(?:min\\.)?js|/assets/img/logo\\.svg.*gitea"}
+
+  - id: gitea-install
+    name: Gitea – niezakończona instalacja
+    kind: panel
+    description: Strona instalacji dostępna bez logowania; ktoś może przejąć konfigurację.
+    match:
+      - {type: title, pattern: "installation\\s*-\\s*gitea"}
+
+  - id: gitea-version-api
+    name: Gitea – publiczne API wersji
+    kind: technology
+    match:
+      - {type: path, path: /api/v1/version, status: [200], pattern: "\"version\""}
+
+  - id: rabbitmq
+    name: RabbitMQ
+    kind: technology
+    match:
+      - {type: title, pattern: "rabbitmq"}
+      - {type: html, pattern: "rabbitmq"}
+
+  - id: rabbitmq-management
+    name: Panel RabbitMQ Management
+    kind: panel
+    match:
+      - {type: title, pattern: "rabbitmq management"}
+
+  - id: adminer
+    name: Adminer
+    kind: technology
+    match:
+      - {type: title, pattern: "\\badminer\\b"}
+      - {type: html, pattern: "adminer\\.org"}
+
+  - id: adminer-panel
+    name: Panel bazy danych Adminer
+    kind: panel
+    match:
+      - {type: title, pattern: "\\badminer\\b"}
+
+  - id: phpmyadmin-panel
+    name: Panel bazy danych phpMyAdmin
+    kind: panel
+    match:
+      - {type: title, pattern: "phpmyadmin"}
+      - {type: cookie, pattern: "^phpmyadmin$|^pma_lang$"}
+
+  - id: traefik
+    name: Traefik
+    kind: technology
+    match:
+      - {type: title, pattern: "\\btraefik\\b"}
+      - {type: html, pattern: "traefik"}
+
+  - id: traefik-dashboard
+    name: Dashboard Traefika
+    kind: panel
+    match:
+      - {type: title, pattern: "\\btraefik\\b"}
+
+  - id: nginx-proxy-manager
+    name: Nginx Proxy Manager
+    kind: technology
+    match:
+      - {type: title, pattern: "nginx proxy manager"}
+
+  - id: nginx-proxy-manager-panel
+    name: Panel Nginx Proxy Manager
+    kind: panel
+    match:
+      - {type: title, pattern: "nginx proxy manager"}
+
+  - id: httpbin
+    name: httpbin
+    kind: technology
+    match:
+      - {type: title, pattern: "httpbin"}
+
+  - id: wordpress-login
+    name: Logowanie WordPressa
+    kind: panel
+    match:
+      - {type: path, path: /wp-login.php, status: [200], pattern: "user_login|wp-submit"}
+
+  - id: wordpress-install
+    name: WordPress – niezakończona instalacja
+    kind: panel
+    description: Kreator instalacji dostępny bez logowania.
+    match:
+      - {type: title, pattern: "wordpress.*installation"}

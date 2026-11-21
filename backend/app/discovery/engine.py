@@ -36,6 +36,7 @@ from app.core.scope_guard import (
     ScopeGuard,
 )
 from app.discovery.fingerprint import HttpFingerprinter, flags_for, web_ports
+from app.discovery.signatures import Signature, load_signatures
 from app.models import DiscoveryBatch, DiscoveryRun, Observation
 from app.models.base import utcnow
 from app.scanners.models import DiscoveredHost, HostScan
@@ -67,6 +68,8 @@ class DiscoveryConfig:
     limits: dict[str, int]
     inactive_after_runs: int = 3
     window: int = 5
+    # Własne sygnatury z rules/signatures.yaml (ten sam katalog co discovery.yaml).
+    signatures: tuple[Signature, ...] = ()
 
     @classmethod
     def from_file(cls, path: Path) -> DiscoveryConfig:
@@ -80,6 +83,7 @@ class DiscoveryConfig:
             limits={k: int(v) for k, v in (data.get("limits") or {}).items()},
             inactive_after_runs=int(state.get("inactive_after_runs", 3)),
             window=int(state.get("window", 5)),
+            signatures=load_signatures(path.parent / "signatures.yaml"),
         )
 
     def settings(self, overrides: dict[str, Any] | None = None) -> DiscoverySettings:
@@ -249,7 +253,9 @@ class DiscoveryEngine:
             return ServiceResult(target.address, None, [], time.monotonic() - started, str(error))
         http: list[dict[str, Any]] = []
         if http_target is not None and settings.fingerprint:
-            prober = self._fingerprinter or HttpFingerprinter(list(settings.http_paths))
+            prober = self._fingerprinter or HttpFingerprinter(
+                list(settings.http_paths), signatures=self._config.signatures
+            )
             try:
                 for port, scheme in web_ports(service_dicts(scan)):
                     http.append(prober.probe(http_target, port, scheme).as_dict())

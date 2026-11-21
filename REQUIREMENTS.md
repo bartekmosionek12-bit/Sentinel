@@ -7,7 +7,7 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
 | Kategoria oceny | Pokrycie | Stan |
 |---|---:|---|
 | A. Discovery i skala | 75% | IP/CIDR/domeny w liście celów, adaptacyjne paczki, dwa workery, nmap T3 i limit pakietów/s, postęp oraz ETA. Test /18 objął 16 384 adresy i 40 hostów z symulowanym adapterem; pomiar rzeczywistego /18 w demo-lab nie powstał. |
-| B. Fingerprint WWW i flagi | 85% | Biblioteka Python `httpx`: tytuł, status, nagłówki, nazwy ciasteczek, certyfikat TLS, przekierowanie, hash favicony, `/admin` i `/login`, staging, reguły ciekawych nagłówków i ciasteczek, liczba dowodów. Wbudowana detekcja technologii binarki ProjectDiscovery `httpx` nie jest podłączona. |
+| B. Fingerprint WWW, flagi i własne sygnatury | 90% | Biblioteka Python `httpx`: tytuł, status, nagłówki, nazwy ciasteczek, certyfikat TLS, przekierowanie, hash favicony, `/admin` i `/login`, staging, reguły ciekawych nagłówków i ciasteczek, liczba dowodów. Własne sygnatury w `rules/signatures.yaml` z walidatorem (tylko GET, typy z briefu). Na labie mentorów rozpoznane WordPress, DVWA, Gitea, RabbitMQ, phpMyAdmin, Nginx Proxy Manager, Traefik, httpbin. Wbudowana detekcja technologii binarki ProjectDiscovery `httpx` nie jest podłączona. |
 | C. Porównanie i stan hostów | 100% | Dowolne dwa przebiegi, zmiany hostów, usług, technologii i nagłówków; stany aktywny, niestabilny, niepotwierdzony, nieaktywny po domyślnie trzech brakach; widok i JSON/CSV. |
 | D. Import, eksport, nadpisania | 100% | Formularz celów z walidacją i podglądem, ręcznie/CSV/JSON; import wyników JSON/CSV/nmap XML; eksport wyników i różnic JSON/CSV; nadpisania w osobnej tabeli scalane przy odczycie. |
 | E. Lokalny DefectDojo | 100% | Profil Docker Compose uruchomiony lokalnie; API v2 zweryfikowane przez utworzenie findingu `Info` i pominięcie duplikatu. Eksport nmap XML stanowi drogę awaryjną. |
@@ -35,8 +35,7 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
    [docs/PERFORMANCE.md](docs/PERFORMANCE.md) podaje wyłącznie czas silnika z atrapą sieci.
 2. Detekcja technologii przez ProjectDiscovery `httpx` i jej włączenie do porównań.
 3. Pełna próba scenariusza demo z wyłączeniem usługi między dwoma skanami.
-4. Test na laboratorium organizatorów (lab.zip): przekierowanie na porcie 80/443 gubi
-   WordPress i DVWA (porównanie adresu w `fingerprint.py`), a listy portów w
-   `rules/discovery.yaml` nie obejmują portów labu (m.in. 2223, 3001, 5672, 8085–8090,
-   15432, 15672). Moduł organizacji i dashboard menedżera nie wchodzą do tej wersji
-   (usunięte w c1299e6 jako spoza briefu).
+4. Modułu organizacji i dashboardu menedżera nie ma w tej wersji (usunięte w c1299e6 jako
+   spoza briefu). Edycja sygnatur odbywa się w `rules/signatures.yaml`, bez edytora w UI.
+
+Test na laboratorium od mentorów i instrukcja odtworzenia: [docs/LAB_TEST.md](docs/LAB_TEST.md).

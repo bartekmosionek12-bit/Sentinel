@@ -21,10 +21,16 @@ from typing import Any
 import httpx
 
 from app.core.scope_guard import ScopedTarget
+from app.discovery.signatures import Observed, Signature, evaluate, signature_paths
 
 MAX_BODY = 131_072
 MAX_REDIRECTS = 5
-WEB_PORTS = {80, 81, 443, 3000, 5000, 8000, 8008, 8080, 8081, 8443, 8888, 9000, 9090, 9200}
+# Typowe porty aplikacji WWW (także te, które nmap nazywa inaczej, np. Gitea na 3001 jako
+# „nessus”, panel RabbitMQ na 15672). Na nich zawsze próbujemy GET, niezależnie od nazwy usługi.
+WEB_PORTS = {
+    80, 81, 443, 3000, 3001, 4000, 5000, 5601, 8000, 8008, 8080, 8081, 8082, 8083, 8085,
+    8086, 8088, 8089, 8090, 8181, 8443, 8787, 8888, 9000, 9090, 9200, 9443, 15672, 15673,
+}
 TLS_PORTS = {443, 8443}
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 _ICON_RE = re.compile(r"<link[^>]+rel=[\"'][^\"']*icon[^\"']*[\"'][^>]*>", re.IGNORECASE)
@@ -37,6 +43,7 @@ _GENERATOR_RE = re.compile(
 TECH_RULES: tuple[tuple[str, str, str], ...] = (
     ("Apache", "header:server", r"apache"),
     ("nginx", "header:server", r"nginx"),
+    ("OpenResty", "header:server", r"openresty"),
     ("Microsoft IIS", "header:server", r"microsoft-iis"),
     ("Express", "header:x-powered-by", r"express"),
     ("PHP", "header:x-powered-by", r"php"),
@@ -102,6 +109,7 @@ class HttpResult:
     favicon_hash: int | None = None
     technologies: list[str] = field(default_factory=list)
     paths: dict[str, int] = field(default_factory=dict)
+    signatures: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -215,8 +223,14 @@ def tls_info(address: str, port: int, server_name: str | None) -> dict[str, Any]
 class HttpFingerprinter:
     """Tylko GET (i HEAD nie jest potrzebny): nic nie wysyłamy, nie logujemy się, nie zgadujemy."""
 
-    def __init__(self, paths: list[str] | None = None, timeout: float = 6.0) -> None:
-        self._paths = paths or []
+    def __init__(
+        self,
+        paths: list[str] | None = None,
+        timeout: float = 6.0,
+        signatures: tuple[Signature, ...] = (),
+    ) -> None:
+        self._signatures = signatures
+        self._paths = list(dict.fromkeys([*(paths or []), *signature_paths(signatures)]))
         self._client = httpx.Client(
             timeout=httpx.Timeout(timeout),
             follow_redirects=False,
@@ -254,7 +268,7 @@ class HttpFingerprinter:
                 if response.is_redirect and location:
                     nxt = str(response.url.join(location))
                     result.redirects.append(nxt[:300])
-                    if not nxt.startswith(base):
+                    if not _same_origin(nxt, scheme, target.address, port):
                         break
                     url = nxt
                     continue
@@ -282,22 +296,53 @@ class HttpFingerprinter:
         icon = _ICON_RE.search(text)
         href = _HREF_RE.search(icon.group(0)) if icon else None
         icon_url = str(response.url.join(href.group(1))) if href else f"{base}/favicon.ico"
-        if icon_url.startswith(base):
+        if _same_origin(icon_url, scheme, target.address, port):
             try:
                 icon_response, icon_body = self._get(icon_url)
                 if icon_response.status_code == 200 and icon_body:
                     result.favicon_hash = favicon_hash(icon_body)
             except httpx.HTTPError:
                 pass
+        path_bodies: dict[str, str] = {}
         for path in self._paths:
             try:
-                path_response, _ = self._get(f"{base}{path}")
+                path_response, path_body = self._get(f"{base}{path}")
                 result.paths[path] = path_response.status_code
+                path_bodies[path] = path_body.decode(path_response.encoding or "utf-8", "replace")
             except httpx.HTTPError:
                 continue
+        generator = _GENERATOR_RE.search(text)
+        result.signatures = evaluate(
+            self._signatures,
+            Observed(
+                headers=headers,
+                cookies=[c["name"] for c in result.cookies],
+                body=text,
+                title=result.title,
+                generator=generator.group(1) if generator else "",
+                favicon_hash=result.favicon_hash,
+                paths=result.paths,
+                path_bodies=path_bodies,
+            ),
+        )
+        for hit in result.signatures:
+            if hit["kind"] == "technology" and hit["name"] not in result.technologies:
+                result.technologies.append(hit["name"])
         if scheme == "https":
             result.tls = tls_info(target.address, port, target.hostname)
         return result
+
+
+def _same_origin(url: str, scheme: str, address: str, port: int) -> bool:
+    """Ten sam schemat, host i port. httpx usuwa z adresu port domyślny (80/443), więc
+    porównanie tekstowe z „http://host:80” zawodziło i gubiło np. WordPressa i DVWA."""
+    try:
+        parsed = httpx.URL(url)
+    except httpx.InvalidURL:
+        return False
+    default = 443 if parsed.scheme == "https" else 80
+    host = parsed.host.strip("[]")
+    return (parsed.scheme, host, parsed.port or default) == (scheme, address, port)
 
 
 def flags_for(hostname: str | None, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -323,6 +368,10 @@ def flags_for(hostname: str | None, results: list[dict[str, Any]]) -> list[dict[
             panel.append(f"przekierowanie{where} do logowania")
         if STAGING_TITLE.search(title):
             staging.append(f"tytuł{where}: {title[:80]}")
+        for hit in item.get("signatures") or []:
+            target = {"panel": panel, "staging": staging}.get(hit.get("kind"))
+            if target is not None:
+                target.append(f"sygnatura {hit['name']}{where}: {', '.join(hit['evidence'])}")
         for name in (item.get("tls") or {}).get("san") or []:
             if STAGING_NAME.search(name):
                 staging.append(f"certyfikat{where}: {name}")
