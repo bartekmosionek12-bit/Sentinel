@@ -29,6 +29,7 @@ SCAN_ACTION_STATUSES = (
     "failed",
 )
 AUDIENCES = ("technical", "operational", "executive")
+
 SCAN_REQUEST_SCOPES = ("organization", "unit", "device")
 SCAN_REQUEST_STATUSES = ("pending", "approved", "rejected", "done", "failed")
 

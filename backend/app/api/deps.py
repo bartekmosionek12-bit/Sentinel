@@ -30,7 +30,7 @@ __all__ = [
 class Dispatcher(Protocol):
     """Zleca pracę workerom. API samo nie skanuje i nie pobiera feedów."""
 
-    def run_scan(self, actor: str, request_id: uuid.UUID | None = None) -> str: ...
+    def run_scan(self, actor: str) -> str: ...
 
     def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str: ...
 
@@ -54,6 +54,8 @@ class Dispatcher(Protocol):
 
     def execute_agent_task(self, task_id: uuid.UUID) -> str: ...
 
+    def run_discovery(self, run_id: uuid.UUID) -> str: ...
+
     def run_agent_test(
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
     ) -> str: ...
@@ -65,13 +67,8 @@ class CeleryDispatcher:
 
         return str(celery_app.send_task(name, args=list(args)).id)
 
-    def run_scan(self, actor: str, request_id: uuid.UUID | None = None) -> str:
-        if request_id is None:
-            return self._send("app.workers.tasks.scans.run_scan", "manual", actor)
-        # Skan z prośby menedżera (moduł 21): po zakończeniu worker powiadamia proszącego.
-        return self._send(
-            "app.workers.tasks.scans.run_scan", "manager_request", actor, str(request_id)
-        )
+    def run_scan(self, actor: str) -> str:
+        return self._send("app.workers.tasks.scans.run_scan", "manual", actor)
 
     def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str:
         return self._send(
@@ -117,6 +114,9 @@ class CeleryDispatcher:
 
     def execute_agent_task(self, task_id: uuid.UUID) -> str:
         return self._send("app.workers.tasks.agent.execute_task", str(task_id))
+
+    def run_discovery(self, run_id: uuid.UUID) -> str:
+        return self._send("app.workers.tasks.scans.run_discovery", str(run_id))
 
     def run_agent_test(
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None

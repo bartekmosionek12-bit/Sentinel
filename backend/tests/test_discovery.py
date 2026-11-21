@@ -1,0 +1,114 @@
+"""Discovery: przebieg z fałszywym nmapem, porównanie, nadpisania, import i eksport."""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import Any
+
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.core.audit import DbAuditSink
+from app.core.scope_guard import ScopeConfig, ScopedTarget, ScopeGuard
+from app.discovery.engine import DiscoveryConfig, DiscoveryEngine, parse_targets
+from app.discovery.fingerprint import HttpResult
+from app.scanners.models import ServiceInfo
+from app.scanners.nmap import NmapAdapter
+from tests.conftest import FakeResolver
+from tests.scanner_fakes import FakeLab
+
+RULES = Path(__file__).resolve().parents[2] / "rules" / "discovery.yaml"
+
+
+class FakeHttp:
+    def probe(self, target: ScopedTarget, port: int, scheme: str) -> HttpResult:
+        return HttpResult(
+            url=f"{scheme}://{target.address}:{port}/",
+            port=port,
+            scheme=scheme,
+            status=200,
+            title="Panel administracyjny staging",
+            headers={"server": "nginx/1.25"},
+            technologies=["nginx"],
+            paths={"/admin": 200},
+        )
+
+
+def _run(client: TestClient, factory: sessionmaker[Session], lab: FakeLab) -> str:
+    response = client.post(
+        "/api/discovery/runs", json={"items": ["10.10.0.0/24"], "settings": {"workers": 2}}
+    )
+    assert response.status_code == 202, response.text
+    run_id = response.json()["id"]
+    guard = ScopeGuard(
+        ScopeConfig.from_dict({"allow": {"cidrs": ["10.10.0.0/24"]}}),
+        audit=DbAuditSink(factory),
+        resolver=FakeResolver(),
+    )
+    engine_cfg = DiscoveryConfig.from_file(RULES)
+    with factory() as session:
+        run = DiscoveryEngine(
+            session, guard, engine_cfg, nmap=NmapAdapter(lab.runner), fingerprinter=FakeHttp()
+        ).run(uuid.UUID(run_id))
+        assert run.status == "done", run.error
+    return str(run_id)
+
+
+def test_parse_targets_validates() -> None:
+    parsed = parse_targets(["10.0.0.0/18", "example.test", "nie adres!", "10.0.0.5"])
+    assert parsed.addresses == 16384 + 1  # domena liczona jako 1
+    assert parsed.domains == ["example.test"]
+    assert parsed.errors
+
+
+def test_discovery_end_to_end(
+    client: TestClient, session_factory: sessionmaker[Session], dispatcher: Any
+) -> None:
+    lab = FakeLab(
+        {
+            "10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http", product="nginx")],
+            "10.10.0.7": [ServiceInfo(port=22, protocol="tcp", name="ssh", product="OpenSSH")],
+        }
+    )
+    first = _run(client, session_factory, lab)
+    assert any(c[0] == "run_discovery" for c in dispatcher.calls)
+    hosts = client.get(f"/api/discovery/runs/{first}/hosts").json()
+    ips = {h["ip"]: h for h in (hosts["hosts"] if isinstance(hosts, dict) else hosts)}
+    assert set(ips) == {"10.10.0.5", "10.10.0.7"}
+    assert {f["kind"] for f in ips["10.10.0.5"]["flags"]} >= {"panel", "staging"}
+
+    lab.services.pop("10.10.0.7")
+    lab.services["10.10.0.9"] = [ServiceInfo(port=443, protocol="tcp", name="https")]
+    second = _run(client, session_factory, lab)
+    diff = client.get("/api/discovery/compare", params={"older": first, "newer": second}).json()
+    assert [h["ip"] for h in diff["new_hosts"]] == ["10.10.0.9"]
+    assert [h["ip"] for h in diff["gone_hosts"]] == ["10.10.0.7"]
+
+    edit = client.put("/api/discovery/overrides/10.10.0.5", json={"field": "note", "value": "DMZ"})
+    assert edit.status_code == 200, edit.text
+    third = _run(client, session_factory, lab)
+    hosts = client.get(f"/api/discovery/runs/{third}/hosts").json()
+    rows = hosts["hosts"] if isinstance(hosts, dict) else hosts
+    host = next(h for h in rows if h["ip"] == "10.10.0.5")
+    assert host["note"] == "DMZ"
+    assert "note" in host["edited"]
+
+    csv = client.get(f"/api/discovery/runs/{third}/export", params={"format": "csv"})
+    assert csv.status_code == 200
+    assert "10.10.0.5" in csv.text
+    xml = client.get(f"/api/discovery/runs/{third}/export", params={"format": "nmap"})
+    assert "<nmaprun" in xml.text
+    imported = client.post(
+        "/api/discovery/import",
+        json={"content": '[{"ip": "10.10.0.20", "services": [{"port": 8080}]}]', "name": "imp"},
+    )
+    assert imported.status_code in (200, 201), imported.text
+    states = client.get("/api/discovery/states").json()
+    assert states
+
+
+def test_viewer_cannot_run_or_export_to_dojo(anon_client: TestClient, tokens: Any) -> None:
+    anon_client.headers.update(tokens.headers(["viewer"], username="v"))
+    assert anon_client.post("/api/discovery/runs", json={"items": ["10.10.0.1"]}).status_code == 403
+    assert anon_client.get("/api/discovery/runs").status_code == 200

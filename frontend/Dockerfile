@@ -2,7 +2,6 @@ FROM node:22-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY admin/package.json admin/
-COPY dashboard/package.json dashboard/
 COPY shared/package.json shared/
 RUN --mount=type=secret,id=proxy_ca,required=false \
     if [ -f /run/secrets/proxy_ca ]; then \
@@ -20,7 +19,7 @@ FROM nginx:mainline-alpine
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY site.conf /etc/nginx/sentinel/site.conf
-# Dwie aplikacje pod jednym nginx: konsola operacyjna i dashboard menedżera.
+# Jedna aplikacja: konsola zespołu IT (/admin/).
 COPY --from=build /src/admin/dist /usr/share/nginx/html/admin
 COPY --from=build /src/dashboard/dist /usr/share/nginx/html/dashboard
 RUN chmod a+r /etc/nginx/nginx.conf /etc/nginx/sentinel/site.conf \

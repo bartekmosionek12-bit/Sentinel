@@ -35,3 +35,6 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
    [docs/PERFORMANCE.md](docs/PERFORMANCE.md) podaje wyłącznie czas silnika z atrapą sieci.
 2. Detekcja technologii przez ProjectDiscovery `httpx` i jej włączenie do porównań.
 3. Pełna próba scenariusza demo z wyłączeniem usługi między dwoma skanami.
+4. Po scaleniu z równoległą przebudową konsoli zachowano starsze pliki modułu organizacji,
+   ale trzy jego stare pliki testowe nie zbierają się z nowym schematem modeli i CLI.
+   Aktywna konsola i testy skanowania są weryfikowane osobno.

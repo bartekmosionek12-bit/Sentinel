@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { PageHeader } from "@shared/components/page";
+import { Sentek } from "@shared/components/Sentek";
 import { KevBadge, RiskBadge } from "@shared/components/risk";
 import { Badge } from "@shared/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
@@ -74,6 +75,13 @@ export function Dashboard() {
         title="Pulpit"
         description="Co wymaga uwagi teraz: zagrożenia od najwyższego ryzyka, decyzje czekające na człowieka i ostatnie powiadomienia."
       />
+      <Card className="mb-6 flex items-center gap-4 p-4">
+        <Sentek pose="wave" size={180} className="shrink-0 max-w-[40vw]" />
+        <div>
+          <h2 className="text-xl font-semibold">Sentek</h2>
+          <p className="text-sm text-muted-foreground">Asystent Sentinela pomaga czytać stan bezpieczeństwa.</p>
+        </div>
+      </Card>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="Aktywne zagrożenia"
