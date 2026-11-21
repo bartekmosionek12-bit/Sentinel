@@ -19,17 +19,17 @@ max_words_per_second: 2.6
 scenes:
   - id: powitanie
     start: 0
-    end: 6
+    end: 7
     app: dashboard
     path: /
     pose: wave
     side: right
     bubble: "Cześć, jestem Sentek!"
-    narration: "Cześć, jestem Sentek. Pokażę, jak Sentinel pilnuje sieci firmy, a decyzje zostają przy ludziach."
+    narration: "Cześć, jestem Sentek. Pokażę, jak Sentinel pilnuje sieci, a decyzje zostawia ludziom."
 
   - id: przejrzystosc
-    start: 6
-    end: 15
+    start: 7
+    end: 16
     app: dashboard
     path: /mapa
     highlight: '[data-demo="map"]'
@@ -39,8 +39,8 @@ scenes:
     narration: "Każde urządzenie ma dział i właściciela. Dwa widać w sieci, a nie ma ich w żadnym rejestrze. To może być shadow IT."
 
   - id: zero-day
-    start: 15
-    end: 24
+    start: 16
+    end: 25
     app: dashboard
     path: /
     actions: [inject_kev]
@@ -48,11 +48,11 @@ scenes:
     pose: surprised
     side: right
     bubble: "Nowa podatność z KEV!"
-    narration: "Nagle katalog KEV dostaje nową, aktywnie wykorzystywaną podatność. Po sekundzie menedżer widzi baner i wie, których serwerów dotyczy."
+    narration: "Katalog KEV dostaje nową, aktywnie wykorzystywaną podatność. Chwilę później menedżer widzi baner i wie, których serwerów dotyczy."
 
   - id: raport
-    start: 24
-    end: 33
+    start: 25
+    end: 34
     app: dashboard
     path: /skrzynka
     actions: [open_latest_report]
@@ -60,16 +60,16 @@ scenes:
     pose: point_right
     side: left
     bubble: "Pięć pytań, prosty język"
-    narration: "Raport odpowiada prostym językiem na pięć pytań: co się stało, czy jesteśmy zagrożeni, kto i do kiedy. Ta sama treść idzie e-mailem."
+    narration: "Raport odpowiada prostym językiem na pięć pytań: co się stało, czy jesteśmy zagrożeni, kto i do kiedy. Tę samą treść dostaje mailem."
 
   - id: bezpieczny-agent
-    start: 33
+    start: 34
     end: 44
     app: admin
     path: /agent
     highlight: '[data-demo="agent-task"]'
     then:
-      at: 6
+      at: 5
       highlight: '[data-demo="agent-leases"]'
       bubble: "Certyfikat SSH na 15 minut"
     pose: talk
@@ -101,9 +101,30 @@ scenes:
     narration: "Sentinel działa lokalnie, bez GPU, z myślą o KSC i RODO. Dziękuję!"
 
 # Pogłębienia dla jury (20–30 s każde, nagrywane osobno, ten sam mechanizm scen).
+# `ready_after`: etap, po którym funkcja istnieje. Nie nagrywamy niczego, czego jeszcze nie ma.
 deep_dives:
-  - {id: rbac, title: "RBAC i redakcja danych", seconds: 25}
-  - {id: kill-switch, title: "Kill switch agenta", seconds: 25}
-  - {id: zgodnosc, title: "Zgodność: KSC, RODO art. 32, ISO 27001", seconds: 30}
-  - {id: artemis, title: "Skaner zewnętrzny (Artemis) i zakres", seconds: 25}
-  - {id: samouczek, title: "Samouczek i Sentek dla menedżera", seconds: 20}
+  - id: rbac
+    title: "RBAC i redakcja danych"
+    seconds: 25
+    ready_after: 6
+    show: "Menedżer otwiera /admin/: 403 i wpis access_denied w audycie; pseudonimy w konsoli"
+  - id: kill-switch
+    title: "Kill switch agenta"
+    seconds: 25
+    ready_after: 5
+    show: "Czerwony przycisk z powodem; karta skutków: baza, Keycloak, OpenBao, mcp-scanner"
+  - id: samouczek
+    title: "Samouczek i Sentek dla menedżera"
+    seconds: 20
+    ready_after: 6
+    show: "Samouczek 9 kroków, pytanie do Sentka i odmowa polecenia „wyłącz skaner”"
+  - id: zgodnosc
+    title: "Zgodność: KSC, RODO art. 32, ISO 27001"
+    seconds: 30
+    ready_after: 7
+    show: "Widok zgodności z linkiem do przepisu; treść wymagań z reguł, nie z modelu"
+  - id: artemis
+    title: "Widok z zewnątrz (Artemis) i zakres"
+    seconds: 25
+    ready_after: 8
+    show: "Wyniki Artemis z przypisaniem CERT Polska, ten sam scope_guard co skaner wewnętrzny"

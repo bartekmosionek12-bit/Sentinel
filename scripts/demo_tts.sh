@@ -13,6 +13,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PYTHON=${PYTHON:-backend/.venv/bin/python}
 VOICE=${VOICE:-pl_PL-darkman-medium}
+# Tempo: <1 to szybciej (domyślnie lekko szybciej niż wzorzec głosu, żeby zmieścić scenę).
+LENGTH_SCALE=${LENGTH_SCALE:-0.92}
 PIPER_VERSION=1.8.0
 BASE=https://huggingface.co/rhasspy/piper-voices/resolve/main/pl/pl_PL/darkman/medium
 MODELS=demo/.models
@@ -33,10 +35,10 @@ if grep -qi "lessac" "$MODELS/MODEL_CARD"; then
   exit 1
 fi
 echo "Głos: $VOICE, sha256: $(sha256sum "$MODELS/$VOICE.onnx" | cut -d' ' -f1)"
-grep -E "^(License|Training|Dataset)" "$MODELS/MODEL_CARD" || true
+grep -E "License|Finetuned" "$MODELS/MODEL_CARD" || true
 
 "$PYTHON" scripts/demo_script.py lines | while IFS=$'\t' read -r id text; do
-  printf '%s\n' "$text" | "$VENV/bin/piper" --model "$MODELS/$VOICE.onnx" --output_file "$OUT/$id.wav" >/dev/null
+  printf '%s\n' "$text" | "$VENV/bin/piper" --model "$MODELS/$VOICE.onnx" --length-scale "$LENGTH_SCALE" --output_file "$OUT/$id.wav" >/dev/null
 done
 
 # Lektor sceny nie może być dłuższy niż scena.

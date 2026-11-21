@@ -35,6 +35,17 @@ w zapewnieniu bezpieczeństwa sieci, motyw 49 RODO).
 - Ochronę egzekwuje backend: endpoint wybiera pseudonim, a warstwa redakcji odpowiedzi
   zamienia nazwiska na pseudonimy, gdyby endpoint o tym zapomniał.
 
+## Asystent Sentek
+
+- Sentek pokazuje nazwiska na tych samych zasadach co konsola: tylko z `personal_data:view`,
+  z wpisem `personal_data_viewed`, a przy włączonych pseudonimach tylko „Pracownik #N”.
+- W audycie (`assistant_asked`) zapisujemy intencję, parametry, źródło rozpoznania, czas
+  modelu i długość pytania. Treści pytania nie zapisujemy, bo menedżer może w niej wpisać
+  nazwisko.
+- Pytanie trafia wyłącznie do lokalnego modelu (zewnętrzny LLM nie jest tu używany) razem z
+  nazwami działów i terminów ze słownika. Model zwraca tylko intencję; odpowiedź z danymi o
+  urządzeniach i osobach buduje kod, więc tych danych model nie widzi.
+
 ## Pseudonimizacja zawsze
 
 Bez względu na uprawnienia osoby, która eksportuje:

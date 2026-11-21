@@ -35,6 +35,9 @@ których nie da się zrobić w budżecie sprzętowym, są w [sekcji 20](#20-sprz
 21. [Zmiany względem poprzedniej wersji](#21-zmiany-względem-poprzedniej-wersji)
 22. [Ustalenia](#22-ustalenia)
 23. [Moduł 19: test bezpieczeństwa agenta](#23-moduł-19-test-bezpieczeństwa-agenta)
+24. [Moduł 20: widok z zewnątrz (Artemis, CERT Polska) i korelacja outside-in / inside-out](#24-moduł-20-widok-z-zewnątrz-artemis-cert-polska-i-korelacja-outside-in--inside-out)
+25. [Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)](#25-moduł-21-raport-aktualny-obraz-i-asystent-menedżera-sentek)
+26. [Moduł 22: film demo 60 s z Sentkiem](#26-moduł-22-film-demo-60-s-z-sentkiem)
 
 ---
 
@@ -1593,6 +1596,11 @@ interaktywna. Issue: #28.
   `scan:request` pozwala tylko złożyć prośbę; skan po zatwierdzeniu przechodzi zwykłą ścieżką
   (`scope_guard`, poziomy, limity). Gdy wyniki są gotowe, menedżer dostaje powiadomienie.
 - Widoki odświeżają się istniejącym odpytywaniem (jak skrzynka, co 5 s).
+- **Stan Etapu 6 (#28):** `POST /api/reports/current`, `POST /api/scan-requests` (`scan:request`),
+  decyzja admina `POST /api/scan-requests/{id}/decision` z powodem. Zakres prośby (dział albo
+  urządzenie) jest zapisany i widoczny w kolejce, ale zatwierdzony skan to zwykły przebieg
+  planera po **całym autoryzowanym zakresie** (`run_scan` z wyzwalaczem `manager_request`):
+  skanowanie wybranego wycinka to ROADMAP. Po skanie worker powiadamia proszącego.
 
 ### 25.2 Asystent menedżera „Sentek”
 
@@ -1614,6 +1622,26 @@ postać oryginalna (tarcza z oczkami), dymek w rogu, do wyłączenia.
 - **Samouczek** przy pierwszym logowaniu menedżera (strona główna, „Nieznane i
   niepotwierdzone”, mapa, karta urządzenia, skrzynka, „Aktualny obraz”), do powtórzenia;
   lekka biblioteka (driver.js). Dostępność: klawiatura, nie zasłania treści.
+- **Stan Etapu 6 (#28), różnice względem projektu:**
+  - Model (`assistant_intent.v1.md`, schemat JSON w `format` Ollamy) tylko klasyfikuje, z
+    limitem `ASSISTANT_TIMEOUT_SECONDS` (4 s); po nim albo przy błędzie działają słowa kluczowe
+    (rapidfuzz na tekście bez polskich znaków). Parametry od modelu są ponownie sprawdzane z
+    katalogiem nazw z bazy (urządzenia, działy, produkty, słownik). `ASSISTANT_USE_MODEL=false`
+    wyłącza model całkiem.
+  - Odmowa działań (wyłącz, usuń, nadaj, dodaj, zignoruj, ustaw, napraw jako całe słowa) liczy
+    kod przed modelem i wygrywa z nim. „Uruchom” i „odpal” przechodzą tylko przy intencji skanu
+    albo samouczka.
+  - Odpowiedzi buduje kod w procesie API (`app/assistant/answers.py`), nie przez wywołania HTTP;
+    każda intencja sama sprawdza uprawnienie (`findings:read`, `inventory:read`, `scan:request`), a dane osobowe
+    idą przez tę samą redakcję i pseudonimy co konsola (z audytem `personal_data_viewed`).
+    Dostęp do asystenta: `assistant:use` (menedżer, audytor). `POST /api/assistant`.
+  - „Terminy”: tylko terminy wewnętrzne (findingi z terminem). Terminów ustawowych asystent
+    nie podaje, bo oś compliance to Etap 7, a treść przepisów nigdy nie pochodzi z modelu.
+  - Prośba o skan z asystenta to propozycja: wysyła ją dopiero kliknięcie menedżera.
+  - Audyt `assistant_asked`: intencja, parametry, źródło (model albo słowa kluczowe), czas
+    modelu i liczba znaków; **bez** treści pytania.
+  - Samouczek ma 9 kroków (także mapa i Sentek). Mapa: Cytoscape z deterministycznym układem
+    kolumn (dział = kolumna), ładowana dopiero na `/mapa`.
 
 ### 25.3 Testy
 
@@ -1624,3 +1652,30 @@ postać oryginalna (tarcza z oczkami), dymek w rogu, do wyłączenia.
   do odczytu.
 - Playwright: samouczek, 3 intencje od pytania do właściwego ekranu, prośba o skanowanie w
   kolejce admina.
+- **Stan Etapu 6:** `eval/assistant_cases.yaml` 39 przypadków; słowa kluczowe bez modelu 38/39
+  (`eval/results/assistant-keywords.jsonl`), bramka w pytest: ≥ 90% i 100% przypadków
+  bezpieczeństwa. promptfoo: `assistant-mock` (wroga atrapa modelu, 10 przypadków, każdy PR) i
+  `assistant` (Qwen3 4B, nocą). Playwright (`frontend/e2e/`) działa na atrapie API, więc
+  sprawdza interfejs; zachowanie na żywo sprawdzają pytest i `scripts/check_demo.py`
+  (pytanie do Sentka, odmowa i prośba o skan w kolejce admina).
+
+## 26. Moduł 22: film demo 60 s z Sentkiem
+
+Demo na scenę to zmontowany film prowadzony przez animowanego Sentka, nagrany z prawdziwej
+aplikacji na danych demo. Instrukcja: [`docs/DEMO_GUIDE.md`](DEMO_GUIDE.md), część 2.
+
+- **Scenariusz**: `demo/script.yaml` (sceny, pozy, dymki, podświetlenia, narracja, plansza
+  końcowa, „głębsze nurkowanie”). `scripts/demo_script.py` sprawdza reguły i generuje `.srt`.
+- **Tryb nagrywania** `?demo=record`: działa tylko, gdy `GET /api/health` zgłasza `demo_mode`.
+  Nakładka `DemoStage` (wspólna dla obu konsol) podświetla wyłącznie elementy z `data-demo`;
+  nagrywarka steruje nią przez `window.sentinelDemo`. Niczego nie dorysowujemy: zero-day jest
+  wstrzykiwany w trakcie sceny, a nagrywarka wypisuje zmierzone opóźnienie banera.
+- **Nagranie**: Playwright 1920×1080, logowanie przez Keycloak (admin z TOTP), klip na scenę;
+  montaż ffmpeg do 30 kl./s, H.264, napisy jako osobny `.srt`. Stan przygotowuje
+  `scripts/demo_stage.py` przez API (te same uprawnienia, `scope_guard` i audyt).
+- **Lektor**: Piper lokalnie, głos `pl_PL-darkman-medium` (dane i baza CC0 według karty modelu;
+  skrypt odmawia kopii dostrojonej z „lessac”). Silnik GPL-3.0 w osobnym środowisku, poza
+  produktem. Bez klonowania głosu i bez muzyki.
+- **Testy w CI**: reguły scenariusza (czas ≤ 60 s, narracja w każdej scenie, tempo, akcje z
+  listy, podświetlenia przez `data-demo`) i Playwright: każdy podświetlany element istnieje w
+  DOM. Film, klipy i model głosu są poza Gitem.

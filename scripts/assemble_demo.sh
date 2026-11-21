@@ -28,12 +28,12 @@ while IFS=$'\t' read -r id file offset duration; do
   audio="$OUT/audio/$id.wav"
   part="$OUT/parts/$id.mp4"
   if [ -z "${NO_AUDIO:-}" ] && [ -f "$audio" ]; then
-    ffmpeg -loglevel error -y -ss "$offset" -t "$duration" -i "$file" -i "$audio" \
+    ffmpeg -nostdin -loglevel error -y -ss "$offset" -t "$duration" -i "$file" -i "$audio" \
       -filter_complex "[0:v]fps=$FPS,scale=1920:1080,format=yuv420p[v];[1:a]apad,atrim=0:$duration,aresample=48000[a]" \
       -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 160k -t "$duration" "$part"
   else
     [ -n "${NO_AUDIO:-}" ] || echo "Uwaga: brak lektora dla sceny $id ($audio), wstawiam ciszę" >&2
-    ffmpeg -loglevel error -y -ss "$offset" -t "$duration" -i "$file" \
+    ffmpeg -nostdin -loglevel error -y -ss "$offset" -t "$duration" -i "$file" \
       -f lavfi -t "$duration" -i anullsrc=r=48000:cl=stereo \
       -filter_complex "[0:v]fps=$FPS,scale=1920:1080,format=yuv420p[v]" \
       -map "[v]" -map 1:a -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 160k -t "$duration" "$part"
