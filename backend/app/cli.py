@@ -28,6 +28,9 @@ from app.iam.rbac import RoleCatalog
 from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
 from app.models import Report
+from app.org.coverage import as_view, record_snapshot
+from app.org.sources import collect, demo_sources
+from app.org.sync import sync_organization
 from app.pipeline import analyze
 from app.reports.delivery import create_digest, email_report
 from app.reports.service import create_report
@@ -66,6 +69,28 @@ def cmd_import_assets(session: Session, path: Path) -> dict[str, Any]:
         "unchanged": result.unchanged,
         "errors": errors,
     }
+
+
+def cmd_sync_org(session: Session, settings: Settings, *, actor: str = "cli") -> dict[str, Any]:
+    """Synchronizacja organizacji z atrap AD, MDM, CMDB i DHCP (tylko DEMO_MODE)."""
+    if not settings.demo_mode:
+        raise CliError(
+            "sync-org czyta atrapy z fikcyjną organizacją i działa tylko przy DEMO_MODE=true. "
+            "Prawdziwe konektory AD/Entra, MDM i CMDB są w ROADMAP."
+        )
+    snapshot = collect(demo_sources(settings.demo_org_dir))
+    result = sync_organization(session, snapshot, actor=actor)
+    analysis = analyze(session, get_rulebook(), channel_sender())
+    coverage = record_snapshot(session)
+    return {
+        "sync": result.summary(),
+        "unknown_devices_new": analysis.summary()["unknown_devices_new"],
+        "coverage": as_view(coverage),
+    }
+
+
+def cmd_coverage(session: Session) -> dict[str, Any]:
+    return as_view(record_snapshot(session))
 
 
 def cmd_sync_feeds(session: Session, settings: Settings, directory: Path | None) -> dict[str, Any]:
@@ -193,6 +218,7 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
         ),
     )
     assets = cmd_import_assets(session, settings.demo_assets_file)
+    org = cmd_sync_org(session, settings, actor="seed_demo")
     session.commit()
     has_snapshots = (settings.feeds_dir / "nvd.json").is_file()
     feeds_dir = settings.feeds_dir if has_snapshots else settings.demo_feeds_dir
@@ -200,11 +226,14 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
     session.commit()
     run = service.run(trigger="seed_demo", actor="seed_demo")
     report = create_report(session, get_reports_config(), kind="assessment", actor="seed_demo")
+    coverage = record_snapshot(session)
     session.commit()
     _queue_summary(settings, report.id, "seed_demo")
     return {
         "report": {"id": str(report.id), "light": report.light, "title": report.title},
         "assets": assets,
+        "organization": org["sync"],
+        "coverage": as_view(coverage),
         "feeds_source": "pobrane snapshoty" if has_snapshots else "miniaturowy zestaw demo",
         "feeds": feeds.results,
         "l2_approval": "seed_demo" if approval_active else "wymaga człowieka",
@@ -345,6 +374,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser(
         "agent-bootstrap", help="zdolności agenta dla demo-lab i test agenta (tylko DEMO_MODE)"
     )
+    commands.add_parser(
+        "sync-org", help="organizacja z atrap AD, MDM, CMDB, DHCP (tylko DEMO_MODE=true)"
+    )
+    commands.add_parser("coverage", help="dzisiejszy pomiar pokrycia inwentarza")
     commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
     commands.add_parser("report", help="raport o otwartych zagrożeniach do skrzynek menedżerów")
     commands.add_parser("digest", help="digest z powiadomień czekających (wersja menedżera)")
@@ -380,6 +413,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = cmd_email_report(session, args.report_id)
             elif args.command == "inject-kev":
                 result = cmd_inject_kev(session, settings, args.cve_id)
+            elif args.command == "sync-org":
+                result = cmd_sync_org(session, settings)
+            elif args.command == "coverage":
+                result = cmd_coverage(session)
             elif args.command == "agent-bootstrap":
                 result = cmd_agent_bootstrap(session, settings)
             elif args.command == "sync-roles":

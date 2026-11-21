@@ -165,6 +165,17 @@ def create_digest_task(actor: str = "system:beat") -> dict[str, Any]:
         return {"report_id": str(report.id) if report else None}
 
 
+@celery_app.task(name="app.workers.tasks.coverage_snapshot")
+def coverage_snapshot_task() -> dict[str, Any]:
+    """Dzienny pomiar pokrycia inwentarza (§8.6): punkt szeregu czasowego na wykres."""
+    from app.org.coverage import as_view, record_snapshot
+
+    with get_sessionmaker()() as session:
+        row = record_snapshot(session)
+        session.commit()
+        return as_view(row)
+
+
 @celery_app.task(name="app.workers.tasks.email_report")
 def email_report_task(report_id: str, actor: str = "system") -> dict[str, Any]:
     from app.reports.delivery import email_report

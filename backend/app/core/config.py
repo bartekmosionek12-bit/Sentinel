@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     demo_feeds_dir: Path = Path("/app/demo-feeds")
     # Fikcyjny inwentarz demo-lab importowany przez seed-demo.
     demo_assets_file: Path = Path("/app/demo-lab/assets.csv")
+    # Fikcyjna organizacja (atrapy AD, MDM, CMDB, DHCP), tylko DEMO_MODE (#18).
+    demo_org_dir: Path = Path("/app/demo-lab/org")
     nvd_api_key: str = ""
 
     # Powiadomienia: puste wartości oznaczają kanał wyłączony.
