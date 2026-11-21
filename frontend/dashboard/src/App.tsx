@@ -6,6 +6,7 @@ import { TourButton } from "@/tour";
 import { DeviceCard } from "@/pages/DeviceCard";
 import { Devices, UnknownDevices } from "@/pages/Devices";
 import { Home } from "@/pages/Home";
+import { OrgMap } from "@/pages/OrgMap";
 import { People } from "@/pages/People";
 import { TopFindings } from "@/pages/TopFindings";
 import { AppShell } from "@shared/components/AppShell";
@@ -45,6 +46,7 @@ export function App() {
         <Route path="/zagrozenia" element={<TopFindings />} />
         <Route path="/urzadzenia" element={<Devices />} />
         <Route path="/urzadzenia/:id" element={<DeviceCard />} />
+        <Route path="/mapa" element={<OrgMap />} />
         <Route path="/nieznane" element={<UnknownDevices />} />
         <Route path="/ludzie" element={<People />} />
         <Route path="/skrzynka" element={<InboxPage basePath="/raporty" />} />

@@ -604,7 +604,7 @@ def tour(intent: Intent) -> Answer:
     return Answer(
         intent.name,
         intent.source,
-        ["Pokażę Ci konsolę w siedmiu krokach. Strzałki przechodzą dalej, Esc zamyka samouczek."],
+        ["Pokażę Ci najważniejsze miejsca w konsoli. Strzałki przechodzą dalej, Esc zamyka samouczek."],
         action={"kind": "tour"},
         suggestions=_suggest("Pokaż samouczek"),
         pose="wave",

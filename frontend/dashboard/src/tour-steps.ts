@@ -46,6 +46,12 @@ export const TOUR: TourStep[] = [
     text: "Kliknij nazwę urządzenia: zobaczysz właściciela, dział, źródła danych i otwarte zagrożenia.",
   },
   {
+    path: "/mapa",
+    selector: '[data-demo="map"]',
+    title: "Mapa organizacji",
+    text: "Działy i ich urządzenia na jednym obrazie. Kolor to najwyższe ryzyko, przerywana ramka to urządzenie nieznane.",
+  },
+  {
     path: "/skrzynka",
     selector: '[data-demo="inbox"]',
     title: "Skrzynka",
@@ -56,6 +62,12 @@ export const TOUR: TourStep[] = [
     selector: '[data-demo="current-picture"]',
     title: "Aktualny obraz",
     text: "Raport z bieżącego stanu w kilka sekund, bez skanowania. Gdy dane są stare, poproś o nowe skanowanie.",
+  },
+  {
+    path: "/",
+    selector: '[data-demo="sentek-button"]',
+    title: "Sentek",
+    text: "Zapytaj po polsku, np. „Co jest teraz najgroźniejsze?”. Sentek czyta dane, ale nie skanuje i nie zmienia ustawień.",
   },
 ];
 
