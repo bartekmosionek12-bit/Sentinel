@@ -21,7 +21,7 @@ light:
     when: {}
 
 # Kto dostaje raport do skrzynki (rola z rules/roles.yaml, kanał in_app).
-recipients: [manager]
+recipients: [administrator, editor, modifier, viewer]
 
 # Ile zagrożeń trafia do faktów „W skrócie” (najwyższe ryzyko pierwsze). Pełna lista jest w
 # warstwie technicznej.

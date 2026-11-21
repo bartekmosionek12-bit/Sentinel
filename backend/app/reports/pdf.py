@@ -94,6 +94,6 @@ def report_view(report: Report, *, technical: bool, personal: bool) -> dict[str,
         "facts": shown["facts"],
         "technical": shown["technical"],
     }
-    if not technical and not personal:
+    if not technical:
         return view
-    return dict(redact(view, technical=technical, personal=personal))
+    return dict(redact(view, technical=True))
