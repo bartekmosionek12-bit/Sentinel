@@ -47,6 +47,12 @@ celery_app.conf.update(
         "sync-feeds": {"task": "app.workers.tasks.feeds.sync_feeds", "schedule": 6 * 3600.0},
         # Skan zakresu raz na dobę. Przy pustym zakresie nic się nie wykonuje.
         "scheduled-scan": {"task": "app.workers.tasks.scans.run_scan", "schedule": 24 * 3600.0},
+        # Cykliczne discovery: powtórka celów ostatniego przebiegu co 6 godzin (porównanie
+        # przebiegów i stany hostów potrzebują regularnych pomiarów).
+        "scheduled-discovery": {
+            "task": "app.workers.tasks.scans.scheduled_discovery",
+            "schedule": 6 * 3600.0,
+        },
         # Digest z powiadomień `delivery: digest` raz na dobę (Etap 6).
         "daily-digest": {"task": "app.workers.tasks.create_digest", "schedule": 24 * 3600.0},
         # Moduł 19: nocny pełny test bezpieczeństwa agenta na aktywnej konfiguracji.

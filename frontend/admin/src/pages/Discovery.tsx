@@ -233,6 +233,7 @@ function TargetForm() {
 
         <div className="flex flex-wrap gap-3">
           <Button
+            data-demo="preview-btn"
             variant="outline"
             disabled={!text.trim() || preview.isPending}
             onClick={() => preview.mutate()}

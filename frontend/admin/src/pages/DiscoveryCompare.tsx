@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
@@ -82,8 +83,9 @@ export function DiscoveryCompare() {
     queryFn: api.hostStates,
   });
   const done = (runs.data ?? []).filter((r) => r.status === "done" || r.status === "stopped");
-  const [older, setOlder] = useState("");
-  const [newer, setNewer] = useState("");
+  const [params] = useSearchParams();
+  const [older, setOlder] = useState(params.get("older") ?? "");
+  const [newer, setNewer] = useState(params.get("newer") ?? "");
   useEffect(() => {
     const [latest, previous] = done;
     if (latest && previous && !older && !newer) {

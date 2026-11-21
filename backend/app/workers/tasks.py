@@ -68,6 +68,55 @@ def run_discovery(run_id: str) -> dict[str, Any]:
         return {"run_id": run_id, "status": run.status, "hosts_up": run.hosts_up}
 
 
+@celery_app.task(name="app.workers.tasks.scans.scheduled_discovery")
+def scheduled_discovery() -> dict[str, Any]:
+    """Cykliczne discovery (beat): powtarza cele ostatniego ręcznie zleconego przebiegu.
+
+    Nic nie robi, gdy nie było jeszcze żadnego przebiegu albo poprzedni wciąż trwa. Cele i
+    tak przechodzą przez scope_guard w silniku, więc zmiana zakresu działa od razu.
+    """
+    from app.core import audit
+    from app.discovery.engine import DiscoveryConfig, DiscoveryEngine
+    from app.models import DiscoveryRun
+    from app.runtime import get_scope_guard
+
+    config = DiscoveryConfig.from_file(get_settings().rules_dir / "discovery.yaml")
+    with get_sessionmaker()() as session:
+        busy = session.scalar(
+            select(DiscoveryRun.id).where(DiscoveryRun.status.in_(("queued", "running")))
+        )
+        last = session.scalar(
+            select(DiscoveryRun)
+            .where(DiscoveryRun.source == "scan")
+            .order_by(DiscoveryRun.created_at.desc())
+        )
+        if busy is not None or last is None:
+            return {"skipped": "trwa inny przebieg" if busy else "brak poprzedniego przebiegu"}
+        run = DiscoveryRun(
+            name=f"Cykliczny: {last.name}"[:200],
+            targets=list(last.targets),
+            settings=dict(last.settings),
+            created_by="system:beat",
+            addresses_total=last.addresses_total,
+        )
+        session.add(run)
+        session.flush()
+        audit.record(
+            session,
+            audit.AuditEvent(
+                actor="system:beat",
+                action="discovery_requested",
+                reason="Cykliczny przebieg discovery",
+                inputs={"targets": run.targets[:50], "repeats": str(last.id)},
+                object_type="discovery_run",
+                object_id=str(run.id),
+            ),
+        )
+        session.commit()
+        done = DiscoveryEngine(session, get_scope_guard(), config).run(run.id)
+        return {"run_id": str(done.id), "status": done.status, "hosts_up": done.hosts_up}
+
+
 @celery_app.task(name="app.workers.tasks.scans.approve_action")
 def approve_action(action_id: str, approved_by: str, reason: str) -> dict[str, Any]:
     with get_sessionmaker()() as session:

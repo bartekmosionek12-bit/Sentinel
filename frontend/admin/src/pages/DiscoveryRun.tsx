@@ -196,7 +196,7 @@ function HostCard({ host }: { host: DiscoveryHost }) {
   const { can } = useAuth();
   return (
     <div className="space-y-4 bg-background p-4" data-demo="host-card">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" data-demo="host-flags">
         {host.flags.length === 0 && (
           <span className="text-sm text-muted-foreground">Brak flag.</span>
         )}
@@ -268,7 +268,9 @@ export function DiscoveryRunPage() {
   });
 
   const r = run.data;
-  const list = [...(hosts.data ?? [])].sort((a, b) => b.flags.length - a.flags.length);
+  const list = [...(hosts.data ?? [])].sort(
+    (a, b) => b.flags.length - a.flags.length || a.ip.localeCompare(b.ip, "en", { numeric: true }),
+  );
   const sweep = r?.batches.filter((b) => b.phase === "sweep") ?? [];
   const toggle = (ip: string) =>
     setSelected((s) => {
@@ -315,7 +317,7 @@ export function DiscoveryRunPage() {
         </div>
       )}
 
-      {sweep.length > 0 && (
+      {r && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-lg">Paczki</CardTitle>
@@ -335,6 +337,15 @@ export function DiscoveryRunPage() {
                 </tr>
               </thead>
               <tbody>
+                {sweep.length === 0 && (
+                  <tr>
+                    <Td colSpan={5} className="text-muted-foreground">
+                      {r?.source === "import"
+                        ? "Przebieg z importu: bez paczek skanowania."
+                        : "Pierwsza paczka w toku…"}
+                    </Td>
+                  </tr>
+                )}
                 {sweep.slice(0, 40).map((b) => (
                   <tr key={b.target}>
                     <Td className="font-mono">{b.target}</Td>
@@ -354,13 +365,13 @@ export function DiscoveryRunPage() {
         </Card>
       )}
 
-      <Card>
+      <Card data-demo="hosts">
         <CardHeader>
           <CardTitle className="text-lg">Hosty ({list.length})</CardTitle>
           <CardDescription>
             Kliknij adres, żeby zobaczyć kartę hosta. Zaznacz hosty, żeby wysłać je do DefectDojo.
           </CardDescription>
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2" data-demo="export-buttons">
             {(["json", "csv", "nmap"] as const).map((f) => (
               <Button
                 key={f}
@@ -473,10 +484,11 @@ function HostRows({
 }) {
   return (
     <>
-      <tr data-demo={`host-${host.ip}`}>
+      <tr data-demo="host-row" data-ip={host.ip}>
         <Td>
           <input
             type="checkbox"
+            data-demo="host-select"
             className="size-4 accent-[var(--color-primary)]"
             checked={selected}
             onChange={onToggle}
@@ -485,6 +497,7 @@ function HostRows({
         </Td>
         <Td>
           <button
+            data-demo="host-open"
             className="text-left font-mono font-semibold text-primary underline"
             onClick={onOpen}
           >

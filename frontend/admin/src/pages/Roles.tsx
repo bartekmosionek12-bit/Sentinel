@@ -36,7 +36,7 @@ function has(role: IamRole, permission: string): boolean {
 function Matrix({ roles, permissions }: { roles: IamRole[]; permissions: IamPermission[] }) {
   const human = roles.filter((r) => r.kind === "human");
   return (
-    <Card className="mb-6">
+    <Card className="mb-6" data-demo="roles-matrix">
       <CardHeader>
         <CardTitle>Macierz uprawnień</CardTitle>
         <CardDescription>

@@ -155,6 +155,24 @@ audytu.
 
 ![Wyjaśnienie generowane na żywo](docs/screenshots/etap3-strumien.png)
 
+## Film demo 90 s (jedna komenda)
+
+```bash
+cp .env.example .env    # uzupełnij hasła, ustaw świadomie DEMO_MODE=true
+./scripts/make_demo.sh  # wynik: demo/out/demo.mp4 (1920×1080, 30 kl./s, napisy wypalone)
+```
+
+Wymaga tylko Dockera z `docker compose` oraz `bash`, `curl` i `python3` (są w każdym
+Linuksie, macOS i WSL). Playwright z Chromium, ffmpeg i lektor Piper działają w kontenerze
+narzędzi (`docker-compose.demo-video.yml`), więc nic więcej nie trzeba instalować.
+Skrypt sam uruchamia stos z demo-lab i lokalnym DefectDojo (`docker-compose.defectdojo.yml`,
+interfejs na <http://localhost:8081>), zakłada konta demo, pobiera token DefectDojo do `.env`,
+robi przez API trzy przebiegi discovery ze zmianą między nimi, nagrywa 7 scen na prawdziwym
+API, generuje lektora (głos `pl_PL-darkman-medium`, licencja CC0) i sprawdza, że każda scena
+mieści się w swoim czasie, a na końcu montuje film. Scenariusz, napisy i tekst lektora są
+w [demo/script.yaml](demo/script.yaml). Pierwsze uruchomienie pobiera obrazy i trwa
+kilkanaście minut; poprawka jednej sceny: `ONLY=skan ./scripts/make_demo.sh`.
+
 ## Logowanie i role
 
 Logowanie obsługuje Keycloak (OIDC, kod autoryzacji z PKCE), wystawiony przez ten sam nginx

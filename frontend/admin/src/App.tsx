@@ -19,6 +19,7 @@ import { Scans } from "@/pages/Scans";
 import { Scope } from "@/pages/Scope";
 import { ThreatFeed } from "@/pages/ThreatFeed";
 import { AppShell } from "@shared/components/AppShell";
+import { DemoStage } from "@shared/components/DemoStage";
 import { Planned } from "@shared/components/Planned";
 import { InboxPage, ReportPage } from "@shared/components/ReportPages";
 import { ZeroDayBanner } from "@shared/components/reports";
@@ -73,6 +74,7 @@ export function App() {
       footer="Decyzje podejmuje kod. Model językowy tylko tłumaczy."
       banner={<ZeroDayBanner basePath="/skrzynka" />}
     >
+      <DemoStage />
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/skrzynka" element={<InboxPage basePath="/skrzynka" />} />

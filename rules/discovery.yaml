@@ -5,11 +5,13 @@ defaults:
   workers: 4                 # równoległe procesy nmap
   max_rate: 300              # pakiety/s na jeden proces nmap (--max-rate)
   timing: 3                  # szablon czasowy nmap: 0–3 (T4 i T5 są zablokowane)
-  batch_initial: 256         # pierwsza paczka adresów
+  batch_initial: 1024        # pierwsza paczka adresów
   batch_min: 16
-  batch_max: 1024
-  batch_target_seconds: 20   # rozmiar kolejnych paczek dobierany do zmierzonej szybkości
-  discovery_ports: "21,22,23,25,53,80,110,135,139,143,443,445,993,3306,3389,5432,5900,6379,8000,8080,8443,9200"
+  batch_max: 4096           # nmap sam zrównolegla hosty w paczce; duże paczki są wydajniejsze
+  batch_target_seconds: 60   # rozmiar kolejnych paczek dobierany do zmierzonej szybkości
+  # Mało portów w fazie odkrywania: każdy port to sonda do każdego pustego adresu (pomiar w
+  # docs/PERFORMANCE.md: 22 porty były o ~60% wolniejsze niż 7). Pełna lista w service_ports.
+  discovery_ports: "22,80,443,445,3389,8080,8443"
   service_ports: "21,22,23,25,53,80,81,110,143,443,445,1433,3000,3306,3389,5000,5432,5900,6379,8000,8008,8080,8081,8443,8888,9000,9090,9200,27017"
   http_paths: ["/admin", "/login"]   # sprawdzane tylko metodą GET, bez wysyłania danych
 limits:

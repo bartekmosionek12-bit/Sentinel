@@ -148,11 +148,11 @@ def preview_targets(payload: TargetsIn, guard: ScopeGuardDep, principal: Reader)
                 ipaddress.ip_network(target)
                 guard.authorize_network(
                     str(network)
-                    if network.num_addresses <= 1024
+                    if network.num_addresses <= 4096
                     else str(
                         next(
                             network.subnets(
-                                new_prefix=max(network.prefixlen, network.max_prefixlen - 10)
+                                new_prefix=max(network.prefixlen, network.max_prefixlen - 12)
                             )
                         )
                     ),

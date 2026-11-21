@@ -1,0 +1,126 @@
+# Film demo 90 s (moduł 22, wersja dla briefu AGH). Jeden plik steruje nagraniem
+# (scripts/record_demo.sh), lektorem (scripts/demo_tts.sh), napisami i montażem
+# (scripts/assemble_demo.sh); całość uruchamia ./scripts/make_demo.sh.
+#
+# subtitle: napisy wypalane w obrazie (liczby cyframi, nazwy jak w produkcie).
+# tts: tekst dla lektora (Piper), liczby i skróty zapisane słownie / fonetycznie.
+# steps: co nagrywarka robi w scenie, `at` w sekundach od początku sceny. Dozwolone akcje
+#   są w scripts/demo_script.py (STEP_ACTIONS). Selektory tylko przez atrybut data-demo.
+#   W ścieżkach {run1} {run2} {run3} to przebiegi przygotowane przez scripts/demo_stage.py.
+# Każda scena pokazuje wyłącznie funkcje, które działają na prawdziwym API (bez atrap).
+version: 2
+title: "Sentinel ASI w 90 sekund"
+resolution: [1920, 1080]
+fps: 30
+max_seconds: 90
+max_words: 260
+max_words_per_second: 2.6
+
+scenes:
+  - id: pulpit
+    start: 0
+    end: 12
+    path: /
+    pose: wave
+    side: right
+    steps:
+      - {at: 0.5, do: highlight, sel: '[data-demo="kpis"]'}
+    subtitle: "Sentinel ASI to skaner discovery dla Centrum Bezpieczeństwa Informacji AGH. Ponad 10 000 adresów, cyklicznie i bezpiecznie."
+    tts: "Sentinel ASI to skaner discovery dla Centrum Bezpieczeństwa Informacji a-gie-ha. Ponad dziesięć tysięcy adresów, cyklicznie i bezpiecznie."
+
+  - id: skan
+    start: 12
+    end: 28
+    path: /discovery
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.3, do: upload, sel: '[data-demo="targets-file"]', file: demo/targets.csv}
+      - {at: 0.6, do: highlight, sel: '[data-demo="targets"]'}
+      - {at: 3.0, do: click, sel: '[data-demo="preview-btn"]'}
+      - {at: 3.6, do: highlight, sel: '[data-demo="preview"]'}
+      - {at: 7.0, do: click, sel: '[data-demo="start-run"]'}
+      - {at: 8.0, do: highlight, sel: '[data-demo="run-stats"]'}
+      - {at: 12.0, do: highlight, sel: '[data-demo="batches"]'}
+    subtitle: "Wczytujemy adresy, zakresy CIDR i domeny, ręcznie albo z pliku. System dzieli je na paczki o adaptacyjnym rozmiarze, skanuje równolegle i pilnuje tempa zapytań. Widać czas każdej paczki i prognozę zakończenia."
+    tts: "Wczytujemy adresy, zakresy sider i domeny, ręcznie albo z pliku. System dzieli je na paczki o adaptacyjnym rozmiarze, skanuje równolegle i pilnuje tempa zapytań. Widać czas każdej paczki i prognozę zakończenia."
+
+  - id: karta-hosta
+    start: 28
+    end: 42
+    tts_length_scale: 0.83
+    path: "/discovery/{run3}"
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.3, do: click, sel: '[data-demo="host-open"]'}
+      - {at: 0.8, do: highlight, sel: '[data-demo="host-card"]'}
+      - {at: 4.0, do: highlight, sel: '[data-demo="http-card"]'}
+      - {at: 9.0, do: highlight, sel: '[data-demo="host-flags"]'}
+    subtitle: "Dla każdej usługi webowej pobieramy tytuł, kod odpowiedzi, nagłówki, ciasteczka, certyfikat i przekierowania. Rozpoznajemy CMS-y i technologie, oznaczamy panele administracyjne i środowiska testowe."
+    tts: "Dla każdej usługi webowej pobieramy tytuł, kod odpowiedzi, nagłówki, ciasteczka, certyfikat i przekierowania. Rozpoznajemy systemy CMS i technologie, oznaczamy panele administracyjne i środowiska testowe."
+
+  - id: porownanie
+    start: 42
+    end: 58
+    path: "/discovery/porownanie?older={run1}&newer={run2}"
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.5, do: highlight, sel: '[data-demo="diff-counts"]'}
+      - {at: 5.0, do: highlight, sel: '[data-demo="diff"]'}
+      - {at: 10.0, do: highlight, sel: '[data-demo="states"]'}
+    subtitle: "Najważniejsze są zmiany w czasie. Porównujemy dowolne dwa przebiegi: nowe, zmienione i znikające usługi. Host odpowiadający tylko czasem dostaje status niestabilny, a nieaktywny dopiero po 3 przebiegach bez odpowiedzi."
+    tts: "Najważniejsze są zmiany w czasie. Porównujemy dowolne dwa przebiegi: nowe, zmienione i znikające usługi. Host odpowiadający tylko czasem dostaje status niestabilny, a nieaktywny dopiero po trzech przebiegach bez odpowiedzi."
+
+  - id: import-edycja
+    start: 58
+    end: 70
+    path: /discovery
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.3, do: upload, sel: '[data-demo="import-file"]', file: demo/import-wyniki.xml}
+      - {at: 1.0, do: highlight, sel: '[data-demo="hosts"]'}
+      - {at: 3.5, do: goto, path: "/discovery/{run2}"}
+      - {at: 4.0, do: click, sel: '[data-demo="host-open"]'}
+      - {at: 4.4, do: fill, sel: '[data-demo="edit-note"]', text: "Serwer zespołu e-learningu, właściciel potwierdzony"}
+      - {at: 5.0, do: highlight, sel: '[data-demo="host-editor"]'}
+      - {at: 6.0, do: click, sel: '[data-demo="save-edit"]'}
+      - {at: 7.5, do: goto, path: "/discovery/{run3}"}
+      - {at: 8.0, do: highlight, sel: '[data-demo="host-row"]'}
+      - {at: 10.0, do: highlight, sel: '[data-demo="export-buttons"]'}
+    subtitle: "Wyniki zaimportujesz z JSON, CSV i nmap XML, a wyeksportujesz do JSON i CSV. Ręczne poprawki są trwałe, kolejny skan ich nie nadpisuje."
+    tts: "Wyniki zaimportujesz z dżejsona, ce-es-fał i en-map iks-em-el, a wyeksportujesz do dżejsona i ce-es-fał. Ręczne poprawki są trwałe, kolejny skan ich nie nadpisuje."
+
+  - id: defectdojo
+    start: 70
+    end: 82
+    path: "/discovery/{run3}"
+    pose: thumbs_up
+    side: right
+    steps:
+      - {at: 0.3, do: check, sel: '[data-demo="host-select"]', count: 2}
+      - {at: 1.5, do: click, sel: '[data-demo="dojo-export"]'}
+      - {at: 2.2, do: highlight, sel: '[data-demo="dojo-result"]'}
+      - {at: 5.5, do: defectdojo, path: /finding/open}
+    subtitle: "Wybrane obserwacje jednym kliknięciem trafiają do DefectDojo jako findingi informacyjne, z deduplikacją przy ponownym eksporcie."
+    tts: "Wybrane obserwacje jednym kliknięciem trafiają do Defekt Dodżo jako findingi informacyjne, z deduplikacją przy ponownym eksporcie."
+
+  - id: role
+    start: 82
+    end: 90
+    tts_length_scale: 0.76
+    path: /role
+    pose: thumbs_up
+    side: right
+    steps:
+      - {at: 0.3, do: highlight, sel: '[data-demo="roles-matrix"]'}
+    end_card_at: 4
+    end_card:
+      title: "Sentinel ASI · Attack Surface Intelligence"
+      lines:
+        - "Dedykowane dla CBI AGH · HackNation"
+        - "Skan >10 000 IP · Fingerprinting HTTP · Diffing zmian · DefectDojo · RBAC"
+    subtitle: "Cztery role z wymagań, pełny audyt i skaner, który nigdy nie wychodzi poza zatwierdzony zakres. Sentinel ASI dla CBI AGH."
+    tts: "Cztery role z wymagań, pełny audyt i skaner, który nigdy nie wychodzi poza zatwierdzony zakres. Sentinel ASI dla ce-be-i a-gie-ha."

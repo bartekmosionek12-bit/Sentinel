@@ -1,0 +1,14 @@
+# Nakładka do nagrania filmu demo: kontener z narzędziami (Playwright, ffmpeg, Piper).
+# Używa jej ./scripts/make_demo.sh; sam z siebie nic nie uruchamia (profil demo-video).
+services:
+  demo-tools:
+    build:
+      context: .
+      dockerfile: demo/Dockerfile.tools
+    image: sentinel-asi/demo-tools:dev
+    profiles: ["demo-video"]
+    volumes:
+      - .:/work
+    working_dir: /work
+    networks: [core]
+    shm_size: 1gb
