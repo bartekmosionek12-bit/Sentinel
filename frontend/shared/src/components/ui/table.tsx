@@ -14,7 +14,7 @@ export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
   return (
     <th
       className={cn(
-        "border-b border-border px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase",
+        "border-b border-border bg-muted px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-foreground",
         className,
       )}
       {...props}
@@ -23,5 +23,5 @@ export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
 }
 
 export function Td({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn("border-b border-border px-3 py-2 align-top", className)} {...props} />;
+  return <td className={cn("border-b border-border/60 px-2.5 py-1.5 align-top", className)} {...props} />;
 }

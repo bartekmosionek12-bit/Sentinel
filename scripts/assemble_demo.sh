@@ -5,8 +5,8 @@
 #   NO_AUDIO=1 ./scripts/assemble_demo.sh # bez lektora (cisza), np. do próby
 #
 # Każda scena: klip przycięty od początku sceny (clips.json) do jej długości, 30 kl./s, H.264,
-# lektor dopełniony ciszą do długości sceny. Napisy jako osobny plik .srt (nie wypalamy ich
-# w obrazie). Domyślnie bez muzyki: muzyka tylko z licencją, która na to pozwala.
+# lektor (z 0,3 s oddechu na początku) dopełniony ciszą do długości sceny. Napisy z pola
+# `subtitle` wypalamy w obrazie (i zostawiamy też plik .srt). Bez muzyki.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v ffmpeg >/dev/null || { echo "Potrzebny ffmpeg" >&2; exit 1; }
@@ -29,7 +29,7 @@ while IFS=$'\t' read -r id file offset duration; do
   part="$OUT/parts/$id.mp4"
   if [ -z "${NO_AUDIO:-}" ] && [ -f "$audio" ]; then
     ffmpeg -nostdin -loglevel error -y -ss "$offset" -t "$duration" -i "$file" -i "$audio" \
-      -filter_complex "[0:v]fps=$FPS,scale=1920:1080,format=yuv420p[v];[1:a]apad,atrim=0:$duration,aresample=48000[a]" \
+      -filter_complex "[0:v]fps=$FPS,scale=1920:1080,format=yuv420p[v];[1:a]adelay=300:all=1,apad,atrim=0:$duration,aresample=48000[a]" \
       -map "[v]" -map "[a]" -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 160k -t "$duration" "$part"
   else
     [ -n "${NO_AUDIO:-}" ] || echo "Uwaga: brak lektora dla sceny $id ($audio), wstawiam ciszę" >&2
@@ -41,8 +41,15 @@ while IFS=$'\t' read -r id file offset duration; do
   echo "file '$PWD/$part'" >> "$OUT/parts/list.txt"
 done < "$OUT/parts/plan.tsv"
 
-ffmpeg -loglevel error -y -f concat -safe 0 -i "$OUT/parts/list.txt" -c copy "$OUT/demo.mp4"
+ffmpeg -loglevel error -y -f concat -safe 0 -i "$OUT/parts/list.txt" -c copy "$OUT/raw.mp4"
 "$PYTHON" scripts/demo_script.py srt > "$OUT/demo.srt"
+# Napisy: biały tekst na nieprzezroczystym ciemnym pasku (BorderStyle=3), bez cieni.
+STYLE="FontName=DejaVu Sans,FontSize=17,PrimaryColour=&H00FFFFFF,BackColour=&H00111111,BorderStyle=3,Outline=6,Shadow=0,MarginV=36"
+ffmpeg -nostdin -loglevel error -y -i "$OUT/raw.mp4" \
+  -vf "subtitles=$OUT/demo.srt:force_style='$STYLE'" \
+  -c:v libx264 -preset medium -crf 20 -c:a copy "$OUT/demo.mp4"
+rm -f "$OUT/raw.mp4"
 length=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$OUT/demo.mp4")
-echo "Gotowe: $OUT/demo.mp4 (${length} s) i $OUT/demo.srt"
-"$PYTHON" -c "import sys; sys.exit(float('$length') > 60.5)" || { echo "Film dłuższy niż 60 s" >&2; exit 1; }
+echo "Gotowe: $OUT/demo.mp4 (${length} s, napisy wypalone) i $OUT/demo.srt"
+limit=$("$PYTHON" -c "import json;print(json.load(open('$OUT/script.json'))['max_seconds'])")
+"$PYTHON" -c "import sys; sys.exit(float('$length') > $limit + 0.5)" || { echo "Film dłuższy niż $limit s" >&2; exit 1; }

@@ -14,8 +14,10 @@ from app.core.scope_guard import ScopeConfig, ScopeGuard, SeedDemoApproval
 from app.inventory.service import import_assets, parse_assets_csv
 from app.models import Asset, AuditLog, Finding, Notification, ScanAction, Software
 from app.pipeline import Rulebook
+from app.scanners.http_probe import HttpProbe
 from app.scanners.models import ServiceInfo
 from app.scanners.nmap import NmapAdapter
+from app.scans.diff import compare_runs
 from app.scans.service import ScanActionError, ScanService
 from tests.conftest import FakeResolver, MemoryAudit
 from tests.pipeline_helpers import ASSETS_CSV, RULES, SERVICES, asset_by_ip, seed_feeds
@@ -60,7 +62,13 @@ def seeded(session: Session) -> Session:
 
 
 def _service(session: Session, guard: ScopeGuard, lab: FakeLab) -> ScanService:
-    return ScanService(session, guard, RULEBOOK, nmap=NmapAdapter(lab.runner))
+    class FakeHttpProber:
+        def probe(self, target: object, *, port: int, scheme: str) -> HttpProbe:
+            return HttpProbe(status=200, server="demo", title="Demo", port=port, scheme=scheme)
+
+    return ScanService(
+        session, guard, RULEBOOK, nmap=NmapAdapter(lab.runner), http_prober=FakeHttpProber()
+    )  # type: ignore[arg-type]
 
 
 def _actions(session: Session) -> list[tuple[str, str, str]]:
@@ -98,7 +106,7 @@ def test_full_run_discovers_scans_matches_scores_and_notifies(
     actions = seeded.scalars(select(AuditLog.action)).all()
     for expected in ("scan_started", "scan_action_done", "finding_created", "scan_finished"):
         assert expected in actions
-    assert audit_sink.actions.count("scope_allowed") == 4
+    assert audit_sink.actions.count("scope_allowed") == 7
     assert audit_sink.actions[-1] == "scope_awaiting_approval"
 
 
@@ -116,6 +124,21 @@ def test_second_run_changes_nothing_and_does_not_repeat_notifications(
     assert seeded.scalar(select(func.count()).select_from(Finding)) == 3
     awaiting = [a for a in _actions(seeded) if a[2] == "awaiting_approval"]
     assert len(awaiting) == 1
+
+
+def test_two_runs_show_disappeared_host_and_three_misses_make_it_inactive(
+    seeded: Session, audit_sink: MemoryAudit, lab: FakeLab
+) -> None:
+    service = _service(seeded, _guard(audit_sink), lab)
+    first = service.run(trigger="manual", actor="test")
+    lab.services.pop("172.30.99.12")
+    second = service.run(trigger="manual", actor="test")
+    changes = compare_runs(first.summary["snapshot"], second.summary["snapshot"])
+    assert any(c["kind"] == "host_disappeared" and c["host"] == "172.30.99.12" for c in changes)
+    assert asset_by_ip(seeded, "172.30.99.12").attributes["reachability"] == "unconfirmed"
+    service.run(trigger="manual", actor="test")
+    service.run(trigger="manual", actor="test")
+    assert asset_by_ip(seeded, "172.30.99.12").attributes["reachability"] == "inactive"
 
 
 def test_empty_scope_scans_nothing(seeded: Session, audit_sink: MemoryAudit, lab: FakeLab) -> None:
@@ -148,8 +171,8 @@ def test_shadow_host_is_recorded_and_scanned_as_new(
     assert run.summary["hosts_new"] == 1
     assert ("new_host_service_scan", "172.30.99.14", "done") in _actions(seeded)
     keys = seeded.scalars(select(Finding.dedup_key).where(Finding.asset_id == shadow.id)).all()
-    # Podatność z usługi i finding shadow IT (#18): hosta nie ma w CSV, CMDB, AD ani MDM.
-    assert sorted(k.split(":")[0] for k in keys) == ["cve", "shadow"]
+    # Podatność z usługi. Nowy host to stan w inwentarzu (P5: stany hostów), nie finding.
+    assert sorted(k.split(":")[0] for k in keys) == ["cve"]
     assert any("CVE-2022-24735" in k for k in keys)
 
 

@@ -309,7 +309,7 @@ function TaskCard({ task }: { task: AgentTask }) {
     <Card className={awaiting ? "border-amber-300" : undefined} data-demo="agent-task">
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="text-base">„{task.command}”</CardTitle>
+          <CardTitle className="text-base tracking-normal text-foreground normal-case">„{task.command}”</CardTitle>
           <StatusBadge status={task.status} map={TASK_STATUS} />
           {task.plan_source && (
             <Badge variant="neutral">{SOURCES[task.plan_source] ?? task.plan_source}</Badge>

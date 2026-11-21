@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fikcyjny wynik nmap do pokazania importu w filmie demo (adresy z puli dokumentacyjnej RFC 5737). -->
+<nmaprun scanner="nmap" args="nmap -sV 192.0.2.0/28" start="1795200000" version="7.94">
+<host><status state="up"/><address addr="192.0.2.10" addrtype="ipv4"/><hostnames><hostname name="wiki.example.test" type="user"/></hostnames>
+<ports><port protocol="tcp" portid="443"><state state="open"/><service name="https" product="nginx" version="1.24.0"/></port>
+<port protocol="tcp" portid="22"><state state="open"/><service name="ssh" product="OpenSSH" version="9.6p1"/></port></ports></host>
+<host><status state="up"/><address addr="192.0.2.11" addrtype="ipv4"/><hostnames><hostname name="staging-moodle.example.test" type="user"/></hostnames>
+<ports><port protocol="tcp" portid="80"><state state="open"/><service name="http" product="Apache httpd" version="2.4.58"/></port></ports></host>
+<host><status state="up"/><address addr="192.0.2.12" addrtype="ipv4"/>
+<ports><port protocol="tcp" portid="3306"><state state="open"/><service name="mysql" product="MySQL" version="8.0.36"/></port></ports></host>
+</nmaprun>

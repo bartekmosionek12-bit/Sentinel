@@ -31,6 +31,7 @@ export interface Asset {
   owner: string | null;
   tags: string[];
   status: "active" | "missing" | "retired" | "shadow";
+  reachability: string;
   first_seen: string;
   last_seen: string;
 }
@@ -76,6 +77,9 @@ export interface Scope {
   denied_domains: string[];
   denied_cidrs: string[];
   default_rate_per_minute: number;
+  scan_packets_per_second: number;
+  scan_workers: number;
+  missing_after_runs: number;
   demo_mode: boolean;
   demo_lab_cidr: string;
   demo_approval_expires_at: string | null;
@@ -287,6 +291,25 @@ export interface ScanRun {
   actions: ScanAction[];
 }
 
+export interface ScanChange {
+  kind: string;
+  host: string;
+  item: string;
+  before: string;
+  after: string;
+}
+
+export interface SprintDashboard {
+  changes: ScanChange[];
+  change_count: number;
+  flags: {host: string; kind: string; confidence: number}[];
+  new_admin_panels: number;
+  staging: number;
+  unstable_hosts: number;
+  recent_runs: {id: string; started_at: string; status: string; duration_seconds: number | null; eta_seconds: number | null}[];
+  defectdojo: string;
+}
+
 export interface Task {
   task_id: string;
   detail: string;
@@ -365,6 +388,178 @@ export type ExplanationEvent =
   | { type: "done"; source: string; validation: string; problems?: string[] }
   | { type: "error"; message: string };
 
+// --- Discovery (BLOK A–E) ---------------------------------------------------------
+
+export interface DiscoverySettings {
+  workers: number;
+  max_rate: number;
+  timing: number;
+  batch_initial: number;
+  batch_min: number;
+  batch_max: number;
+  batch_target_seconds: number;
+  discovery_ports: string;
+  service_ports: string;
+  http_paths: string[];
+  fingerprint?: boolean;
+}
+
+export interface DiscoveryConfigInfo {
+  defaults: DiscoverySettings;
+  limits: Record<string, number>;
+  host_state: { inactive_after_runs: number; window: number };
+}
+
+export interface TargetPreview {
+  addresses: number;
+  networks: number;
+  domains: number;
+  rows: {
+    target: string;
+    addresses: number;
+    allowed: boolean;
+    reason: string;
+  }[];
+  errors: string[];
+  ok: boolean;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  name: string;
+  status: "queued" | "running" | "stopping" | "stopped" | "done" | "failed";
+  source: "scan" | "import";
+  targets: string[];
+  targets_count: number;
+  settings: Partial<DiscoverySettings>;
+  created_by: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  addresses_total: number;
+  addresses_done: number;
+  progress: number;
+  batches_done: number;
+  hosts_up: number;
+  eta_seconds: number | null;
+  duration_seconds: number | null;
+  error: string | null;
+  summary: Record<string, unknown> | null;
+}
+
+export interface DiscoveryBatch {
+  target: string;
+  addresses: number;
+  phase: "sweep" | "services";
+  status: string;
+  hosts_up: number;
+  duration_ms: number;
+  detail: string | null;
+  finished_at: string | null;
+}
+
+export interface DiscoveryService {
+  port: number;
+  protocol?: string;
+  name?: string;
+  product?: string;
+  version?: string;
+}
+
+export interface HttpFingerprint {
+  url: string;
+  port: number;
+  scheme: string;
+  status: number | null;
+  title: string;
+  headers: Record<string, string>;
+  cookies: { name: string; secure: boolean; httponly: boolean }[];
+  redirects: string[];
+  tls: {
+    subject?: string;
+    issuer?: string;
+    not_after?: string;
+    san?: string[];
+  } | null;
+  favicon_hash: number | null;
+  technologies: string[];
+  paths: Record<string, number>;
+  error: string | null;
+}
+
+export interface HostFlag {
+  kind: string;
+  label: string;
+  evidence: string[];
+  confidence: "niska" | "średnia" | "wysoka";
+}
+
+export interface HostState {
+  state: "active" | "unstable" | "unconfirmed" | "inactive";
+  label: string;
+  history: boolean[];
+  misses: number;
+}
+
+export interface DiscoveryHost {
+  ip: string;
+  hostname: string | null;
+  services: DiscoveryService[];
+  http: HttpFingerprint[];
+  flags: HostFlag[];
+  technologies: string[];
+  note: string | null;
+  tags: string[];
+  criticality: string | null;
+  status: string | null;
+  edited: string[];
+  edits: Record<string, { value: unknown; by: string; at: string }>;
+  state: HostState | null;
+}
+
+export interface DiffHost {
+  ip: string;
+  hostname: string | null;
+  services: string[];
+  technologies: string[];
+  flags: string[];
+}
+
+export interface DictDiff {
+  added: Record<string, string>;
+  removed: Record<string, string>;
+  changed: Record<string, [string, string]>;
+}
+
+export interface RunDiff {
+  older: { id: string; name: string; created_at: string; hosts_up: number };
+  newer: { id: string; name: string; created_at: string; hosts_up: number };
+  new_hosts: DiffHost[];
+  gone_hosts: DiffHost[];
+  changed_hosts: {
+    ip: string;
+    hostname: string | null;
+    services?: DictDiff;
+    headers?: DictDiff;
+    titles?: DictDiff;
+    technologies?: { added: string[]; removed: string[] };
+    flags?: { added: string[]; removed: string[] };
+    hostname_change?: [string | null, string | null];
+  }[];
+  counts: Record<string, number>;
+}
+
+export interface DojoStatus {
+  configured: boolean;
+  ok: boolean;
+  detail: string;
+  url?: string;
+  product?: string;
+  engagement?: string;
+  exported: number;
+  last_export: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -376,7 +571,10 @@ export class ApiError extends Error {
 
 /** Dostawca tokenu dostępu; ustawia go `AuthProvider` po zalogowaniu. */
 type TokenSource = { token: () => string | null; onUnauthorized: () => void };
-let tokenSource: TokenSource = { token: () => null, onUnauthorized: () => undefined };
+let tokenSource: TokenSource = {
+  token: () => null,
+  onUnauthorized: () => undefined,
+};
 
 export function setTokenSource(source: TokenSource): void {
   tokenSource = source;
@@ -390,7 +588,11 @@ function authHeaders(): Record<string, string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...init?.headers,
+    },
   });
   if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) {
@@ -411,7 +613,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Pobranie pliku z autoryzacją (np. PDF raportu): fetch → blob → link tymczasowy. */
 async function download(path: string, fallbackName: string): Promise<void> {
-  const response = await fetch(`/api${path}`, { headers: { ...authHeaders() } });
+  const response = await fetch(`/api${path}`, {
+    headers: { ...authHeaders() },
+  });
   if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) throw new ApiError(response.status, `Błąd serwera (${response.status})`);
   const disposition = response.headers.get("Content-Disposition") ?? "";
@@ -432,7 +636,10 @@ function streamEvents<E extends { type: string }>(
 ): () => void {
   const controller = new AbortController();
   const lost = () =>
-    onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" } as unknown as E);
+    onEvent({
+      type: "error",
+      message: "Utracono połączenie ze strumieniem",
+    } as unknown as E);
   void (async () => {
     try {
       const response = await fetch(`/api${path}`, {
@@ -710,98 +917,7 @@ export interface CredentialLease {
   revoked_by: string | null;
 }
 
-
-// --- organizacja (Etap 6, #18) ---
-
-export interface Coverage {
-  day: string;
-  assets_total: number;
-  unknown_devices: number;
-  open_findings: number;
-  critical_findings: number;
-  with_owner_pct: number;
-  scanned_recently_pct: number;
-  known_version_pct: number;
-}
-
-export interface OrgUnitSummary {
-  id: string;
-  name: string;
-  parent_id: string | null;
-  devices: number;
-  unknown: number;
-  open_findings: number;
-  critical: number;
-  worst_level: RiskLevel | null;
-}
-
-export interface OrgOverview {
-  demo: boolean;
-  demo_label: string | null;
-  units: OrgUnitSummary[];
-  locations: { id: string; name: string; devices: number }[];
-  coverage: Coverage;
-  trend: Coverage[];
-  unassigned_devices: number;
-}
-
-export interface OrgPerson {
-  id: string;
-  pseudonym: string;
-  display_name: string;
-  job_title: string | null;
-  active: boolean;
-  left_at: string | null;
-}
-
-export interface OrgPeopleRow extends OrgPerson {
-  unit: string | null;
-  devices: number;
-}
-
-export interface Device {
-  id: string;
-  name: string;
-  type: string;
-  status: "active" | "missing" | "retired" | "shadow";
-  exposure: Exposure;
-  criticality: number;
-  unit: string | null;
-  unit_id: string | null;
-  location: string | null;
-  segment: string | null;
-  owners: OrgPerson[];
-  users: OrgPerson[];
-  sources: string[];
-  in_cmdb: boolean;
-  confirmed: boolean;
-  open_findings: number;
-  worst_level: RiskLevel | null;
-  max_score: number;
-  first_seen: string;
-  last_seen: string;
-  last_scan: string | null;
-}
-
-export interface DeviceList {
-  items: Device[];
-  total: number;
-  demo_label: string | null;
-}
-
-export interface DeviceFilter {
-  unit?: string;
-  unknown?: boolean;
-  pseudonyms?: boolean;
-}
-
-function query(params: Record<string, string | boolean | undefined>): string {
-  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== false);
-  if (!entries.length) return "";
-  return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
-}
-
-// --- moduł 21: świeżość danych, „Aktualny obraz”, prośby o skanowanie ---
+// --- świeżość danych i asystent Sentek ---
 
 export interface Freshness {
   last_scan_at: string | null;
@@ -812,13 +928,11 @@ export interface Freshness {
   label: string;
 }
 
-export type ScanRequestScope = "organization" | "unit" | "device";
-
-/** Odpowiedź Sentka (moduł 21): tekst z danych, linki i ewentualna propozycja akcji. */
+/** Odpowiedź Sentka: tekst z danych, linki i ewentualna propozycja zadania dla agenta.
+ *  Sentek niczego nie uruchamia: zadanie trafia do agenta, a plan zatwierdza człowiek. */
 export interface AssistantAction {
-  kind: "scan_request" | "tour";
-  scope_kind?: ScanRequestScope;
-  scope_ref?: string | null;
+  kind: "agent_task";
+  command?: string;
   label?: string;
 }
 
@@ -834,19 +948,56 @@ export interface AssistantAnswer {
   disclaimer: string;
 }
 
-export interface ScanRequest {
+// --- szczegóły zasobu (karta hosta) ---
+
+export interface AssetHistory {
   id: string;
-  requested_by: string;
-  scope_kind: ScanRequestScope;
-  scope_label: string;
-  reason: string;
-  status: "pending" | "approved" | "rejected" | "done" | "failed";
-  decided_by: string | null;
-  decision_reason: string | null;
-  decided_at: string | null;
-  scan_run_id: string | null;
+  change: string;
+  diff: Record<string, unknown>;
   created_at: string;
-  finished_at: string | null;
+}
+
+export interface AssetDetail {
+  asset: Asset;
+  attributes: Record<string, unknown>;
+  software: Software[];
+  history: AssetHistory[];
+  active_findings: number;
+}
+
+// --- role i użytkownicy (P1, docs/ROLES.md) ---
+
+export interface IamPermission {
+  name: string;
+  description: string;
+  mfa: boolean;
+  /** Tylko w rolach z pliku (np. `iam:manage`); edytor ról go nie nadaje. */
+  reserved: boolean;
+}
+
+export interface IamRole {
+  name: string;
+  label: string;
+  description: string;
+  kind: "human" | "agent" | "system";
+  builtin: boolean;
+  grantable: boolean;
+  permissions: string[];
+  created_by: string | null;
+  updated_at: string | null;
+}
+
+export interface IamUser {
+  id: string;
+  username: string;
+  display_name: string;
+  kind: "human" | "agent" | "system";
+  active: boolean;
+  /** Role z tokenu Keycloak (nadawane w Keycloak, tu tylko do odczytu). */
+  token_roles: string[];
+  /** Role nadane w konsoli. */
+  granted_roles: string[];
+  last_seen_at: string | null;
 }
 
 export const api = {
@@ -867,7 +1018,8 @@ export const api = {
     }),
   stats: () => request<Stats>("/stats"),
   findings: (status: string) => request<Page<Finding>>(`/findings?status=${status}&limit=500`),
-  deviceFindings: (assetId: string) =>
+  assetDetails: (id: string) => request<AssetDetail>(`/assets/${id}/details`),
+  assetFindings: (assetId: string) =>
     request<Page<Finding>>(`/findings?status=active&asset_id=${assetId}&limit=100`),
   finding: (id: string) => request<FindingDetail>(`/findings/${id}`),
   updateFinding: (id: string, patch: FindingPatch) =>
@@ -912,6 +1064,19 @@ export const api = {
       body: JSON.stringify({ accept }),
     }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
+  sprintDashboard: () => request<SprintDashboard>("/sprint/dashboard"),
+  scanDiff: (from: string, to: string) => request<ScanChange[]>(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`),
+  downloadScanDiff: (from: string, to: string, format: "json" | "csv") => download(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`, `scan-diff.${format}`),
+  previewScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]}>("/scan-targets/preview", {method: "POST", body: JSON.stringify({text, format})}),
+  saveScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]; added: number}>("/scan-targets", {method: "POST", body: JSON.stringify({text, format})}),
+  scanTargets: () => request<{target: string; kind: string}[]>("/scan-targets"),
+  importScanResults: (text: string, format: "json" | "csv" | "xml") => request<{run_id: string; hosts: number}>("/scan-results/import", {method: "POST", body: JSON.stringify({text, format})}),
+  scanResults: (id: string) => request<{run_id: string; hosts: Record<string, {name: string; note?: string; state: string; manually_changed?: boolean; flags?: {kind: string; evidence: string[]; confidence: number}[]}>}>(`/scan-results/${id}`),
+  overrideScanResult: (host: string, field: "name" | "note" | "state", value: string) => request<{host: string; field: string; manually_changed: boolean}>("/scan-results/override", {method: "POST", body: JSON.stringify({host, field, value})}),
+  downloadScanResults: (id: string, format: "json" | "csv") => download(`/scan-results/${id}/export?format=${format}`, `scan-results.${format}`),
+  downloadNmapXml: (id: string) => download(`/scan-results/${id}/nmap.xml`, "sentinel-nmap.xml"),
+  defectdojoStatus: () => request<{connected: boolean; detail: string}>("/defectdojo/status"),
+  exportDefectdojo: (run_id: string, selected: {host: string; kind: string}[]) => request<{created: number; duplicates: number}>("/defectdojo/export", {method: "POST", body: JSON.stringify({run_id, selected})}),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>
@@ -930,32 +1095,12 @@ export const api = {
   inbox: () => request<Inbox>("/inbox"),
   downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
-  orgOverview: () => request<OrgOverview>("/org/overview"),
   freshness: () => request<Freshness>("/freshness"),
-  currentReport: () => request<Report>("/reports/current", { method: "POST" }),
-  scanRequests: (status?: string) =>
-    request<ScanRequest[]>(`/scan-requests${status ? `?status=${status}` : ""}`),
-  requestScan: (scope_kind: ScanRequestScope, scope_ref: string | null, reason: string) =>
-    request<ScanRequest>("/scan-requests", {
-      method: "POST",
-      body: JSON.stringify({ scope_kind, scope_ref, reason }),
-    }),
-  assistant: (question: string, pseudonyms = false) =>
+  assistant: (question: string) =>
     request<AssistantAnswer>("/assistant", {
       method: "POST",
-      body: JSON.stringify({ question, pseudonyms }),
+      body: JSON.stringify({ question }),
     }),
-  decideScanRequest: (id: string, approve: boolean, reason: string) =>
-    request<ScanRequest>(`/scan-requests/${id}/decision`, {
-      method: "POST",
-      body: JSON.stringify({ approve, reason }),
-    }),
-  devices: (filter: DeviceFilter = {}) =>
-    request<DeviceList>(`/org/devices${query({ ...filter })}`),
-  device: (id: string, pseudonyms = false) =>
-    request<Device>(`/org/devices/${id}${query({ pseudonyms })}`),
-  people: (pseudonyms = false) => request<OrgPeopleRow[]>(`/org/people${query({ pseudonyms })}`),
-  confirmDevice: (id: string) => request<Device>(`/org/devices/${id}/confirm`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>
     request<{ task_id: string }>(`/reports/${id}/summary`, { method: "POST" }),
@@ -969,7 +1114,10 @@ export const api = {
   agentStatus: () => request<AgentStatus>("/agent/status"),
   agentCapabilities: () => request<AgentCapability[]>("/agent/capabilities"),
   createAgentCapability: (input: AgentCapabilityInput) =>
-    request<AgentConfig>("/agent/capabilities", { method: "POST", body: JSON.stringify(input) }),
+    request<AgentConfig>("/agent/capabilities", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   killAgent: (reason: string) =>
     request<Record<string, unknown>>("/agent/kill", {
       method: "POST",
@@ -978,7 +1126,10 @@ export const api = {
   agentLeases: () => request<CredentialLease[]>("/agent/leases?limit=50"),
   agentTasks: () => request<AgentTask[]>("/agent/tasks?limit=20"),
   createAgentTask: (command: string) =>
-    request<AgentTask>("/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
+    request<AgentTask>("/agent/tasks", {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    }),
   approveAgentTask: (id: string, reason: string, stepIds?: string[]) =>
     request<Task>(`/agent/tasks/${id}/approve`, {
       method: "POST",
@@ -993,10 +1144,86 @@ export const api = {
   agentTests: () => request<AgentTestRun[]>("/agent/tests?limit=20"),
   agentTest: (id: string) => request<AgentTestRunDetail>(`/agent/tests/${id}`),
   runAgentTest: (suite: "quick" | "full") =>
-    request<Task>("/agent/tests", { method: "POST", body: JSON.stringify({ suite }) }),
+    request<Task>("/agent/tests", {
+      method: "POST",
+      body: JSON.stringify({ suite }),
+    }),
   forceAgentConfig: (id: string, justification: string) =>
     request<AgentConfig>(`/agent/configs/${id}/force`, {
       method: "POST",
       body: JSON.stringify({ justification }),
+    }),
+  discoveryConfig: () => request<DiscoveryConfigInfo>("/discovery/settings"),
+  previewTargets: (text: string) =>
+    request<TargetPreview>("/discovery/targets/preview", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  startDiscovery: (input: { text: string; name: string; settings: Partial<DiscoverySettings> }) =>
+    request<DiscoveryRun>("/discovery/runs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  discoveryRuns: () => request<DiscoveryRun[]>("/discovery/runs?limit=50"),
+  discoveryRun: (id: string) =>
+    request<DiscoveryRun & { batches: DiscoveryBatch[] }>(`/discovery/runs/${id}`),
+  stopDiscovery: (id: string) =>
+    request<DiscoveryRun>(`/discovery/runs/${id}/stop`, { method: "POST" }),
+  discoveryHosts: (id: string) => request<DiscoveryHost[]>(`/discovery/runs/${id}/hosts`),
+  exportDiscovery: (id: string, format: "json" | "csv" | "nmap") =>
+    download(`/discovery/runs/${id}/export?format=${format}`, `sentinel.${format}`),
+  compareRuns: (older: string, newer: string) =>
+    request<RunDiff>(`/discovery/compare?older=${older}&newer=${newer}`),
+  exportDiff: (older: string, newer: string, format: "json" | "csv") =>
+    download(
+      `/discovery/compare/export?older=${older}&newer=${newer}&format=${format}`,
+      `sentinel-roznice.${format}`,
+    ),
+  hostStates: () =>
+    request<{
+      counts: Record<string, number>;
+      hosts: Record<string, HostState>;
+    }>("/discovery/states"),
+  setOverride: (ip: string, field: string, value: unknown) =>
+    request<unknown>(`/discovery/overrides/${encodeURIComponent(ip)}`, {
+      method: "PUT",
+      body: JSON.stringify({ field, value }),
+    }),
+  importResults: (content: string, filename: string) =>
+    request<DiscoveryRun>("/discovery/import", {
+      method: "POST",
+      body: JSON.stringify({ content, filename, name: `Import ${filename}` }),
+    }),
+  dojoStatus: () => request<DojoStatus>("/discovery/defectdojo/status"),
+  dojoExport: (runId: string, ips: string[]) =>
+    request<{
+      sent: number;
+      skipped_duplicates?: number;
+      detail?: string;
+      test?: number;
+    }>("/discovery/defectdojo/export", {
+      method: "POST",
+      body: JSON.stringify({ run_id: runId, ips }),
+    }),
+  iamPermissions: () => request<IamPermission[]>("/iam/permissions"),
+  iamRoles: () => request<IamRole[]>("/iam/roles"),
+  iamUsers: () => request<IamUser[]>("/iam/users"),
+  saveRole: (name: string, input: { description: string; permissions: string[] }) =>
+    request<IamRole>(`/iam/roles/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  deleteRole: (name: string) =>
+    request<void>(`/iam/roles/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+  grantRole: (userId: string, role: string) =>
+    request<IamUser>(`/iam/users/${userId}/roles`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+  revokeRole: (userId: string, role: string) =>
+    request<IamUser>(`/iam/users/${userId}/roles/${encodeURIComponent(role)}`, {
+      method: "DELETE",
     }),
 };

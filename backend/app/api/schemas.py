@@ -60,6 +60,7 @@ class AssetOut(OrmModel):
     owner: str | None
     tags: list[str]
     status: AssetStatus
+    reachability: str
     first_seen: datetime
     last_seen: datetime
 
@@ -102,6 +103,9 @@ class ScopeOut(BaseModel):
     denied_domains: list[str]
     denied_cidrs: list[str]
     default_rate_per_minute: int
+    scan_packets_per_second: int
+    scan_workers: int
+    missing_after_runs: int
     demo_mode: bool
     demo_lab_cidr: str
     demo_approval_expires_at: datetime | None

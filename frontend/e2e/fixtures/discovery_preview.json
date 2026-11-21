@@ -1,0 +1,1 @@
+{"addresses": 16640, "networks": 2, "domains": 0, "rows": [{"target": "10.20.0.0/18", "addresses": 16384, "allowed": true, "reason": "w zakresie"}, {"target": "172.30.99.0/24", "addresses": 256, "allowed": true, "reason": "w zakresie"}], "errors": [], "ok": true}

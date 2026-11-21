@@ -1,17 +1,32 @@
 #!/usr/bin/env bash
-# Konta demo w Keycloaku: admin (hasło + TOTP), menedżer i audytor. Tylko DEMO_MODE=true.
+# Konta demo w Keycloaku dla czterech ról z briefu (docs/ROLES.md): admin (administrator),
+# editor, modifier i viewer. Każde loguje się do konsoli zespołu IT hasłem i TOTP (wspólny
+# sekret TOTP kont demo). Tylko DEMO_MODE=true.
 #
 # Hasła i sekret TOTP bierze z .env (DEMO_ADMIN_PASSWORD, DEMO_ADMIN_TOTP_SECRET,
-# DEMO_MANAGER_PASSWORD); puste wartości generuje i zapisuje w data/demo-credentials.env
+# DEMO_EDITOR_PASSWORD, DEMO_MODIFIER_PASSWORD, DEMO_VIEWER_PASSWORD); puste wartości generuje
+# i zapisuje w data/demo-credentials.env
 # (poza Gitem, uprawnienia 600), żeby kolejne uruchomienia używały tych samych.
 # Nazwiska są fikcyjne, adresy e-mail w domenie example (RFC 2606).
 set -euo pipefail
+# Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
 if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
   echo "Konta demo tworzymy tylko przy DEMO_MODE=true w pliku .env." >&2
   exit 1
 fi
+
+# python3 albo python (na Windowsie w Git Bash zwykle jest tylko `python`).
+PY=""
+for candidate in "${PYTHON:-}" python3 python; do
+  if [ -n "$candidate" ] && "$candidate" -c "import secrets" >/dev/null 2>&1; then
+    PY=$candidate
+    break
+  fi
+done
+[ -n "$PY" ] || { echo "Potrzebny Python 3 (python3 albo python) do utworzenia kont demo." >&2; exit 1; }
 
 CREDS=data/demo-credentials.env
 mkdir -p data
@@ -27,27 +42,30 @@ value() {  # value NAZWA: z .env, potem z pliku kont demo
   printf '%s' "$found"
 }
 
-random() { python3 -c "import secrets; print(secrets.token_urlsafe($1))"; }
+random() { "$PY" -c "import secrets; print(secrets.token_urlsafe($1))"; }
 
 ADMIN_PASSWORD=$(value DEMO_ADMIN_PASSWORD); ADMIN_PASSWORD=${ADMIN_PASSWORD:-$(random 18)}
 TOTP_SECRET=$(value DEMO_ADMIN_TOTP_SECRET); TOTP_SECRET=${TOTP_SECRET:-$(random 15)}
-MANAGER_PASSWORD=$(value DEMO_MANAGER_PASSWORD); MANAGER_PASSWORD=${MANAGER_PASSWORD:-$(random 18)}
-AUDITOR_PASSWORD=$(value DEMO_AUDITOR_PASSWORD); AUDITOR_PASSWORD=${AUDITOR_PASSWORD:-$(random 18)}
+EDITOR_PASSWORD=$(value DEMO_EDITOR_PASSWORD); EDITOR_PASSWORD=${EDITOR_PASSWORD:-$(random 18)}
+MODIFIER_PASSWORD=$(value DEMO_MODIFIER_PASSWORD); MODIFIER_PASSWORD=${MODIFIER_PASSWORD:-$(random 18)}
+VIEWER_PASSWORD=$(value DEMO_VIEWER_PASSWORD); VIEWER_PASSWORD=${VIEWER_PASSWORD:-$(random 18)}
 
 # Aplikacje TOTP przyjmują sekret w Base32; Keycloak przechowuje jego surowe bajty.
-TOTP_BASE32=$(python3 -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
+TOTP_BASE32=$("$PY" -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
 
 cat > "$CREDS" <<CREDS
 # Konta demo (DEMO_MODE). Plik poza Gitem; usuń go, żeby wygenerować nowe hasła.
 DEMO_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 DEMO_ADMIN_TOTP_SECRET=${TOTP_SECRET}
 DEMO_ADMIN_TOTP_BASE32=${TOTP_BASE32}
-DEMO_MANAGER_PASSWORD=${MANAGER_PASSWORD}
-DEMO_AUDITOR_PASSWORD=${AUDITOR_PASSWORD}
+DEMO_EDITOR_PASSWORD=${EDITOR_PASSWORD}
+DEMO_MODIFIER_PASSWORD=${MODIFIER_PASSWORD}
+DEMO_VIEWER_PASSWORD=${VIEWER_PASSWORD}
 CREDS
 
 USERS=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" TOTP_SECRET="$TOTP_SECRET" \
-  MANAGER_PASSWORD="$MANAGER_PASSWORD" AUDITOR_PASSWORD="$AUDITOR_PASSWORD" python3 - <<'PY'
+  EDITOR_PASSWORD="$EDITOR_PASSWORD" MODIFIER_PASSWORD="$MODIFIER_PASSWORD" \
+  VIEWER_PASSWORD="$VIEWER_PASSWORD" "$PY" - <<'PY'
 import json, os
 
 def user(name, first, last, role, password, totp=None):
@@ -69,9 +87,10 @@ def user(name, first, last, role, password, totp=None):
     }
 
 print(json.dumps({"ifResourceExists": "OVERWRITE", "users": [
-    user("admin", "Anna", "Demonstracyjna", "admin", os.environ["ADMIN_PASSWORD"], os.environ["TOTP_SECRET"]),
-    user("manager", "Marek", "Demonstracyjny", "manager", os.environ["MANAGER_PASSWORD"]),
-    user("auditor", "Alicja", "Demonstracyjna", "auditor", os.environ["AUDITOR_PASSWORD"]),
+    user("admin", "Anna", "Demonstracyjna", "administrator", os.environ["ADMIN_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("editor", "Edward", "Demonstracyjny", "editor", os.environ["EDITOR_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("modifier", "Monika", "Demonstracyjna", "modifier", os.environ["MODIFIER_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("viewer", "Wiktor", "Demonstracyjny", "viewer", os.environ["VIEWER_PASSWORD"], os.environ["TOTP_SECRET"]),
 ]}))
 PY
 )
@@ -91,7 +110,9 @@ for attempt in 1 2 3 4 5 6; do
 done
 
 echo "Konta demo gotowe (hasła w ${CREDS}):"
-echo "  admin    konsola operacyjna, hasło + TOTP (sekret Base32: ${TOTP_BASE32})"
-echo "  manager  dashboard menedżera"
-echo "  auditor  dashboard, z dziennikiem audytu i bez danych osobowych"
-echo "  TOTP do aplikacji: otpauth://totp/Sentinel%20ASI:admin?secret=${TOTP_BASE32}&issuer=Sentinel%20ASI"
+echo "  admin     Administracja (wszystko, edytor ról)"
+echo "  editor    Dodawanie, usuwanie, modyfikacja (skany, zatwierdzanie planów agenta i L2+)"
+echo "  modifier  Modyfikacja i odczyt"
+echo "  viewer    Odczyt"
+echo "  Każde konto: hasło + TOTP (wspólny sekret kont demo, Base32: ${TOTP_BASE32})"
+echo "  TOTP do aplikacji: otpauth://totp/Sentinel%20ASI:demo?secret=${TOTP_BASE32}&issuer=Sentinel%20ASI"

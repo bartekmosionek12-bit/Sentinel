@@ -1,130 +1,126 @@
-# Moduł 22: film demo 60 s prowadzony przez Sentka. Jeden plik steruje nagraniem
+# Film demo 90 s (moduł 22, wersja dla briefu AGH). Jeden plik steruje nagraniem
 # (scripts/record_demo.sh), lektorem (scripts/demo_tts.sh), napisami i montażem
-# (scripts/assemble_demo.sh). Test w CI (backend/tests/test_demo_script.py i
-# frontend/e2e/demo.spec.ts) pilnuje czasu, tempa mowy i istnienia podświetlanych elementów.
+# (scripts/assemble_demo.sh); całość uruchamia ./scripts/make_demo.sh.
 #
-# Narracja to wersja robocza do podmiany na tekst od Bartka; limit to ok. 140 słów i
-# najwyżej 2,6 słowa na sekundę w scenie (tempo lektora po polsku).
-version: 1
-title: "Sentinel ASI w 60 sekund"
+# subtitle: napisy wypalane w obrazie (liczby cyframi, nazwy jak w produkcie).
+# tts: tekst dla lektora (Piper), liczby i skróty zapisane słownie / fonetycznie.
+# steps: co nagrywarka robi w scenie, `at` w sekundach od początku sceny. Dozwolone akcje
+#   są w scripts/demo_script.py (STEP_ACTIONS). Selektory tylko przez atrybut data-demo.
+#   W ścieżkach {run1} {run2} {run3} to przebiegi przygotowane przez scripts/demo_stage.py.
+# Każda scena pokazuje wyłącznie funkcje, które działają na prawdziwym API (bez atrap).
+version: 2
+title: "Sentinel ASI w 90 sekund"
 resolution: [1920, 1080]
 fps: 30
-max_seconds: 60
-max_words: 150
+max_seconds: 90
+max_words: 260
 max_words_per_second: 2.6
 
-# Elementy: app (dashboard | admin), path, highlight (selektor CSS z data-demo), pose Sentka,
-# side (po której stronie stoi Sentek), bubble (krótki dymek na ekranie), narration (lektor
-# i napisy), actions (tylko z listy w scripts/record_demo.mjs), end_card (plansza końcowa).
 scenes:
-  - id: powitanie
+  - id: pulpit
     start: 0
-    end: 7
-    app: dashboard
+    end: 12
     path: /
     pose: wave
     side: right
-    bubble: "Cześć, jestem Sentek!"
-    narration: "Cześć, jestem Sentek. Pokażę, jak Sentinel pilnuje sieci, a decyzje zostawia ludziom."
+    steps:
+      - {at: 0.5, do: highlight, sel: '[data-demo="kpis"]'}
+    subtitle: "Sentinel ASI to skaner discovery dla Centrum Bezpieczeństwa Informacji AGH. Ponad 10 000 adresów, cyklicznie i bezpiecznie."
+    tts: "Sentinel ASI to skaner discovery dla Centrum Bezpieczeństwa Informacji a-gie-ha. Ponad dziesięć tysięcy adresów, cyklicznie i bezpiecznie."
 
-  - id: przejrzystosc
-    start: 7
-    end: 16
-    app: dashboard
-    path: /mapa
-    highlight: '[data-demo="map"]'
+  - id: skan
+    start: 12
+    end: 28
+    path: /discovery
     pose: point_left
     side: right
-    bubble: "Każde urządzenie ma dział i właściciela"
-    narration: "Każde urządzenie ma dział i właściciela. Dwa widać w sieci, a nie ma ich w żadnym rejestrze. To może być shadow IT."
+    steps:
+      - {at: 0.3, do: upload, sel: '[data-demo="targets-file"]', file: demo/targets.csv}
+      - {at: 0.6, do: highlight, sel: '[data-demo="targets"]'}
+      - {at: 3.0, do: click, sel: '[data-demo="preview-btn"]'}
+      - {at: 3.6, do: highlight, sel: '[data-demo="preview"]'}
+      - {at: 7.0, do: click, sel: '[data-demo="start-run"]'}
+      - {at: 8.0, do: highlight, sel: '[data-demo="run-stats"]'}
+      - {at: 12.0, do: highlight, sel: '[data-demo="batches"]'}
+    subtitle: "Wczytujemy adresy, zakresy CIDR i domeny, ręcznie albo z pliku. System dzieli je na paczki o adaptacyjnym rozmiarze, skanuje równolegle i pilnuje tempa zapytań. Widać czas każdej paczki i prognozę zakończenia."
+    tts: "Wczytujemy adresy, zakresy sider i domeny, ręcznie albo z pliku. System dzieli je na paczki o adaptacyjnym rozmiarze, skanuje równolegle i pilnuje tempa zapytań. Widać czas każdej paczki i prognozę zakończenia."
 
-  - id: zero-day
-    start: 16
-    end: 25
-    app: dashboard
-    path: /
-    actions: [inject_kev]
-    highlight: '[data-demo="zero-day-banner"]'
-    pose: surprised
+  - id: karta-hosta
+    start: 28
+    end: 42
+    tts_length_scale: 0.83
+    path: "/discovery/{run3}"
+    pose: point_left
     side: right
-    bubble: "Nowa podatność z KEV!"
-    narration: "Katalog KEV dostaje nową, aktywnie wykorzystywaną podatność. Chwilę później menedżer widzi baner i wie, których serwerów dotyczy."
+    steps:
+      - {at: 0.3, do: click, sel: '[data-demo="host-open"]'}
+      - {at: 0.8, do: highlight, sel: '[data-demo="host-card"]'}
+      - {at: 4.0, do: highlight, sel: '[data-demo="http-card"]'}
+      - {at: 9.0, do: highlight, sel: '[data-demo="host-flags"]'}
+    subtitle: "Dla każdej usługi webowej pobieramy tytuł, kod odpowiedzi, nagłówki, ciasteczka, certyfikat i przekierowania. Rozpoznajemy CMS-y i technologie, oznaczamy panele administracyjne i środowiska testowe."
+    tts: "Dla każdej usługi webowej pobieramy tytuł, kod odpowiedzi, nagłówki, ciasteczka, certyfikat i przekierowania. Rozpoznajemy systemy CMS i technologie, oznaczamy panele administracyjne i środowiska testowe."
 
-  - id: raport
-    start: 25
-    end: 34
-    app: dashboard
-    path: /skrzynka
-    actions: [open_latest_report]
-    highlight: '[data-demo="report-summary"]'
-    pose: point_right
-    side: left
-    bubble: "Pięć pytań, prosty język"
-    narration: "Raport odpowiada prostym językiem na pięć pytań: co się stało, czy jesteśmy zagrożeni, kto i do kiedy. Tę samą treść dostaje mailem."
+  - id: porownanie
+    start: 42
+    end: 58
+    path: "/discovery/porownanie?older={run1}&newer={run2}"
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.5, do: highlight, sel: '[data-demo="diff-counts"]'}
+      - {at: 5.0, do: highlight, sel: '[data-demo="diff"]'}
+      - {at: 10.0, do: highlight, sel: '[data-demo="states"]'}
+    subtitle: "Najważniejsze są zmiany w czasie. Porównujemy dowolne dwa przebiegi: nowe, zmienione i znikające usługi. Host odpowiadający tylko czasem dostaje status niestabilny, a nieaktywny dopiero po 3 przebiegach bez odpowiedzi."
+    tts: "Najważniejsze są zmiany w czasie. Porównujemy dowolne dwa przebiegi: nowe, zmienione i znikające usługi. Host odpowiadający tylko czasem dostaje status niestabilny, a nieaktywny dopiero po trzech przebiegach bez odpowiedzi."
 
-  - id: bezpieczny-agent
-    start: 34
-    end: 44
-    app: admin
-    path: /agent
-    highlight: '[data-demo="agent-task"]'
-    then:
-      at: 5
-      highlight: '[data-demo="agent-leases"]'
-      bubble: "Certyfikat SSH na 15 minut"
-    pose: talk
-    side: left
-    bubble: "Plan, zgoda admina, skan"
-    narration: "Agent tylko planuje sprawdzenie. Skan rusza po zgodzie administratora, z certyfikatem SSH ważnym piętnaście minut, a każdy krok trafia do audytu."
+  - id: import-edycja
+    start: 58
+    end: 70
+    path: /discovery
+    pose: point_left
+    side: right
+    steps:
+      - {at: 0.3, do: upload, sel: '[data-demo="import-file"]', file: demo/import-wyniki.xml}
+      - {at: 1.0, do: highlight, sel: '[data-demo="hosts"]'}
+      - {at: 3.5, do: goto, path: "/discovery/{run2}"}
+      - {at: 4.0, do: click, sel: '[data-demo="host-open"]'}
+      - {at: 4.4, do: fill, sel: '[data-demo="edit-note"]', text: "Serwer zespołu e-learningu, właściciel potwierdzony"}
+      - {at: 5.0, do: highlight, sel: '[data-demo="host-editor"]'}
+      - {at: 6.0, do: click, sel: '[data-demo="save-edit"]'}
+      - {at: 7.5, do: goto, path: "/discovery/{run3}"}
+      - {at: 8.0, do: highlight, sel: '[data-demo="host-row"]'}
+      - {at: 10.0, do: highlight, sel: '[data-demo="export-buttons"]'}
+    subtitle: "Wyniki zaimportujesz z JSON, CSV i nmap XML, a wyeksportujesz do JSON i CSV. Ręczne poprawki są trwałe, kolejny skan ich nie nadpisuje."
+    tts: "Wyniki zaimportujesz z dżejsona, ce-es-fał i en-map iks-em-el, a wyeksportujesz do dżejsona i ce-es-fał. Ręczne poprawki są trwałe, kolejny skan ich nie nadpisuje."
 
-  - id: odpornosc
-    start: 44
-    end: 53
-    app: admin
-    path: /agent/test
-    highlight: '[data-demo="agent-tests"]'
+  - id: defectdojo
+    start: 70
+    end: 82
+    path: "/discovery/{run3}"
     pose: thumbs_up
-    side: left
-    bubble: "Model przejęty, ocena ryzyka bez zmian"
-    narration: "Testujemy też samo AI. Przejęty model próbuje zmienić ocenę ryzyka, ale ocenę liczy kod, więc zostaje bez zmian."
-
-  - id: koniec
-    start: 53
-    end: 60
-    app: dashboard
-    path: /
-    pose: wave
     side: right
-    end_card:
-      title: "Sentinel ASI"
-      line: "Lokalnie · bez GPU · KSC i RODO"
-    narration: "Sentinel działa lokalnie, bez GPU, z myślą o KSC i RODO. Dziękuję!"
+    steps:
+      - {at: 0.3, do: check, sel: '[data-demo="host-select"]', count: 2}
+      - {at: 1.5, do: click, sel: '[data-demo="dojo-export"]'}
+      - {at: 2.2, do: highlight, sel: '[data-demo="dojo-result"]'}
+      - {at: 5.5, do: defectdojo, path: /finding/open}
+    subtitle: "Wybrane obserwacje jednym kliknięciem trafiają do DefectDojo jako findingi informacyjne, z deduplikacją przy ponownym eksporcie."
+    tts: "Wybrane obserwacje jednym kliknięciem trafiają do Defekt Dodżo jako findingi informacyjne, z deduplikacją przy ponownym eksporcie."
 
-# Pogłębienia dla jury (20–30 s każde, nagrywane osobno, ten sam mechanizm scen).
-# `ready_after`: etap, po którym funkcja istnieje. Nie nagrywamy niczego, czego jeszcze nie ma.
-deep_dives:
-  - id: rbac
-    title: "RBAC i redakcja danych"
-    seconds: 25
-    ready_after: 6
-    show: "Menedżer otwiera /admin/: 403 i wpis access_denied w audycie; pseudonimy w konsoli"
-  - id: kill-switch
-    title: "Kill switch agenta"
-    seconds: 25
-    ready_after: 5
-    show: "Czerwony przycisk z powodem; karta skutków: baza, Keycloak, OpenBao, mcp-scanner"
-  - id: samouczek
-    title: "Samouczek i Sentek dla menedżera"
-    seconds: 20
-    ready_after: 6
-    show: "Samouczek 9 kroków, pytanie do Sentka i odmowa polecenia „wyłącz skaner”"
-  - id: zgodnosc
-    title: "Zgodność: KSC, RODO art. 32, ISO 27001"
-    seconds: 30
-    ready_after: 7
-    show: "Widok zgodności z linkiem do przepisu; treść wymagań z reguł, nie z modelu"
-  - id: artemis
-    title: "Widok z zewnątrz (Artemis) i zakres"
-    seconds: 25
-    ready_after: 8
-    show: "Wyniki Artemis z przypisaniem CERT Polska, ten sam scope_guard co skaner wewnętrzny"
+  - id: role
+    start: 82
+    end: 90
+    tts_length_scale: 0.76
+    path: /role
+    pose: thumbs_up
+    side: right
+    steps:
+      - {at: 0.3, do: highlight, sel: '[data-demo="roles-matrix"]'}
+    end_card_at: 4
+    end_card:
+      title: "Sentinel ASI · Attack Surface Intelligence"
+      lines:
+        - "Dedykowane dla CBI AGH · HackNation"
+        - "Skan >10 000 IP · Fingerprinting HTTP · Diffing zmian · DefectDojo · RBAC"
+    subtitle: "Cztery role z wymagań, pełny audyt i skaner, który nigdy nie wychodzi poza zatwierdzony zakres. Sentinel ASI dla CBI AGH."
+    tts: "Cztery role z wymagań, pełny audyt i skaner, który nigdy nie wychodzi poza zatwierdzony zakres. Sentinel ASI dla ce-be-i a-gie-ha."

@@ -2,19 +2,14 @@
 # Uruchamia demo: stos aplikacji + celowo podatny demo-lab, a potem pełną ścieżkę
 # (import inwentarza, feedy offline, skan, dopasowanie, ocena ryzyka, powiadomienia).
 #
-# Wymaga DEMO_MODE=true w pliku .env. Skrypt tego pliku nie zmienia: tryb demo włącza
-# świadomie człowiek. Zakres skanowania to wyłącznie izolowana sieć demo-lab.
+# Bez ręcznych ustawień: scripts/ensure_env.sh tworzy .env, włącza DEMO_MODE i generuje
+# brakujące hasła. Zakres skanowania to wyłącznie izolowana sieć demo-lab.
 set -euo pipefail
+# Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-if [ ! -f .env ]; then
-  echo "Brak pliku .env. Wykonaj: cp .env.example .env i ustaw POSTGRES_PASSWORD." >&2
-  exit 1
-fi
-if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
-  echo "seed_demo działa tylko przy DEMO_MODE=true w pliku .env (domyślnie false)." >&2
-  exit 1
-fi
+bash ./scripts/ensure_env.sh
 
 # Zakres: tylko demo-lab. Zgoda seed_demo na skany inwazyjne wygasa po 4 godzinach.
 export SCOPE_FILE=/app/rules/scope.demo.yaml
@@ -24,16 +19,9 @@ if [ -z "${DEMO_APPROVAL_EXPIRES_AT:-}" ]; then
 fi
 export DEMO_APPROVAL_EXPIRES_AT
 
-for secret in AGENT_CLIENT_SECRET KILLSWITCH_CLIENT_SECRET; do
-  if ! grep -Eq "^${secret}=.+" .env; then
-    echo "Brak ${secret} w .env (konta usługowe agenta i kill switcha). Wygeneruj: openssl rand -hex 32" >&2
-    exit 1
-  fi
-done
-
 mkdir -p data/feeds
 echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"
-./scripts/fetch_nuclei.sh || \
+bash ./scripts/fetch_nuclei.sh || \
   echo "nuclei niedostępny: narzędzie verify_cve agenta zwróci błąd, reszta demo działa."
 echo "==> Start stosu z profilem demo (zgoda seed_demo do ${DEMO_APPROVAL_EXPIRES_AT})"
 docker compose --profile demo up -d --build
@@ -47,8 +35,8 @@ docker compose exec -T worker-scans python -m app.cli seed-demo
 echo "==> Agent: zdolności dla demo-lab (L0-L2); działają po zaliczonym teście agenta"
 docker compose exec -T worker-agent python -m app.cli agent-bootstrap
 
-echo "==> Konta demo w Keycloaku (admin z TOTP, menedżer, audytor)"
-./scripts/demo_users.sh
+echo "==> Konta demo w Keycloaku (admin, editor, modifier, viewer; każde z TOTP)"
+bash ./scripts/demo_users.sh
 
 # Domyślny model to Qwen3 4B (LLM_MODEL=qwen3-4b-q4km w .env.example, wybór: eval/RESULTS.md).
 LLM_MODEL_NAME=$(grep -E '^LLM_MODEL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
@@ -65,7 +53,6 @@ PUBLIC_URL_VALUE=$(grep -E '^PUBLIC_URL=' .env | tail -n1 | cut -d= -f2- | tr -d
 PUBLIC_URL_VALUE=${PUBLIC_URL_VALUE:-http://localhost:8080}
 echo
 echo "Gotowe."
-echo "  Dashboard menedżera:  ${PUBLIC_URL_VALUE}/dashboard/"
-echo "  Konsola operacyjna:   ${PUBLIC_URL_VALUE}/admin/"
+echo "  Konsola zespołu IT:   ${PUBLIC_URL_VALUE}/admin/"
 echo "  Hasła i sekret TOTP kont demo: data/demo-credentials.env"
 echo "Uwaga: zwykłe 'docker compose up' przywraca pusty zakres skanowania."

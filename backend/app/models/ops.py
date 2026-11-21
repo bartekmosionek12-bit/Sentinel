@@ -6,7 +6,15 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAt, UuidPk, utcnow
@@ -21,6 +29,7 @@ SCAN_ACTION_STATUSES = (
     "failed",
 )
 AUDIENCES = ("technical", "operational", "executive")
+
 SCAN_REQUEST_SCOPES = ("organization", "unit", "device")
 SCAN_REQUEST_STATUSES = ("pending", "approved", "rejected", "done", "failed")
 
@@ -34,6 +43,26 @@ class ScanRun(Base):
     summary: Mapped[dict[str, Any]] = mapped_column(default=dict)
     started_at: Mapped[datetime] = mapped_column(default=utcnow)
     finished_at: Mapped[datetime | None]
+
+
+class ScanTarget(Base):
+    __tablename__ = "scan_target"
+
+    id: Mapped[UuidPk]
+    target: Mapped[str] = mapped_column(String(255), unique=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[CreatedAt]
+
+
+class ScanResultOverride(Base):
+    __tablename__ = "scan_result_override"
+    __table_args__ = (UniqueConstraint("host", "field", name="uq_scan_override_host_field"),)
+
+    id: Mapped[UuidPk]
+    host: Mapped[str] = mapped_column(String(255), index=True)
+    field: Mapped[str] = mapped_column(String(32))
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
 
 class ScanAction(Base):

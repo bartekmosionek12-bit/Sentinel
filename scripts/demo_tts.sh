@@ -37,21 +37,25 @@ fi
 echo "Głos: $VOICE, sha256: $(sha256sum "$MODELS/$VOICE.onnx" | cut -d' ' -f1)"
 grep -E "License|Finetuned" "$MODELS/MODEL_CARD" || true
 
-"$PYTHON" scripts/demo_script.py lines | while IFS=$'\t' read -r id text; do
-  printf '%s\n' "$text" | "$VENV/bin/piper" --model "$MODELS/$VOICE.onnx" --length-scale "$LENGTH_SCALE" --output_file "$OUT/$id.wav" >/dev/null
+# Scena może mieć własne tempo (tts_length_scale w demo/script.yaml), gdy tekst jest długi.
+"$PYTHON" scripts/demo_script.py lines | while IFS=$'\t' read -r id text scale; do
+  printf '%s\n' "$text" | "$VENV/bin/piper" --model "$MODELS/$VOICE.onnx" --length-scale "${scale:-$LENGTH_SCALE}" --output_file "$OUT/$id.wav" >/dev/null
 done
 
-# Lektor sceny nie może być dłuższy niż scena.
+# Lektor sceny (z oddechem 0,3 s na początku i 0,3 s na końcu) nie może być dłuższy niż
+# scena. Długości trafiają do durations.json: z nich demo_script.py rozkłada napisy.
 "$PYTHON" - <<'PY'
 import json, subprocess, sys, wave
 script = json.loads(subprocess.check_output([sys.executable, "scripts/demo_script.py", "json"]))
-bad = 0
+bad, durations = 0, {}
 for scene in script["scenes"]:
     with wave.open(f"demo/out/audio/{scene['id']}.wav") as audio:
         seconds = audio.getnframes() / audio.getframerate()
-    limit = scene["end"] - scene["start"]
+    durations[scene["id"]] = round(seconds, 2)
+    limit = scene["end"] - scene["start"] - 0.6
     mark = "OK" if seconds <= limit else "ZA DŁUGO"
     bad += seconds > limit
-    print(f"{scene['id']:<18} {seconds:5.1f} s / {limit} s  {mark}")
+    print(f"{scene['id']:<18} {seconds:5.1f} s / {limit:.1f} s  {mark}")
+json.dump(durations, open("demo/out/audio/durations.json", "w"))
 sys.exit(1 if bad else 0)
 PY

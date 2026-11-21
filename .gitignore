@@ -63,3 +63,6 @@ frontend/playwright-report/
 demo/out/
 demo/.venv-tts/
 demo/.models/
+
+# zamiennik docker dla Git Bash (tworzy start.sh)
+.bin/

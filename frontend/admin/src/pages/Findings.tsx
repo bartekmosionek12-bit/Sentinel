@@ -152,7 +152,7 @@ function Detail({ id }: { id: string }) {
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="text-base">{vuln?.cve_id ?? data.type}</CardTitle>
+          <CardTitle className="text-base tracking-normal text-foreground normal-case">{vuln?.cve_id ?? data.type}</CardTitle>
           <RiskBadge level={data.risk_level} score={data.risk_score} />
           {vuln?.in_kev && <KevBadge />}
           {data.type === "signal" && (

@@ -1,0 +1,10 @@
+# Narzędzia do nagrania filmu demo (moduł 22): Playwright z Chromium, ffmpeg (z libass do
+# wypalania napisów), Python z PyYAML i lektor Piper. Dzięki temu na komputerze wystarczy
+# Docker (plus bash, curl i python3 do przygotowania stanu przez API).
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg python3-yaml python3-venv socat fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /work
+COPY demo/tools-entry.sh /usr/local/bin/tools-entry
+ENTRYPOINT ["/usr/local/bin/tools-entry"]

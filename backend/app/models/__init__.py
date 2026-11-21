@@ -11,14 +11,15 @@ from app.models.agent import (
     CredentialLease,
 )
 from app.models.base import Base
-from app.models.finding import (
-    ComplianceResult,
-    ComplianceRule,
-    Finding,
-    FindingEvent,
-    UpdateRecommendation,
+from app.models.discovery import (
+    DefectDojoExport,
+    DiscoveryBatch,
+    DiscoveryRun,
+    Observation,
+    ObservationOverride,
 )
-from app.models.iam import Permission, Role, RolePermission, User
+from app.models.finding import Finding, FindingEvent, UpdateRecommendation
+from app.models.iam import CustomRole, Permission, Role, RoleGrant, RolePermission, User
 from app.models.inventory import (
     Asset,
     AssetHistory,
@@ -28,6 +29,7 @@ from app.models.inventory import (
     SignalMatch,
     Software,
 )
+from app.models.network import AssetSource, NetworkSegment
 from app.models.ops import (
     AuditLog,
     FeedSync,
@@ -35,16 +37,9 @@ from app.models.ops import (
     Notification,
     ScanAction,
     ScanRequest,
+    ScanResultOverride,
     ScanRun,
-)
-from app.models.organization import (
-    AssetAssignment,
-    AssetSource,
-    CoverageSnapshot,
-    Location,
-    NetworkSegment,
-    OrgUnit,
-    Person,
+    ScanTarget,
 )
 from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
@@ -58,36 +53,38 @@ __all__ = [
     "AgentTestCaseResult",
     "AgentTestRun",
     "Asset",
-    "AssetAssignment",
     "AssetHistory",
     "AssetRelation",
     "AssetSource",
     "AuditLog",
     "Base",
-    "ComplianceResult",
-    "ComplianceRule",
-    "CoverageSnapshot",
     "CpeProduct",
     "CredentialLease",
+    "CustomRole",
+    "DefectDojoExport",
+    "DiscoveryBatch",
+    "DiscoveryRun",
     "FeedSync",
     "Finding",
     "FindingEvent",
     "LLMCache",
-    "Location",
     "MatchCandidate",
     "NetworkSegment",
     "Notification",
-    "OrgUnit",
+    "Observation",
+    "ObservationOverride",
     "Permission",
-    "Person",
     "Report",
     "ReportDelivery",
     "ReportRead",
     "Role",
+    "RoleGrant",
     "RolePermission",
     "ScanAction",
     "ScanRequest",
+    "ScanResultOverride",
     "ScanRun",
+    "ScanTarget",
     "SignalMatch",
     "Software",
     "UpdateRecommendation",

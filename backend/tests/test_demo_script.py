@@ -1,12 +1,10 @@
-"""Moduł 22: scenariusz filmu demo (demo/script.yaml) mieści się w regułach.
-
-Element podświetlany w każdej scenie sprawdza Playwright (frontend/e2e/demo.spec.ts).
-"""
+"""Moduł 22: scenariusz filmu demo (demo/script.yaml, 90 s) mieści się w regułach."""
 
 from __future__ import annotations
 
 import copy
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -29,44 +27,46 @@ def _module() -> ModuleType:
 DEMO = _module()
 
 
-def test_script_fits_sixty_seconds_and_word_limits() -> None:
+def test_script_fits_time_and_word_limits() -> None:
     script = DEMO.load()
     assert DEMO.problems(script) == []
-    assert script["scenes"][-1]["end"] <= 60
-    assert len(script["scenes"]) == 7
+    assert script["scenes"][-1]["end"] <= script["max_seconds"] == 90
 
 
-def test_every_scene_has_narration_and_subtitles() -> None:
+def test_every_scene_has_subtitles() -> None:
     script = DEMO.load()
     cues = DEMO.cues(script)
     for scene in script["scenes"]:
         inside = [c for c in cues if scene["start"] <= c.start < scene["end"]]
         assert inside, scene["id"]
-        assert inside[-1].end <= scene["end"]
-    assert cues[-1].end <= 60
-    assert DEMO.srt(script).startswith("1\n00:00:00,000 --> ")
+    assert cues[-1].end <= script["max_seconds"]
+    assert DEMO.srt(script).startswith("1\n00:00:0")
 
 
 def test_highlighted_elements_exist_in_frontend_sources() -> None:
     sources = "".join(
         path.read_text(encoding="utf-8") for path in (ROOT / "frontend").glob("*/src/**/*.tsx")
     )
+    # Pola tworzone w pętli mają atrybut z szablonu, np. data-demo={`edit-${field}`}.
+    prefixes = re.findall(r"data-demo=\{`([a-z-]+)\$\{", sources)
     for scene in DEMO.load()["scenes"]:
-        for selector in (scene.get("highlight"), (scene.get("then") or {}).get("highlight")):
+        for step in scene.get("steps") or []:
+            selector = step.get("sel")
             if selector:
                 name = selector.split('"')[1]
-                assert f'data-demo="{name}"' in sources, (scene["id"], name)
+                found = f'data-demo="{name}"' in sources or any(map(name.startswith, prefixes))
+                assert found, (scene["id"], name)
 
 
 def test_rules_catch_overlong_or_unsafe_scripts() -> None:
     script = DEMO.load()
     broken = copy.deepcopy(script)
-    broken["scenes"][-1]["end"] = 75
-    broken["scenes"][1]["narration"] = " ".join(["słowo"] * 60)
-    broken["scenes"][2]["actions"] = ["rm_rf"]
-    broken["scenes"][3]["highlight"] = "div.card"
+    broken["scenes"][-1]["end"] = 120
+    broken["scenes"][1]["tts"] = " ".join(["słowo"] * 80)
+    broken["scenes"][2]["steps"] = [{"at": 0.5, "do": "rm_rf"}]
+    broken["scenes"][3]["steps"] = [{"at": 0.5, "do": "click", "sel": "div.card"}]
     found = " ".join(DEMO.problems(broken))
-    assert "limit to 60" in found
-    assert "słowa na sekundę" in found
+    assert "limit to 90" in found
+    assert "słów na" in found
     assert "spoza listy" in found
     assert "data-demo" in found

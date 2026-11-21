@@ -1,10 +1,12 @@
 /** Wspólne elementy stron obu konsol. */
 
+/** Tytuł strony; opis jest w podpowiedzi (title), bez tłumaczeń nad każdym widokiem. */
 export function PageHeader({ title, description }: { title: string; description: string }) {
   return (
-    <div className="mb-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p>
+    <div className="mb-3">
+      <h1 className="text-lg font-semibold" title={description}>
+        {title}
+      </h1>
     </div>
   );
 }

@@ -4,9 +4,18 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@shared/components/page";
 import { KevBadge, RiskBadge } from "@shared/components/risk";
 import { Badge } from "@shared/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@shared/components/ui/card";
 import { api, type RiskLevel } from "@shared/lib/api";
 import { formatDateTime } from "@shared/lib/utils";
+
+import { HOST_STATE } from "@/labels";
+import { RunsTable } from "@/pages/Discovery";
 
 const LEVELS: RiskLevel[] = ["krytyczny", "wysoki", "średni", "niski"];
 
@@ -23,11 +32,11 @@ function Stat({
 }) {
   return (
     <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
+      <CardContent className="pb-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-3xl font-semibold tabular-nums">{value}</p>
-      </CardHeader>
-      <CardContent>
+      </CardContent>
+      <CardContent className="pt-1">
         <p className="text-xs text-muted-foreground">{hint}</p>
         {to && (
           <Link className="mt-2 inline-block text-xs text-primary underline" to={to}>
@@ -36,6 +45,166 @@ function Stat({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function BigNumber({
+  label,
+  value,
+  hint,
+  to,
+  demo,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  to: string;
+  demo?: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="block border border-border bg-card px-3 py-2.5 text-center hover:border-primary"
+      data-demo={demo}
+    >
+      <p className="text-left text-sm font-semibold">{label}</p>
+      <p className="mt-2 text-5xl font-bold text-primary tabular-nums">{value}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+    </Link>
+  );
+}
+
+/** Discovery na górze pulpitu: najważniejsze liczby, zmiany od ostatniego skanu, ostatnie przebiegi. */
+function DiscoveryOverview() {
+  const runs = useQuery({
+    queryKey: ["discovery-runs"],
+    queryFn: api.discoveryRuns,
+    refetchInterval: 5000,
+  });
+  const done = (runs.data ?? []).filter((r) => r.status === "done");
+  const [latest, previous] = done;
+  const hosts = useQuery({
+    queryKey: ["discovery-hosts", latest?.id],
+    queryFn: () => api.discoveryHosts(latest?.id ?? ""),
+    enabled: Boolean(latest),
+  });
+  const diff = useQuery({
+    queryKey: ["compare", previous?.id, latest?.id],
+    queryFn: () => api.compareRuns(previous?.id ?? "", latest?.id ?? ""),
+    enabled: Boolean(latest && previous),
+  });
+  const states = useQuery({ queryKey: ["host-states"], queryFn: api.hostStates });
+  const dojo = useQuery({ queryKey: ["dojo-status"], queryFn: api.dojoStatus });
+  const list = hosts.data ?? [];
+  const services = list.reduce((sum, h) => sum + h.services.length, 0);
+  const panels = list.filter((h) => h.flags.some((f) => f.kind === "panel"));
+  const staging = list.filter((h) => h.flags.some((f) => f.kind === "staging"));
+  const d = diff.data?.counts;
+  const unstable = Object.entries(states.data?.hosts ?? {}).filter(
+    ([, v]) => v.state === "unstable",
+  );
+  const unstableLabel = HOST_STATE.unstable?.label ?? "Niestabilny";
+
+  return (
+    <section className="mb-8" aria-label="Discovery">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-demo="kpis">
+        <BigNumber
+          label="Aktywne hosty"
+          value={latest ? String(latest.hosts_up) : "–"}
+          hint={
+            latest
+              ? `z ${latest.addresses_total.toLocaleString("pl-PL")} adresów w ostatnim przebiegu`
+              : "Uruchom pierwszy przebieg discovery"
+          }
+          to={latest ? `/discovery/${latest.id}` : "/discovery"}
+        />
+        <BigNumber
+          label="Otwarte usługi"
+          value={latest ? String(services) : "–"}
+          hint={`Panele administracyjne: ${panels.length}, staging: ${staging.length}`}
+          to={latest ? `/discovery/${latest.id}` : "/discovery"}
+        />
+        <BigNumber
+          label="Zmiany od ostatniego skanu"
+          value={
+            d ? String((d.new_hosts ?? 0) + (d.gone_hosts ?? 0) + (d.changed_hosts ?? 0)) : "–"
+          }
+          hint={
+            d
+              ? `Nowe hosty: ${d.new_hosts}, znikające: ${d.gone_hosts}, zmienione: ${d.changed_hosts}`
+              : "Potrzebne są dwa przebiegi"
+          }
+          to="/discovery/porownanie"
+        />
+        <BigNumber
+          label={`Hosty: ${unstableLabel.toLowerCase()}`}
+          value={states.data ? String(states.data.counts.unstable ?? 0) : "–"}
+          hint={`Nieaktywne: ${states.data?.counts.inactive ?? 0}, niepotwierdzone: ${states.data?.counts.unconfirmed ?? 0}`}
+          to="/discovery/porownanie"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Ostatnie przebiegi discovery</CardTitle>
+            <CardDescription>Czas trwania, postęp i prognoza zakończenia.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {runs.data && runs.data.length > 0 ? (
+              <RunsTable runs={runs.data.slice(0, 5)} compact />
+            ) : (
+              <p className="text-sm text-muted-foreground">Nie było jeszcze żadnego przebiegu.</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Wymaga uwagi</CardTitle>
+            <CardDescription>Nowe panele, staging i hosty niestabilne.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <ul className="space-y-2">
+              {[...panels, ...staging]
+                .filter((h, i, all) => all.findIndex((x) => x.ip === h.ip) === i)
+                .slice(0, 6)
+                .map((h) => (
+                  <li key={h.ip} className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono">{h.ip}</span>
+                    {h.flags
+                      .filter((f) => f.kind === "panel" || f.kind === "staging")
+                      .map((f) => (
+                        <Badge key={f.kind} variant={f.kind === "panel" ? "danger" : "warn"}>
+                          {f.label}
+                        </Badge>
+                      ))}
+                  </li>
+                ))}
+              {unstable.slice(0, 4).map(([ip]) => (
+                <li key={`u${ip}`} className="flex items-center gap-2">
+                  <span className="font-mono">{ip}</span>
+                  <Badge variant="warn">{unstableLabel}</Badge>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-border pt-3" data-demo="dojo-status">
+              <Badge variant={dojo.data?.ok ? "ok" : "warn"}>
+                DefectDojo:{" "}
+                {dojo.data ? (dojo.data.ok ? "połączono" : dojo.data.detail) : "sprawdzanie"}
+              </Badge>
+              {dojo.data && (
+                <p className="mt-1 text-muted-foreground">
+                  Wysłane obserwacje: {dojo.data.exported}
+                  {dojo.data.last_export
+                    ? `, ostatnio ${formatDateTime(dojo.data.last_export)}`
+                    : ""}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </section>
   );
 }
 
@@ -59,6 +228,7 @@ export function Dashboard() {
     queryFn: api.auditChain,
   });
   const scope = useQuery({ queryKey: ["scope"], queryFn: api.scope });
+  const sprint = useQuery({queryKey: ["sprint-dashboard"], queryFn: api.sprintDashboard, refetchInterval: 15_000});
 
   const s = stats.data;
   const scopeSize = scope.data
@@ -71,8 +241,9 @@ export function Dashboard() {
     <>
       <PageHeader
         title="Pulpit"
-        description="Co wymaga uwagi teraz: zagrożenia od najwyższego ryzyka, decyzje czekające na człowieka i ostatnie powiadomienia."
+        description="Najważniejsze liczby z discovery, zmiany od ostatniego skanu i to, co wymaga uwagi."
       />
+      <DiscoveryOverview />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="Aktywne zagrożenia"
@@ -111,6 +282,19 @@ export function Dashboard() {
           to={s && s.awaiting_approval > 0 ? "/skany" : "/weryfikacja"}
         />
       </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Zmiany od ostatniego skanu" value={String(sprint.data?.change_count ?? "–")} hint="Nowe, znikające i zmienione obserwacje" to="/skany" />
+        <Stat label="Panele administracyjne i staging" value={sprint.data ? `${sprint.data.new_admin_panels} / ${sprint.data.staging}` : "–"} hint="Flagi z ostatniego skanu" to="/skany" />
+        <Stat label="Hosty niestabilne" value={String(sprint.data?.unstable_hosts ?? "–")} hint="Przeplatane odpowiedzi w ostatnich przebiegach" to="/zasoby" />
+        <Stat label="DefectDojo" value={sprint.data?.defectdojo ?? "–"} hint="Lokalny profil Docker Compose" to="/skany" />
+      </div>
+
+      <Card className="mt-6"><CardHeader><CardTitle>Ostatnie skany i zmiany</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">
+        {sprint.data?.recent_runs.map((run) => <p key={run.id}>{formatDateTime(run.started_at)} · {run.status} · czas {run.duration_seconds ?? "w toku"} s · ETA {run.eta_seconds ?? "?"} s</p>)}
+        {sprint.data?.changes.slice(0, 5).map((change, index) => <p key={index}>{change.kind}: {change.host} {change.item}</p>)}
+        {sprint.data?.flags.slice(0, 5).map((flag, index) => <p key={index}>{flag.kind}: {flag.host} · dowody {flag.confidence}</p>)}
+      </CardContent></Card>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card>

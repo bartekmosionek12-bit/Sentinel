@@ -1,0 +1,93 @@
+# DefectDojo uruchamiany lokalnie obok Sentinel ASI (BLOK E, brief: „testowa instancja DefectDojo”).
+# Nakładka na główny plik, żeby DefectDojo było w tej samej sieci `core` co API:
+#   docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml --profile defectdojo up -d
+#   scripts/defectdojo_token.sh        # wpisuje DEFECTDOJO_TOKEN do .env, potem restart api
+# Interfejs DefectDojo: http://localhost:8081 (login z DD_ADMIN_USER / DD_ADMIN_PASSWORD).
+# Obrazy pobieramy z Docker Hub (docker.io), nie z registry.defectdojo.com, które loguje adres IP
+# pobierającego. Wersja przypięta; sekrety tylko w .env (wzór w .env.example).
+x-dd-image: &dd-image "docker.io/defectdojo/defectdojo-django:${DD_VERSION:-3.5.201}"
+x-dd-env: &dd-env
+  DD_DATABASE_URL: "postgresql://defectdojo:${DD_DATABASE_PASSWORD:?Ustaw DD_DATABASE_PASSWORD w .env}@dd-postgres:5432/defectdojo"
+  DD_CELERY_BROKER_URL: redis://dd-valkey:6379/0
+  DD_CACHE_URL: redis://dd-valkey:6379/1
+  DD_SECRET_KEY: "${DD_SECRET_KEY:?Ustaw DD_SECRET_KEY w .env}"
+  DD_CREDENTIAL_AES_256_KEY: "${DD_CREDENTIAL_AES_256_KEY:?Ustaw DD_CREDENTIAL_AES_256_KEY w .env}"
+  DD_DATABASE_READINESS_TIMEOUT: "60"
+  DD_ALLOWED_HOSTS: "*"
+  DD_DEBUG: "False"
+
+services:
+  dd-postgres:
+    image: postgres:16-alpine
+    profiles: ["defectdojo"]
+    environment:
+      POSTGRES_DB: defectdojo
+      POSTGRES_USER: defectdojo
+      POSTGRES_PASSWORD: "${DD_DATABASE_PASSWORD:?Ustaw DD_DATABASE_PASSWORD w .env}"
+    volumes:
+      - dd-postgres:/var/lib/postgresql/data
+    networks: [defectdojo]
+
+  dd-valkey:
+    image: valkey/valkey:8.0.2-alpine
+    profiles: ["defectdojo"]
+    networks: [defectdojo]
+
+  dd-initializer:
+    image: *dd-image
+    profiles: ["defectdojo"]
+    depends_on: [dd-postgres]
+    entrypoint: ["/wait-for-it.sh", "dd-postgres:5432", "-t", "60", "--", "/entrypoint-initializer.sh"]
+    environment:
+      <<: *dd-env
+      DD_ADMIN_USER: "${DD_ADMIN_USER:-admin}"
+      DD_ADMIN_MAIL: admin@defectdojo.local
+      DD_ADMIN_PASSWORD: "${DD_ADMIN_PASSWORD:?Ustaw DD_ADMIN_PASSWORD w .env}"
+      DD_INITIALIZE: "true"
+    networks: [defectdojo]
+
+  dd-uwsgi:
+    image: *dd-image
+    profiles: ["defectdojo"]
+    depends_on:
+      dd-initializer: {condition: service_completed_successfully}
+      dd-valkey: {condition: service_started}
+    entrypoint: ["/wait-for-it.sh", "dd-postgres:5432", "-t", "60", "--", "/entrypoint-uwsgi.sh"]
+    environment: *dd-env
+    volumes:
+      - dd-media:/app/media
+    networks: [defectdojo]
+
+  dd-celeryworker:
+    image: *dd-image
+    profiles: ["defectdojo"]
+    depends_on:
+      dd-initializer: {condition: service_completed_successfully}
+      dd-valkey: {condition: service_started}
+    entrypoint: ["/wait-for-it.sh", "dd-postgres:5432", "-t", "60", "--", "/entrypoint-celery-worker.sh"]
+    environment: *dd-env
+    volumes:
+      - dd-media:/app/media
+    networks: [defectdojo]
+
+  dd-nginx:
+    image: "docker.io/defectdojo/defectdojo-nginx:${DD_VERSION:-3.5.201}"
+    profiles: ["defectdojo"]
+    depends_on: [dd-uwsgi]
+    environment:
+      NGINX_METRICS_ENABLED: "false"
+      DD_UWSGI_HOST: dd-uwsgi
+      DD_UWSGI_PORT: "3031"
+    volumes:
+      - dd-media:/usr/share/nginx/html/media
+    ports:
+      - "127.0.0.1:8081:8080"
+    # `core`: API Sentinela woła http://dd-nginx:8080 (DEFECTDOJO_URL w .env).
+    networks: [defectdojo, core]
+
+networks:
+  defectdojo:
+
+volumes:
+  dd-postgres:
+  dd-media:

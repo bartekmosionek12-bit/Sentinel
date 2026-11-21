@@ -1,17 +1,17 @@
 # Sentinel ASI: architektura
 
-Status: **wersja 2, do akceptacji (Etap 3b)**. Wersja 1 zaakceptowana 2026-11-16 (Etap 0).
-Data: 2026-11-20. Kontekst: HackNation, zadanie „Attack Surface Intelligence” (AGH).
+Status: **wersja 3 (zmiana kierunku), do akceptacji (Etap P0)**. Data: 2026-11-21.
+Kontekst: HackNation, zadanie „Attack Surface Intelligence” Centrum Bezpieczeństwa Informacji
+AGH.
 
-Ta wersja dostosowuje architekturę do pełnej specyfikacji z 2026-11-20 (role i dwie konsole,
-agent AI z serwerem MCP, poświadczenia just-in-time, compliance prawny, testy bezpieczeństwa
-systemów AI, raporty dla menedżera, prywatność danych pracowników). Co się zmieniło względem
-wersji 1 i jaki ma to wpływ na istniejący kod, opisuje
-[sekcja 21](#21-zmiany-względem-poprzedniej-wersji). Sprzeczności w specyfikacji i rzeczy,
-których nie da się zrobić w budżecie sprzętowym, są w [sekcji 20](#20-sprzeczności-ograniczenia-i-pytania).
+Od 21.11.2026 nadrzędnym dokumentem jest oficjalny brief ([BRIEF.md](BRIEF.md)). **Sekcja 0**
+opisuje zmianę kierunku i docelową architekturę. Sekcje 1–26 opisują stan sprzed zmiany: to,
+co z nich zostaje, jest wymienione w sekcji 0.3, a reszta jest nieaktualna i zniknie z tego
+pliku razem z kodem w Etapie P1. Macierz zgodności z briefem: [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ## Spis treści
 
+0. [Zmiana kierunku (brief AGH)](#0-zmiana-kierunku-brief-agh)
 1. [Założenia i zakres](#1-założenia-i-zakres)
 2. [Widok komponentów](#2-widok-komponentów)
 3. [Izolacja sieci, scope_guard i poziomy inwazyjności](#3-izolacja-sieci-scope_guard-i-poziomy-inwazyjności)
@@ -25,7 +25,7 @@ których nie da się zrobić w budżecie sprzętowym, są w [sekcji 20](#20-sprz
 11. [Compliance techniczny i prawny](#11-compliance-techniczny-i-prawny)
 12. [AI Explainer, czat i raporty](#12-ai-explainer-czat-i-raporty)
 13. [AI Security (promptfoo)](#13-ai-security-promptfoo)
-14. [Dwie konsole](#14-dwie-konsole)
+14. [Konsola zespołu IT](#14-konsola-zespołu-it)
 15. [Prywatność danych pracowników](#15-prywatność-danych-pracowników)
 16. [Budżet zasobów (CPU-only, 16 GB)](#16-budżet-zasobów-cpu-only-16-gb)
 17. [Decyzje projektowe z uzasadnieniem](#17-decyzje-projektowe-z-uzasadnieniem)
@@ -36,8 +36,178 @@ których nie da się zrobić w budżecie sprzętowym, są w [sekcji 20](#20-sprz
 22. [Ustalenia](#22-ustalenia)
 23. [Moduł 19: test bezpieczeństwa agenta](#23-moduł-19-test-bezpieczeństwa-agenta)
 24. [Moduł 20: widok z zewnątrz (Artemis, CERT Polska) i korelacja outside-in / inside-out](#24-moduł-20-widok-z-zewnątrz-artemis-cert-polska-i-korelacja-outside-in--inside-out)
-25. [Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)](#25-moduł-21-raport-aktualny-obraz-i-asystent-menedżera-sentek)
+25. [Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)](#25-moduł-21-raport-aktualny-obraz-i-asystent-menedżera-sentek) (historyczne, P1)
 26. [Moduł 22: film demo 60 s z Sentkiem](#26-moduł-22-film-demo-60-s-z-sentkiem)
+
+---
+
+## 0. Zmiana kierunku (brief AGH)
+
+### 0.1 Dlaczego
+
+Dotychczasowa specyfikacja była szeroka (konsola menedżera, compliance prawny, widok z
+zewnątrz, film demo). Oficjalny brief jest węższy i techniczny: **skaner discovery dużej
+infrastruktury (> 10 000 adresów IP)** dla zespołu bezpieczeństwa, z fingerprintingiem
+HTTP/HTTPS, wykrywaniem technologii, własnymi sygnaturami, porównaniem przebiegów, obsługą
+niestabilnych hostów, czterema rolami, szyfrowaniem w spoczynku i integracją z DefectDojo.
+Funkcje spoza briefu nie dają punktów, a rozwiązanie ma być wdrożone w CBI AGH, więc
+projektujemy pod realne użycie przez zespół bezpieczeństwa.
+
+Zasada nadrzędna zostaje bez zmian: **decyzje podejmuje deterministyczny kod**; model językowy
+tylko proponuje plan (agent) albo mówi do człowieka (Sentek, wyjaśnienia), a człowiek
+zatwierdza. Każde aktywne działanie sieciowe przechodzi przez `scope_guard`.
+
+### 0.2 Co usuwamy (kod, migracje, testy, CI, dokumentacja, issues)
+
+| Obszar | Co dokładnie | Co przenosimy do konsoli zespołu IT |
+|---|---|---|
+| Konsola menedżera (`frontend/dashboard`) i rola `manager` | strona główna menedżera, skrzynka, „Aktualny obraz”, prośby o skan, samouczek menedżera, raporty „W skrócie” dla zarządu | komponenty tabel, karta hosta (historia, usługi), wykresy, mapa jako widok sieci i segmentów |
+| Dane pracowników | `Person`, `AssetAssignment`, atrapy AD i MDM, pseudonimizacja, retencja, `PRIVACY.md` | nic (zostaje ogólna redakcja sekretów) |
+| Organizacja z działami | `OrgUnit`, `Location`, metryka pokrycia z działami | `NetworkSegment` jako grupowanie sieci, jeśli się przyda w P3 |
+| Widok z zewnątrz (moduł 20) | Artemis, moje.cert.pl, korelacja outside-in (§24, #26) | nic |
+| Compliance prawny | KSC, RODO, KRI, ISO, NIST, AI Act, kwestionariusz, oś terminów, rejestr ryzyk governance (§11, `ComplianceRule`, `ComplianceResult`) | nic |
+| Film demo (moduł 22) | `demo/script.yaml`, tryb `?demo=record`, Piper, ffmpeg, `DemoStage` | postać Sentka (dla asystenta) |
+| Discovery systemów AI (moduł 12B) | ogólne szukanie systemów AI w infrastrukturze | zastępuje go test wskazanego endpointu (D10, P11) |
+
+### 0.3 Co zostawiamy i wykorzystujemy
+
+| Element | Rola w nowym kierunku | Kryterium |
+|---|---|---|
+| `scope_guard`, poziomy L1–L3, limity, audit log z łańcuchem skrótów (§3) | brama dla każdego pakietu skanera, dowód ostrożności | K4 |
+| Keycloak, MFA, RBAC deny-by-default, test rola × endpoint (§4) | cztery role z briefu, edytor ról | K6 |
+| OpenBao (§6) | klucze do szyfrowania pól (Transit) i poświadczenia JIT agenta | K6 |
+| Serwer MCP, agent z planem i zatwierdzeniem, kill switch, test bezpieczeństwa agenta (§5, §23) | agent jako współpracownik zespołu: proponuje, wykonuje po zgodzie, raportuje (§0.10); test endpointu (D10) | K4 |
+| Adapter nmap, parser nmap XML, inwentarz z historią (§8) | rdzeń discovery do przebudowy na paczki i równoległość | K1 |
+| Import CSV, matching CVE, scoring, feedy offline (§9, §10) | wzbogacenie obserwacji (np. „stary komponent”), nie rdzeń | K5 |
+| Konsola operacyjna (`frontend/admin`) | **jedyna konsola**, dla zespołu IT/bezpieczeństwa | K4 |
+| AI Explainer, promptfoo, eval | wyjaśnienia obserwacji, testy AI w CI | K2 |
+
+**Zamrażamy** (działa, nie rozwijamy): dopasowanie CVE i feedy, raporty dwuwarstwowe (posłużą
+za szkielet raportów ze skanów w P10), powiadomienia, migracja pipeline'u na MCP (#27).
+
+### 0.4 Co budujemy
+
+Moduły D1–D10 (opis w poleceniu P0, plan w [ROADMAP.md](ROADMAP.md)):
+
+| Moduł | Treść | Etap |
+|---|---|---|
+| D1 | Wejście danych: cele z formularza i plików CSV/JSON jedną ścieżką, import wyników, eksport, **warstwa nadpisań użytkownika** | P2 |
+| D2 | Silnik discovery na skalę: paczki, równoległość, limity tempa, czas i ETA, zapis przyrostowy, test > 10 000 IP | P3 |
+| D3 | Harmonogram z oknami czasowymi, zatrzymanie i wznowienie | P8 |
+| D4 | Fingerprinting HTTP/HTTPS, technologie z pewnością, staging i panele, ciekawe nagłówki i ciasteczka | P4 |
+| D5 | Własne sygnatury z walidatorem bezpieczeństwa | P7 |
+| D6 | Zmiany w czasie, stany hostów, niestabilne hosty, pora dnia, ciekawość | P5 |
+| D7 | DefectDojo (obowiązkowe) | P6 |
+| D8 | Szyfrowanie pól wrażliwych | P9 |
+| D9 | Dashboard zespołu IT | P10 |
+| D10 | Testy AI w konsoli: test agenta i test wskazanego endpointu | P11 |
+
+### 0.5 Docelowy przepływ
+
+```mermaid
+flowchart LR
+  IN[Cele: formularz, CSV, JSON] --> V[Walidacja, deduplikacja, podgląd]
+  V --> SG{scope_guard}
+  SCH[Harmonogram i okna] --> PL[Planer paczek]
+  SG --> PL
+  PL -->|paczki o rozmiarze z mierzonej szybkości| W1[Worker discovery 1]
+  PL --> W2[Worker discovery N]
+  W1 --> D[nmap -sn / naabu: aktywne hosty]
+  D --> S[nmap -sV: usługi i banery]
+  S --> H[httpx + moduł własny: HTTP/HTTPS, TLS, favicon]
+  H --> T[Technologie: fingerprinty + sygnatury, pewność 0–100]
+  T --> O[(Obserwacje per przebieg)]
+  O --> DF[Różnice i stany: nowy, zmieniony, niestabilny, nieaktywny]
+  OV[(Nadpisania użytkownika)] --> M[Widok scalony]
+  O --> M
+  DF --> UI[Dashboard zespołu IT]
+  M --> UI
+  M --> EX[Eksport JSON/CSV]
+  M --> DD[DefectDojo API v2: Info + evidence]
+```
+
+- **Obserwacje vs nadpisania.** Każdy przebieg zapisuje obserwacje (host, usługa, odpowiedź
+  HTTP, certyfikat, technologia z dowodami) jako niezmienne rekordy przypisane do przebiegu.
+  Zmiany użytkownika (opis, tagi, priorytet, właściciel, status, poprawiona technologia) idą do
+  osobnej tabeli nadpisań z autorem i czasem. Widok scalony = obserwacja + nadpisanie; skan
+  nigdy nie dotyka nadpisań (wymaganie R14).
+- **Paczki.** Planer dzieli cele na paczki; rozmiar zależy od zmierzonej szybkości poprzednich
+  paczek w danej podsieci i od limitów tempa. Każda paczka ma czas startu i końca, wynik
+  zapisany od razu, status w punkcie kontrolnym (wznowienie po końcu okna, R2, S2).
+- **Pewność.** Technologia ma wynik 0–100 z sumy wag niezależnych dowodów (nagłówek, ciasteczko,
+  favicon, HTML, ścieżka, banner); lista dowodów zapisana przy obserwacji.
+- **Stany hosta.** Konfigurowalne reguły (N przebiegów bez odpowiedzi, czas T, przeplatanie w
+  ostatnich M przebiegach), powtórzenia pomiaru przed zmianą stanu.
+- **Szyfrowanie.** Pola wrażliwe (wartości ciasteczek, nagłówki z tokenami, fragmenty treści,
+  notatki, tokeny integracji) szyfrowane kluczem z OpenBao Transit; obok HMAC, gdy trzeba
+  wyszukiwać.
+
+### 0.6 Role (brief pkt 12–13)
+
+| Rola w kodzie | Nazwa w UI | Zakres |
+|---|---|---|
+| `administrator` | Administracja | użytkownicy i role (edytor ról), konfiguracja, zakresy, polityki, integracje, harmonogramy, agent, kill switch, wszystkie operacje na danych |
+| `editor` | Dodawanie, usuwanie, modyfikacja | cele, skany, wyniki, sygnatury, tagi: tworzenie, usuwanie, edycja; uruchamianie skanów, eksport do DefectDojo, zatwierdzanie planów agenta i akcji L2+ |
+| `modifier` | Modyfikacja i odczyt | odczyt wszystkiego + edycja istniejących danych (wyniki, adnotacje, tagi, priorytety); bez dodawania i usuwania |
+| `viewer` | Odczyt | odczyt, dashboard, raporty, eksport JSON/CSV |
+| `agent` | (tożsamość techniczna) | uprawnienia nadane przez administratora, bez dostępu do UI |
+
+Szczegółowa macierz rola × endpoint × akcja powstanie w `docs/ROLES.md` (P1) i będzie testowana
+automatycznie. Zmiana względem dotychczasowej zasady: akcje L2 i L3 zatwierdza `administrator`
+albo `editor` (decyzja z 21.11.2026), zawsze człowiek i zawsze z wpisem w audycie.
+
+### 0.7 Bezpieczeństwo skanera
+
+- `scope_guard` dopuszcza tylko cele wprowadzone przez uprawnionych użytkowników i porty z listy
+  organizatora; denylista przed allowlistą.
+- Domyślnie ostrożnie: timing nmap nie agresywniejszy niż T3, limity pakietów na sekundę,
+  równoległości i per podsieć; bez skryptów NSE z kategorii intrusive, exploit, dos, brute.
+- Żadnych prób logowania, słowników ani payloadów; sygnatury i sprawdzanie paneli tylko GET i
+  HEAD.
+- Kill switch zatrzymuje wszystkie skany, nie tylko agenta. Identyfikowalny User-Agent z
+  kontaktem. Zasady w `docs/SAFE_SCANNING.md` (P12).
+
+### 0.8 Język i wydajność
+
+Brief sugeruje Go, Rust albo C++. Zostajemy przy obecnym stosie: orkiestracja w Pythonie,
+ciężka praca w narzędziach natywnych (nmap w C, httpx i naabu w Go). Uzasadnienie pomiarami
+(czas discovery dla > 10 000 IP, CPU i RAM orkiestratora vs narzędzi) w `docs/PERFORMANCE.md`
+(P3). Jeśli pomiar pokaże wąskie gardło w Pythonie (np. przetwarzanie wyników), ten fragment
+przenosimy do osobnego modułu w Go.
+
+### 0.9 Środowisko testowe
+
+Do czasu otrzymania zasobów od organizatora rozbudowujemy demo-lab o hosty imitujące
+zróżnicowaną infrastrukturę: CMS-y, panele administracyjne, staging, urządzenia IoT, nietypowe
+banery i ciasteczka, hosty włączające się i wyłączające cyklicznie, usługi zmieniające się
+między przebiegami, oraz pustą przestrzeń adresową > 10 000 IP do testu skali. Po otrzymaniu
+zasobów: profil Compose organizatora, dostosowanie parserów, test precyzji i czułości względem
+wyników referencyjnych (`docs/VALIDATION.md`).
+
+### 0.10 Współpraca z agentem
+
+Zakres pracy wyznacza brief, a sposób pracy zostaje ten, który mieliśmy od początku: zespół
+bezpieczeństwa pracuje razem z agentem. Agent przygotowuje propozycje i wykonuje je dopiero po
+zatwierdzeniu, a człowiek decyduje. Zasada „plan, zatwierdzenie, wykonanie” z §5 obowiązuje w
+każdym module. Każde narzędzie agenta to narzędzie serwera MCP z polityką, `scope_guard` i wpisem
+w audycie.
+
+| Moduł | Co robi agent | Co robi człowiek (`administrator` albo `editor`) |
+|---|---|---|
+| D1 cele | z opisu („sieć serwerowa B, bez drukarek”) proponuje listę celów; kod waliduje i deduplikuje | zatwierdza listę, która trafia do zakresu |
+| D2 discovery | proponuje plan przebiegu: zakres, paczki, techniki, limity tempa (z mierzonej szybkości); wykonuje go przez `mcp-scanner` | zatwierdza plan; kill switch zatrzymuje wszystko |
+| D3 harmonogram | proponuje okno i częstotliwość na podstawie profilu dostępności | zatwierdza harmonogram |
+| D4 fingerprinting | wyjaśnia technologię i dowody, wskazuje panele i staging do weryfikacji (tylko GET/HEAD) | potwierdza albo poprawia (nadpisanie) |
+| D5 sygnatury | proponuje sygnaturę z obserwacji; walidator bezpieczeństwa ją sprawdza | testuje na hoście i zatwierdza |
+| D6 zmiany | streszcza różnice między przebiegami, wskazuje niestabilne hosty i proponuje powtórny pomiar | zatwierdza powtórzenie, ustala priorytet |
+| D7 DefectDojo | przygotowuje paczkę eksportu (findingi „Info” z dowodami) | zatwierdza eksport ręczny; automatyczny ustawia administrator |
+| D9 dashboard | pisze raport z przebiegu (fakty z bazy) | czyta, poprawia, publikuje |
+| D10 testy AI | test wskazanego endpointu na poziomie L3 | zgoda na L3 |
+
+Propozycje agenta do danych (tagi, priorytet, poprawiona technologia) trafiają do warstwy
+nadpisań dopiero po akceptacji człowieka, z autorem „agent, zatwierdził X”. Sentek w konsoli
+zespołu IT odpowiada z bazy i przekazuje prośby o skan lub zmianę jako zadania agenta do
+zatwierdzenia. Agent nigdy nie zatwierdza własnych propozycji i nie widzi poświadczeń.
 
 ---
 
@@ -79,8 +249,7 @@ Compose; prezentacja bez internetu; brak klucza NVD.
 ```mermaid
 flowchart LR
     subgraph UI["Przeglądarka"]
-        ADM["/admin<br/>konsola operacyjna"]
-        DSH["/dashboard<br/>konsola menedżera"]
+        ADM["/admin<br/>konsola zespołu IT"]
     end
 
     subgraph EDGE["Sieć edge"]
@@ -125,7 +294,6 @@ flowchart LR
     end
 
     ADM --> PROXY
-    DSH --> PROXY
     PROXY --> API
     PROXY --> KC
     API -->|JWKS| KC
@@ -189,8 +357,7 @@ sentinel-asi/
 │   └── workers/
 ├── mcp-scanner/        # NOWE: serwer MCP (oficjalne SDK), polityki, klient OpenBao
 ├── frontend/
-│   ├── admin/          # konsola operacyjna (obecne widoki trafiają tutaj)
-│   ├── dashboard/      # konsola menedżera, tylko odczyt
+│   ├── admin/          # konsola zespołu IT, jedyna od P1 (widoki według uprawnień roli)
 │   └── shared/         # komponenty, klient API, słownik pojęć, motyw
 ├── rules/              # + legal/<akt>/, compliance/, glossary.yaml, roles.yaml, reports.yaml
 ├── ai-tests/           # NOWE: promptfoo (testy własnego AI i fixture'y złośliwych advisory)
@@ -285,16 +452,15 @@ z haseł w `.env` albo wygenerowanych).
 
 | Klient Keycloak | Typ | Kto | Token |
 |---|---|---|---|
-| `sentinel-admin` | publiczny, PKCE | ludzie z rolą `admin` | wymagane MFA (TOTP lub WebAuthn), sesja 30 min bezczynności |
-| `sentinel-dashboard` | publiczny, PKCE | `manager`, `auditor` | sesja 8 h, MFA zalecane |
+| `sentinel-admin` | publiczny, PKCE | ludzie z rolami `administrator`, `editor`, `modifier`, `viewer` | wymagane MFA (TOTP) dla każdej roli, sesja 30 min bezczynności |
 | `sentinel-agent` | poufny, client credentials | agent AI | 5 min, audience `mcp-scanner`, rola `agent` |
 | `sentinel-pipeline` | poufny, client credentials | deterministyczny pipeline | 5 min, audience `mcp-scanner`, rola `system` |
 
-- MFA admina wymuszone przepływem `sentinel-admin-mfa` klienta `sentinel-admin` (hasło, potem
-  warunkowo OTP dla roli `admin`). Backend ustala MFA **wyłącznie z claimu `amr`** (`otp`,
+- MFA wymuszone przepływem `sentinel-admin-mfa` klienta `sentinel-admin` (hasło, potem OTP
+  dla każdego konta; od P1 bez warunku na rolę). Backend ustala MFA **wyłącznie z claimu `amr`** (`otp`,
   `hwk`, `webauthn`), który Keycloak wystawia przez mapper `oidc-amr-mapper`. Wnioskowanie z
-  `azp` odrzuciliśmy: sesja SSO z ciasteczka albo menedżer bez OTP na kliencie admina
-  dostałby wtedy „MFA” bez drugiego składnika. Uprawnienia oznaczone w `rules/roles.yaml`
+  `azp` odrzuciliśmy: sesja SSO z ciasteczka albo token z innego klienta dostałby wtedy
+  „MFA” bez drugiego składnika. Uprawnienia oznaczone w `rules/roles.yaml`
   jako `mfa: true` (m.in. `console:admin`, `scan:approve:l2`, `scan:approve:l3`) bez MFA
   dają 403.
 - Krótkie tokeny dostępu (5 min) i odświeżanie; wylogowanie unieważnia sesję w Keycloak, a
@@ -310,31 +476,35 @@ z haseł w `.env` albo wygenerowanych).
 `rules/roles.yaml` (wersjonowane w Git). Keycloak przechowuje tylko przynależność do ról;
 mapowanie rola → uprawnienia robi backend.
 
-| Uprawnienie | admin | manager | auditor | agent | system |
-|---|:-:|:-:|:-:|:-:|:-:|
-| `inventory:read`, `findings:read`, `risks:read`, `compliance:read`, `reports:read` | ✓ | ✓ | ✓ | | |
-| `reports:export` | ✓ | ✓ | ✓ | | |
-| `personal_data:view` | ✓ | ✓ | | | |
-| `secrets:redacted:view` (dane techniczne bez redakcji, poza sekretami) | ✓ | | | | |
-| `audit:read`, `audit:export` | ✓ | | ✓ | | |
-| `scan:run` (L1), `scan:approve:l2`, `scan:approve:l3` | ✓ | | | | |
-| `agent:task`, `agent:configure`, `agent:kill` | ✓ | | | | |
-| `scope:manage`, `integrations:manage`, `iam:manage`, `llm:external:manage` | ✓ | | | | |
-| `review:decide` (kolejka weryfikacji), `findings:update`, `owners:manage` | ✓ | | | | |
-| `risk:accept` (flaga `MANAGER_RISK_ACCEPT`) | ✓ | opcja | | | |
-| `mcp:tool:<nazwa>` | | | | wg zdolności | L1 + zatwierdzone L2/L3 |
+Od P1 role to cztery role z briefu (pkt 13) i dwie tożsamości techniczne. Pełna macierz
+rola × uprawnienie × endpoint jest generowana z kodu w [ROLES.md](ROLES.md) (test pilnuje, że
+jest aktualna); tu tylko skrót.
+
+| Rola | Nazwa w UI | Zakres |
+|---|---|---|
+| `administrator` | Administracja | wszystkie uprawnienia, w tym `iam:manage`, `scope:manage`, `agent:configure`, `integrations:manage`, `audit:read` |
+| `editor` | Dodawanie, usuwanie, modyfikacja | cele, skany L1, zatwierdzanie L2/L3 i planów agenta, statusy, raporty, kill switch |
+| `modifier` | Modyfikacja i odczyt | zmiana statusów i decyzje w kolejce weryfikacji, bez dodawania i skanowania |
+| `viewer` | Odczyt | odczyt i eksport |
+| `agent` | – | brak uprawnień API; wyłącznie zdolności nadane przez administratora (`mcp:tool:<nazwa>`) |
+| `system` | – | pipeline: L1 i zatwierdzone L2/L3 przez MCP |
+
+- **Role własne** (edytor ról w konsoli, `iam:manage`): dowolny podzbiór uprawnień z
+  `rules/roles.yaml` poza `iam:manage`; zapis w `iam_custom_role`, nadania w `iam_role_grant`,
+  każda zmiana w audycie. Rola z pliku zawsze wygrywa z rolą własną o tej samej nazwie, a
+  Administrację nadaje się tylko w Keycloak.
 
 - Każdy endpoint deklaruje uprawnienie przez zależność `require("findings:read")`. Endpoint
   bez deklaracji nie przechodzi testu (test przegląda wszystkie trasy FastAPI). To zamyka
   lukę „ktoś zapomniał dodać kontrolę”.
 - Macierz testów rola × endpoint generowana z tras: dla każdego endpointu dozwolone role
   dostają 2xx, pozostałe 403, brak tokenu 401. Odmowa trafia do audytu (scenariusz demo 5).
-- Menedżer dostaje dane z redakcją: adresy IP, banery i dowody techniczne są zastąpione
-  opisem, dopóki rola nie ma `secrets:redacted:view`. Redakcja jest w warstwie serializacji
+- Rola bez `secrets:redacted:view` (np. rola własna) dostaje dane z redakcją: adresy IP,
+  banery i dowody techniczne są zastąpione opisem. Redakcja jest w warstwie serializacji
   odpowiedzi API, nie w UI.
 - **Fallback** `AUTH_PROVIDER=local` (wbudowane logowanie FastAPI) **nie powstał**: Keycloak
   26 zużywa po starcie 577 MiB przy limicie 900 MB (pomiar w e2e w CI), więc mieści się w budżecie.
-- Wejście do konsoli operacyjnej sprawdza endpoint `GET /api/console/admin`
+- Wejście do konsoli zespołu IT sprawdza endpoint `GET /api/console/admin`
   (`console:admin`); odmowa trafia do audytu (scenariusz demo 5). Interfejs tylko pokazuje
   stronę „brak dostępu”.
 - Każde żądanie dostaje `request_id` (nagłówek `X-Request-ID` od nginx albo nowy), a wpisy
@@ -1127,13 +1297,21 @@ PR działa `redteam-mock` (atrapa generatora, posłuszny model, sędzia atrapa) 
 
 ---
 
-## 14. Dwie konsole
+## 14. Konsola zespołu IT
 
-Dwie osobne aplikacje Vite w workspace npm, ze wspólną biblioteką `frontend/shared`
-(komponenty shadcn/ui, klient API generowany z OpenAPI, słownik pojęć, motyw, dostępność).
+Od P1 jest jedna aplikacja Vite (`frontend/admin`) ze wspólną biblioteką `frontend/shared`.
+Konsola menedżera (`/dashboard`) została usunięta razem z rolą `manager`; przydatne elementy
+trafiły do konsoli zespołu IT: karta hosta (`/zasoby/:id`: atrybuty, usługi, zagrożenia,
+historia), skrzynka raportów z banerem zero-day. Mapa jako widok sieci i segmentów jest
+zaplanowana w P10.
 
-| | `/dashboard` (menedżer) | `/admin` (konsola operacyjna) |
-|---|---|---|
+- Menu i formularze ukrywają to, czego rola nie może zrobić (`NavItem.permission`, `can()`),
+  ale granicę bezpieczeństwa wyznacza RBAC w backendzie.
+- „Role i użytkownicy” (`/role`, `iam:read`; zmiany z `iam:manage`): macierz uprawnień,
+  edytor ról własnych, nadawanie i odbieranie ról.
+- Dostępność: kontrast, kolor nigdy jako jedyny nośnik informacji, obsługa klawiatury.
+
+---|---|---|
 | Kto | `manager`, `auditor` | `admin` z MFA |
 | Dane | tylko odczyt, redakcja danych wrażliwych | pełne dane techniczne (poza sekretami) |
 | Kod | **nie zawiera** komponentów ani wywołań funkcji administracyjnych (osobny bundle) | wszystko |
@@ -1554,6 +1732,9 @@ metryki nie obiecuje „zero shadow IT”: mówi o tym, co dało się zobaczyć 
 
 ### 24.4 Konsola menedżera
 
+> **Usunięte w P1** (zmiana kierunku, §0). Opis zostaje jako historia decyzji.
+
+
 - Na stronie głównej zdanie w prostym języku, np. „Atakujący z internetu widzi 3 rzeczy, o
   których nie wiemy” (liczba z korelacji, zdanie z szablonu).
 - Na mapie i w karcie urządzenia oznaczenie „widoczne z internetu” oraz widok porównawczy
@@ -1579,6 +1760,12 @@ najważniejsza część modułu.
 ---
 
 ## 25. Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)
+
+> **Usunięte w P1** (zmiana kierunku, §0): konsola menedżera, „Aktualny obraz” i prośby o
+> skan. Sentek zostaje w backendzie dla konsoli zespołu IT: prośbę o skan zamienia w
+> propozycję zadania dla agenta (`agent_task`), interfejs wraca w P10. Reszta sekcji to
+> historia decyzji.
+
 
 Druga połowa **Etapu 6** (konsola menedżera), w kolejności: strona główna i tabele → karta
 urządzenia → „Aktualny obraz” i świeżość danych → samouczek → asystent z intencjami → mapa

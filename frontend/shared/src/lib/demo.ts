@@ -31,5 +31,5 @@ export interface DemoScene {
   bubble?: string;
   /** Selektor CSS elementu do podświetlenia (pozycję liczy strona). */
   highlight?: string;
-  endCard?: { title: string; line: string };
+  endCard?: { title: string; lines: string[] };
 }

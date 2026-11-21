@@ -1,95 +1,102 @@
 @import "tailwindcss";
-/* Klasy z obu konsol i z kodu wspólnego (Tailwind skanuje te katalogi). */
+/* Klasy z konsoli i z kodu wspólnego (Tailwind skanuje te katalogi). */
 @source "../../admin/src";
-@source "../../dashboard/src";
 @source "./";
 
+/* Ciemny motyw w stylu konsol operacyjnych (SIEM): gęsty układ, górny pasek z menu zamiast
+   bocznego, panele bez ozdobników, tabele z naprzemiennymi wierszami. Zielony akcent dla akcji,
+   niebieski dla linków. Statusy zawsze kolor + ikona + tekst (patrz ui/badge.tsx). */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --color-background: #f6f7f9;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-primary: #0369a1;
-  --color-primary-foreground: #ffffff;
-  --color-sidebar: #0f172a;
-  --color-sidebar-foreground: #cbd5e1;
-  --color-sidebar-active: #1e293b;
-  --color-risk-critical: #b91c1c;
-  --color-risk-high: #c2410c;
-  --color-risk-medium: #a16207;
-  --color-risk-low: #15803d;
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --color-background: #171d21;
+  --color-foreground: #e1e6eb;
+  --color-card: #1e2429;
+  --color-muted: #262d33;
+  --color-muted-foreground: #a6b0ba;
+  --color-border: #353d44;
+  --color-primary: #3ea6f0;
+  --color-primary-foreground: #08131c;
+  --color-accent: #5cc05c;
+  --color-accent-foreground: #0c1a0c;
+  --color-field: #11161a;
+  --color-sidebar: #000000;
+  --color-sidebar-foreground: #c3cbd4;
+  --color-sidebar-active: #262d33;
+  --color-appbar: #1a1f24;
+  --color-danger: #dc4e41;
+  --color-risk-critical: #dc4e41;
+  --color-risk-high: #f1813f;
+  --color-risk-medium: #f8be34;
+  --color-risk-low: #53a051;
+
+  /* Jasne odcienie palety z dawnego jasnego motywu przemapowane na ciemne tło. */
+  --color-red-50: #2b1416;
+  --color-red-200: #6b2228;
+  --color-red-300: #8a2a31;
+  --color-red-600: #ef4444;
+  --color-red-700: #ff8080;
+  --color-red-800: #ff9a9a;
+  --color-red-900: #ffb3b3;
+  --color-green-50: #10261a;
+  --color-green-200: #1f5135;
+  --color-green-600: #22c55e;
+  --color-green-700: #5ee38f;
+  --color-green-800: #7cf0a8;
+  --color-amber-50: #2b2310;
+  --color-amber-200: #6b5419;
+  --color-amber-300: #8a6b1f;
+  --color-amber-500: #f59e0b;
+  --color-amber-800: #ffd166;
+  --color-amber-900: #ffe08f;
+  --color-orange-50: #2b1a10;
+  --color-orange-200: #6b3c19;
+  --color-sky-50: #14202f;
+  --color-sky-200: #284466;
+  --color-sky-400: #3ea6f0;
+  --color-sky-600: #3ea6f0;
+  --color-sky-800: #a9cbfa;
+  --color-slate-500: #8b959f;
+}
+
+html {
+  font-size: 14px;
+  color-scheme: dark;
 }
 
 body {
   @apply bg-background text-foreground antialiased;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Samouczek (driver.js): czcionka i kolory konsoli, czytelny kontrast. */
-.driver-popover.sentinel-tour {
-  font-family: inherit;
-  max-width: 340px;
-}
-.driver-popover.sentinel-tour .driver-popover-title {
-  font-size: 1rem;
-  font-weight: 600;
-}
-.driver-popover.sentinel-tour .driver-popover-description {
-  font-size: 0.875rem;
-  line-height: 1.45;
+*,
+*::before,
+*::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
 }
 
-/* Sentek (moduł 21): oddychanie, mruganie, mówienie, machanie. Bez ruchu przy reduced-motion. */
-.sentek-animated .sentek-body {
-  animation: sentek-bob 3.2s ease-in-out infinite;
-  transform-box: view-box;
-  transform-origin: 60px 130px;
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
-.sentek-animated .sentek-eyes {
-  animation: sentek-blink 4.5s infinite;
-  transform-box: view-box;
-  transform-origin: 60px 51px;
+
+a {
+  text-underline-offset: 2px;
 }
-.sentek-animated .sentek-mouth {
-  animation: sentek-talk 0.32s ease-in-out infinite alternate;
-  transform-box: fill-box;
-  transform-origin: center;
+
+/* Tabele jak w konsolach SIEM: naprzemienne wiersze i podświetlenie wiersza pod kursorem. */
+table tbody tr:nth-child(even) {
+  background-color: rgb(255 255 255 / 0.025);
 }
-.sentek-animated .sentek-wave {
-  animation: sentek-wave 0.9s ease-in-out infinite alternate;
-  transform-origin: 0 0;
-}
-.sentek-animated .sentek-light {
-  animation: sentek-light 2.4s ease-in-out infinite;
-}
-@keyframes sentek-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2.5px); }
-}
-@keyframes sentek-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.1); }
-}
-@keyframes sentek-talk {
-  from { transform: scaleY(0.35); }
-  to { transform: scaleY(1.1); }
-}
-@keyframes sentek-wave {
-  from { transform: rotate(-14deg); }
-  to { transform: rotate(14deg); }
-}
-@keyframes sentek-light {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sentek-animated .sentek-body,
-  .sentek-animated .sentek-eyes,
-  .sentek-animated .sentek-mouth,
-  .sentek-animated .sentek-wave,
-  .sentek-animated .sentek-light {
-    animation: none;
-  }
+table tbody tr:hover {
+  background-color: rgb(62 166 240 / 0.08);
 }

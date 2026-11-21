@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Scenariusz filmu demo (moduł 22): walidacja, napisy .srt i plan montażu z demo/script.yaml.
+"""Scenariusz filmu demo (moduł 22): walidacja, napisy .srt i plan nagrania z demo/script.yaml.
 
-    python3 scripts/demo_script.py check              # reguły scenariusza (jak test w CI)
+    python3 scripts/demo_script.py check              # reguły scenariusza
     python3 scripts/demo_script.py json  > out.json   # scenariusz dla nagrywarki
-    python3 scripts/demo_script.py srt   > demo.srt   # napisy z narracji
-    python3 scripts/demo_script.py lines              # „id<TAB>narracja” dla lektora
+    python3 scripts/demo_script.py srt   > demo.srt   # napisy z pola `subtitle`
+    python3 scripts/demo_script.py lines              # „id<TAB>tts” dla lektora
 
+Napisy: jeśli istnieje demo/out/audio/durations.json (zapisuje go demo_tts.sh), plansze
+napisów rozkładamy na faktyczną długość lektora w scenie; inaczej na całą scenę.
 Potrzebuje PyYAML (jest w środowisku backendu: backend/.venv/bin/python).
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,12 +24,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "demo" / "script.yaml"
-# Akcje, które nagrywarka umie wykonać (scripts/record_demo.mjs). Nic spoza listy.
-ACTIONS = frozenset({"inject_kev", "open_latest_report"})
+DURATIONS = ROOT / "demo" / "out" / "audio" / "durations.json"
+# Akcje, które umie wykonać nagrywarka (frontend/scripts/record-demo.mjs). Nic spoza listy.
+STEP_ACTIONS = frozenset({"highlight", "click", "fill", "upload", "check", "goto", "defectdojo"})
 POSES = frozenset({"idle", "talk", "wave", "point_left", "point_right", "surprised", "thumbs_up"})
-APPS = frozenset({"dashboard", "admin"})
 # Napis: najwyżej tyle słów na jedną planszę (dwie linie po ok. 42 znaki).
 WORDS_PER_CUE = 9
+# Lektor zaczyna chwilę po początku sceny (oddech między scenami).
+LEAD_SECONDS = 0.3
 
 
 @dataclass(frozen=True)
@@ -65,49 +70,70 @@ def problems(script: dict[str, Any]) -> list[str]:
         if end <= start:
             out.append(f"{sid}: koniec nie jest po początku")
         previous_end = end
-        narration = str(scene.get("narration") or "").strip()
-        if not narration:
-            out.append(f"{sid}: brak narracji (lektor i napisy)")
-        elif words(narration) / (end - start) > rate:
-            out.append(
-                f"{sid}: {words(narration)} słów na {end - start:.0f} s, "
-                f"ponad {rate} słowa na sekundę"
-            )
-        if scene.get("app") not in APPS:
-            out.append(f"{sid}: nieznana aplikacja {scene.get('app')!r}")
+        for field in ("subtitle", "tts"):
+            if not str(scene.get(field) or "").strip():
+                out.append(f"{sid}: brak pola {field}")
+        tts = str(scene.get("tts") or "")
+        if re.search(r"\d", tts):
+            out.append(f"{sid}: w tts liczby zapisujemy słownie")
+        if tts and words(tts) / (end - start) > rate:
+            out.append(f"{sid}: {words(tts)} słów na {end - start:.0f} s, ponad {rate} słowa/s")
         if scene.get("pose") not in POSES:
             out.append(f"{sid}: nieznana poza Sentka {scene.get('pose')!r}")
-        for action in scene.get("actions") or []:
-            if action not in ACTIONS:
-                out.append(f"{sid}: akcja {action!r} spoza listy {sorted(ACTIONS)}")
-        for selector in (scene.get("highlight"), (scene.get("then") or {}).get("highlight")):
+        for step in scene.get("steps") or []:
+            action = step.get("do")
+            if action not in STEP_ACTIONS:
+                out.append(f"{sid}: akcja {action!r} spoza listy {sorted(STEP_ACTIONS)}")
+            if not 0 <= float(step.get("at", -1)) < end - start:
+                out.append(f"{sid}: krok {action} poza czasem sceny")
+            selector = step.get("sel")
             if selector and "data-demo" not in selector:
-                out.append(f"{sid}: podświetlenie tylko przez atrybut data-demo, nie {selector!r}")
-        then = scene.get("then")
-        if then and not 0 < float(then["at"]) < end - start:
-            out.append(f"{sid}: „then.at” poza czasem sceny")
+                out.append(f"{sid}: selektor tylko przez atrybut data-demo, nie {selector!r}")
+            if action == "upload" and not (ROOT / str(step.get("file"))).is_file():
+                out.append(f"{sid}: brak pliku {step.get('file')}")
     if previous_end > limit:
         out.append(f"film trwa {previous_end} s, limit to {limit} s")
-    total = sum(words(str(s.get("narration") or "")) for s in scenes)
+    total = sum(words(str(s.get("tts") or "")) for s in scenes)
     if total > int(script["max_words"]):
-        out.append(f"narracja ma {total} słów, limit to {script['max_words']}")
+        out.append(f"lektor ma {total} słów, limit to {script['max_words']}")
     if not any(s.get("end_card") for s in scenes):
         out.append("brak planszy końcowej")
     return out
 
 
+def _durations() -> dict[str, float]:
+    try:
+        return {str(k): float(v) for k, v in json.loads(DURATIONS.read_text()).items()}
+    except (OSError, ValueError):
+        return {}
+
+
 def cues(script: dict[str, Any]) -> list[Cue]:
-    """Napisy: narracja każdej sceny dzielona na plansze, czas proporcjonalnie do słów."""
+    """Plansze napisów: tekst sceny dzielony po słowach, czas proporcjonalnie do słów."""
     out: list[Cue] = []
+    spoken = _durations()
     for scene in script["scenes"]:
         start, end = float(scene["start"]), float(scene["end"])
-        tokens = str(scene["narration"]).split()
-        chunks = [tokens[i : i + WORDS_PER_CUE] for i in range(0, len(tokens), WORDS_PER_CUE)]
-        # Ostatnia krótka plansza dołącza do poprzedniej.
-        if len(chunks) > 1 and len(chunks[-1]) < 3:
-            chunks[-2].extend(chunks.pop())
-        span = end - start
-        at = start
+        tokens = str(scene["subtitle"]).split()
+        # Nowa plansza po kropce albo po WORDS_PER_CUE słowach (zdanie nie skacze w połowie,
+        # o ile się mieści).
+        chunks: list[list[str]] = [[]]
+        for token in tokens:
+            if len(chunks[-1]) >= WORDS_PER_CUE or (chunks[-1] and chunks[-1][-1].endswith(".")):
+                chunks.append([])
+            chunks[-1].append(token)
+        merged: list[list[str]] = []
+        for chunk in chunks:
+            if merged and len(chunk) < 3:
+                merged[-1].extend(chunk)
+            else:
+                merged.append(chunk)
+        chunks = merged
+        if scene["id"] in spoken:
+            at = start + LEAD_SECONDS
+            span = min(end - at, spoken[scene["id"]] + 0.4)
+        else:
+            at, span = start, end - start
         for chunk in chunks:
             length = span * len(chunk) / len(tokens)
             out.append(Cue(round(at, 2), round(min(end, at + length), 2), " ".join(chunk)))
@@ -138,9 +164,9 @@ def main(argv: list[str]) -> int:
     if command == "check":
         for problem in found:
             print(f"BŁĄD: {problem}", file=sys.stderr)
-        total = sum(words(str(s["narration"])) for s in script["scenes"])
+        total = sum(words(str(s["tts"])) for s in script["scenes"])
         end = script["scenes"][-1]["end"]
-        print(f"Scen: {len(script['scenes'])}, czas: {end} s, słów: {total}")
+        print(f"Scen: {len(script['scenes'])}, czas: {end} s, słów lektora: {total}")
         return 1 if found else 0
     if found:
         print("Scenariusz ma błędy, uruchom: python3 scripts/demo_script.py check", file=sys.stderr)
@@ -151,7 +177,7 @@ def main(argv: list[str]) -> int:
         print(srt(script), end="")
     elif command == "lines":
         for scene in script["scenes"]:
-            print(f"{scene['id']}\t{scene['narration']}")
+            print(f"{scene['id']}\t{scene['tts']}\t{scene.get('tts_length_scale', '')}")
     else:
         print(__doc__, file=sys.stderr)
         return 2

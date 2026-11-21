@@ -1,0 +1,10 @@
+# Skrypty i pliki dla kontenerów zawsze z końcami linii LF, także po klonowaniu na Windowsie
+# (bash i obrazy Linuksa nie przyjmują CRLF).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.zip binary

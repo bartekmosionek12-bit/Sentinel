@@ -41,22 +41,8 @@ function Arm({
   return (
     <g transform={`translate(${x} ${y}) rotate(${angle})`}>
       <g className={className}>
-        <rect
-          x={-5.5}
-          y={-2}
-          width={11}
-          height={30}
-          rx={5.5}
-          fill={BODY_DARK}
-        />
-        <circle
-          cx={0}
-          cy={32}
-          r={7.5}
-          fill={BODY}
-          stroke={BODY_DARK}
-          strokeWidth={2}
-        />
+        <rect x={-5.5} y={-2} width={11} height={30} rx={5.5} fill={BODY_DARK} />
+        <circle cx={0} cy={32} r={7.5} fill={BODY} stroke={BODY_DARK} strokeWidth={2} />
         {hand === "point" && (
           <rect
             x={-2.5}
@@ -87,27 +73,11 @@ function Arm({
 }
 
 function Mouth({ pose }: { pose: SentekPose }) {
-  if (pose === "surprised")
-    return <ellipse cx={60} cy={63} rx={4} ry={5} fill={EYES} />;
+  if (pose === "surprised") return <ellipse cx={60} cy={63} rx={4} ry={5} fill={EYES} />;
   if (pose === "talk")
-    return (
-      <ellipse
-        className="sentek-mouth"
-        cx={60}
-        cy={63}
-        rx={7}
-        ry={3.5}
-        fill={EYES}
-      />
-    );
+    return <ellipse className="sentek-mouth" cx={60} cy={63} rx={7} ry={3.5} fill={EYES} />;
   return (
-    <path
-      d="M51 61 Q60 68 69 61"
-      fill="none"
-      stroke={EYES}
-      strokeWidth={3}
-      strokeLinecap="round"
-    />
+    <path d="M51 61 Q60 68 69 61" fill="none" stroke={EYES} strokeWidth={3} strokeLinecap="round" />
   );
 }
 
@@ -149,23 +119,12 @@ export function Sentek({
         />
         <circle className="sentek-light" cx={60} cy={7} r={4.5} fill={LIGHT} />
         {/* ręce za tarczą */}
-        <Arm
-          x={24}
-          y={66}
-          angle={arms.left}
-          hand={pose === "point_left" ? "point" : "open"}
-        />
+        <Arm x={24} y={66} angle={arms.left} hand={pose === "point_left" ? "point" : "open"} />
         <Arm
           x={96}
           y={66}
           angle={arms.right}
-          hand={
-            pose === "point_right"
-              ? "point"
-              : pose === "thumbs_up"
-                ? "thumb"
-                : "open"
-          }
+          hand={pose === "point_right" ? "point" : pose === "thumbs_up" ? "thumb" : "open"}
           className={pose === "wave" ? "sentek-wave" : undefined}
         />
         {/* tarcza */}
