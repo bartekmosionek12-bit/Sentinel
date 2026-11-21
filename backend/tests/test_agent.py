@@ -536,7 +536,8 @@ def test_follow_up_steps_are_validated_again_and_wait_for_a_new_approval(
     service.execute(task.id, LocalGateway(runtime))
     session.expire_all()
     follow = [s for s in _planned(session, task) if s.source == "follow_up"]
-    assert follow and all(s.status == "planned" for s in follow)
+    assert follow
+    assert all(s.status == "planned" for s in follow)
     assert task.status == "awaiting_approval"
     # Bez nowej zgody serwer MCP nie wykona kroku uzupełniającego.
     step = follow[0]
