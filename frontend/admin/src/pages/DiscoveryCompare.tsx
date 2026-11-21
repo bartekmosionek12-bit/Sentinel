@@ -176,7 +176,7 @@ export function DiscoveryCompare() {
 
           <Card data-demo="diff">
             <CardHeader>
-              <CardTitle className="text-lg">Szczegóły zmian</CardTitle>
+              <CardTitle>Szczegóły zmian</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>

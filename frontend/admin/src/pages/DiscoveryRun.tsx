@@ -320,7 +320,7 @@ export function DiscoveryRunPage() {
       {r && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-lg">Paczki</CardTitle>
+            <CardTitle>Paczki</CardTitle>
             <CardDescription>
               Rozmiar kolejnej paczki dobierany do zmierzonej szybkości. Ostatnie na górze.
             </CardDescription>
@@ -367,7 +367,7 @@ export function DiscoveryRunPage() {
 
       <Card data-demo="hosts">
         <CardHeader>
-          <CardTitle className="text-lg">Hosty ({list.length})</CardTitle>
+          <CardTitle>Hosty ({list.length})</CardTitle>
           <CardDescription>
             Kliknij adres, żeby zobaczyć kartę hosta. Zaznacz hosty, żeby wysłać je do DefectDojo.
           </CardDescription>

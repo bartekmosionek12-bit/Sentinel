@@ -71,7 +71,7 @@ export function App() {
     <AppShell
       navGroups={NAV_GROUPS}
       subtitle="Konsola zespołu IT"
-      footer="Decyzje podejmuje kod. Model językowy tylko tłumaczy."
+      footer=""
       banner={<ZeroDayBanner basePath="/skrzynka" />}
     >
       <DemoStage />

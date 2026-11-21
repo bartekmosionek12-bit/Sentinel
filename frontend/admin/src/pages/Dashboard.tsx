@@ -32,11 +32,11 @@ function Stat({
 }) {
   return (
     <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
+      <CardContent className="pb-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-3xl font-semibold tabular-nums">{value}</p>
-      </CardHeader>
-      <CardContent>
+      </CardContent>
+      <CardContent className="pt-1">
         <p className="text-xs text-muted-foreground">{hint}</p>
         {to && (
           <Link className="mt-2 inline-block text-xs text-primary underline" to={to}>
@@ -64,12 +64,14 @@ function BigNumber({
   return (
     <Link
       to={to}
-      className="block rounded-lg border border-border bg-card p-5 hover:border-primary"
+      className="block rounded-sm border border-border bg-card px-4 py-3 hover:border-primary"
       data-demo={demo}
     >
-      <p className="text-sm font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-5xl font-bold tabular-nums">{value}</p>
-      <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
+      <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1 text-4xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </Link>
   );
 }
@@ -147,7 +149,7 @@ function DiscoveryOverview() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Ostatnie przebiegi discovery</CardTitle>
+            <CardTitle>Ostatnie przebiegi discovery</CardTitle>
             <CardDescription>Czas trwania, postęp i prognoza zakończenia.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -160,7 +162,7 @@ function DiscoveryOverview() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Wymaga uwagi</CardTitle>
+            <CardTitle>Wymaga uwagi</CardTitle>
             <CardDescription>Nowe panele, staging i hosty niestabilne.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">

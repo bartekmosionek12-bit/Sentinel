@@ -159,7 +159,7 @@ function TargetForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Nowy przebieg</CardTitle>
+        <CardTitle>Nowy przebieg</CardTitle>
         <CardDescription>
           Adresy IP, zakresy CIDR i domeny, po jednym w wierszu, albo plik CSV/JSON. Przed startem
           sprawdzamy składnię i zgodność z zatwierdzonym zakresem.
@@ -312,7 +312,7 @@ function ImportCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Import wyników</CardTitle>
+        <CardTitle>Import wyników</CardTitle>
         <CardDescription>
           Wyniki z innych narzędzi: JSON, CSV (kolumna ip) albo nmap XML. Zapisujemy je jako osobny
           przebieg, więc można je porównać ze skanami.
@@ -427,7 +427,7 @@ export function Discovery() {
       )}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Przebiegi</CardTitle>
+          <CardTitle>Przebiegi</CardTitle>
           <CardDescription>
             Odświeżane co 3 sekundy. Wyniki zapisujemy po każdej paczce, więc widać je w trakcie.{" "}
             <Link className="text-primary underline" to="/discovery/porownanie">

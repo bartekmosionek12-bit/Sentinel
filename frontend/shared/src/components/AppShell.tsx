@@ -59,11 +59,10 @@ function DemoDataNotice() {
   return (
     <p
       role="note"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 md:px-8"
+      className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900 md:px-8"
     >
-      <strong className="font-semibold">Dane demonstracyjne.</strong> System działa w trybie demo
-      (DEMO_MODE=true): zasoby pochodzą z demo-lab, a wartości EPSS z wbudowanego zestawu są
-      przykładowe, nie rzeczywiste.
+      <strong className="font-semibold">Tryb demo.</strong> Dane z demo-lab; wartości EPSS
+      przykładowe.
     </p>
   );
 }
@@ -96,16 +95,16 @@ export function AppShell({
     <div className="flex min-h-screen">
       <aside className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center gap-2 px-5 py-5 text-white">
-          <ShieldCheck className="size-6 text-primary" aria-hidden />
+          <ShieldCheck className="size-5 text-primary" aria-hidden />
           <span className="text-base font-semibold">Sentinel ASI</span>
         </div>
-        <nav className="flex-1 space-y-6 px-3 pb-6" aria-label="Nawigacja główna">
+        <nav className="flex-1 space-y-5 px-3 pb-6" aria-label="Nawigacja główna">
           {visible.map((group) => (
             <div key={group.title}>
               <p className="px-2 pb-2 text-xs font-medium tracking-wide text-slate-500 uppercase">
                 {group.title}
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-0.5">
                 {group.items.map(({ path, label, icon: Icon, end }) => (
                   <li key={path}>
                     <NavLink
@@ -113,8 +112,8 @@ export function AppShell({
                       end={end ?? path === "/"}
                       className={({ isActive }) =>
                         cn(
-                          "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-sidebar-active hover:text-white",
-                          isActive && "bg-sidebar-active font-semibold text-white ring-1 ring-inset ring-primary",
+                          "flex items-center gap-2.5 rounded-sm border-l-2 border-transparent px-2 py-1.5 text-sm hover:bg-sidebar-active hover:text-white",
+                          isActive && "border-primary bg-sidebar-active font-medium text-white",
                         )
                       }
                     >
@@ -127,9 +126,7 @@ export function AppShell({
             </div>
           ))}
         </nav>
-        <p className="px-5 pb-4 text-xs text-slate-500">
-          {footer}
-        </p>
+        {footer && <p className="px-5 pb-4 text-xs text-slate-500">{footer}</p>}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -159,7 +156,7 @@ export function AppShell({
         </header>
         {banner}
         <DemoDataNotice />
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-5 md:px-6">{children}</main>
       </div>
     </div>
   );
