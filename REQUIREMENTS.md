@@ -35,6 +35,8 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
    [docs/PERFORMANCE.md](docs/PERFORMANCE.md) podaje wyłącznie czas silnika z atrapą sieci.
 2. Detekcja technologii przez ProjectDiscovery `httpx` i jej włączenie do porównań.
 3. Pełna próba scenariusza demo z wyłączeniem usługi między dwoma skanami.
-4. Po scaleniu z równoległą przebudową konsoli zachowano starsze pliki modułu organizacji,
-   ale trzy jego stare pliki testowe nie zbierają się z nowym schematem modeli i CLI.
-   Aktywna konsola i testy skanowania są weryfikowane osobno.
+4. Test na laboratorium organizatorów (lab.zip): przekierowanie na porcie 80/443 gubi
+   WordPress i DVWA (porównanie adresu w `fingerprint.py`), a listy portów w
+   `rules/discovery.yaml` nie obejmują portów labu (m.in. 2223, 3001, 5672, 8085–8090,
+   15432, 15672). Moduł organizacji i dashboard menedżera nie wchodzą do tej wersji
+   (usunięte w c1299e6 jako spoza briefu).
