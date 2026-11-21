@@ -47,7 +47,16 @@ export const ADMIN_ME = {
 /** Loguje „menedżera” (albo admina) i podstawia API. Zwraca listę wysłanych POST-ów. */
 export async function stubApi(
   page: Page,
-  { app = "dashboard", tourDone = true }: { app?: "dashboard" | "admin"; tourDone?: boolean } = {},
+  {
+    app = "dashboard",
+    tourDone = true,
+    extra = [],
+  }: {
+    app?: "dashboard" | "admin";
+    tourDone?: boolean;
+    /** Dodatkowe trasy sprawdzane przed domyślnymi, np. dane do scen filmu demo. */
+    extra?: [RegExp, string][];
+  } = {},
 ): Promise<Sent[]> {
   const sent: Sent[] = [];
   const answers = fixture("assistant") as Record<string, unknown>;
@@ -71,7 +80,7 @@ export async function stubApi(
       return route.fulfill({ json: { ...(fixture("scanreq") as object[])[0], status: "approved" } });
     }
     if (url.pathname === "/api/me") return route.fulfill({ json: me });
-    const hit = ROUTES.find(([pattern]) => pattern.test(where));
+    const hit = [...extra, ...ROUTES].find(([pattern]) => pattern.test(where));
     if (!hit) return route.fulfill({ json: [] });
     let data = fixture(hit[1]);
     if (hit[1] === "health") data = { ...(data as object), demo_mode: true };

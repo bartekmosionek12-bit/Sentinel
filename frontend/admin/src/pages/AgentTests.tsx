@@ -211,7 +211,7 @@ export function AgentTests() {
         emptyText="Test agenta nie był jeszcze uruchamiany."
       />
       {runs.data && runs.data.length > 0 && (
-        <Card>
+        <Card data-demo="agent-tests">
           <Table>
             <thead>
               <tr>

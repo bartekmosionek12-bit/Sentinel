@@ -16,6 +16,7 @@ import {
   type AssistantAnswer,
 } from "@shared/lib/api";
 import { useAuth } from "@shared/lib/auth-context";
+import { isDemoRecording } from "@shared/lib/demo";
 import { usePseudonyms } from "@shared/lib/privacy";
 import { asPose, setSentekEnabled, useSentekEnabled } from "@shared/lib/sentek";
 import { cn } from "@shared/lib/utils";
@@ -126,7 +127,8 @@ export function SentekAssistant({ onTour }: { onTour?: () => void }) {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [messages, ask.isPending]);
 
-  if (!enabled || !can("assistant:use")) return null;
+  // W nagraniu demo Sentek występuje na scenie (DemoStage), nie w dymku.
+  if (!enabled || !can("assistant:use") || isDemoRecording()) return null;
 
   const submit = (question: string) => {
     const text = question.trim();

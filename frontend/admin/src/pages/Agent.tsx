@@ -306,7 +306,7 @@ function TaskCard({ task }: { task: AgentTask }) {
   };
 
   return (
-    <Card className={awaiting ? "border-amber-300" : undefined}>
+    <Card className={awaiting ? "border-amber-300" : undefined} data-demo="agent-task">
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="text-base">„{task.command}”</CardTitle>
@@ -421,7 +421,7 @@ function TaskCard({ task }: { task: AgentTask }) {
 function Leases() {
   const leases = useQuery({ queryKey: ["agent-leases"], queryFn: api.agentLeases });
   return (
-    <Card className="mt-6">
+    <Card className="mt-6" data-demo="agent-leases">
       <CardHeader>
         <CardTitle>Poświadczenia just-in-time</CardTitle>
         <CardDescription>

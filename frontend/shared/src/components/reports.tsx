@@ -263,7 +263,7 @@ export function ReportView({
             {actions}
           </div>
 
-          <Card>
+          <Card data-demo="report-summary">
             <CardHeader>
               <CardTitle>W skrócie</CardTitle>
             </CardHeader>
@@ -399,6 +399,7 @@ export function ZeroDayBanner({ basePath }: { basePath: string }) {
   if (!urgent) return null;
   return (
     <div
+      data-demo="zero-day-banner"
       role="alert"
       className="flex flex-wrap items-center gap-3 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 md:px-8"
     >

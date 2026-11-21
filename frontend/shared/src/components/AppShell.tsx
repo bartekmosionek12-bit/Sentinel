@@ -4,6 +4,7 @@ import { ShieldCheck, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 
+import { DemoStage } from "@shared/components/DemoStage";
 import { Badge } from "@shared/components/ui/badge";
 import { api } from "@shared/lib/api";
 import { UserMenu } from "@shared/lib/auth";
@@ -151,6 +152,7 @@ export function AppShell({
         <DemoDataNotice />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
       </div>
+      <DemoStage />
     </div>
   );
 }

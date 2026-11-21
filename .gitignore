@@ -58,3 +58,8 @@ Thumbs.db
 # Playwright (frontend/e2e)
 frontend/test-results/
 frontend/playwright-report/
+
+# Film demo (moduł 22): klipy, nagrania, środowisko i model lektora poza Git
+demo/out/
+demo/.venv-tts/
+demo/.models/

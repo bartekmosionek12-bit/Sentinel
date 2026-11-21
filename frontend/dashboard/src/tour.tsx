@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { runTour, wasDone } from "@/tour-steps";
 import { Button } from "@shared/components/ui/button";
+import { isDemoRecording } from "@shared/lib/demo";
 import { useAuth } from "@shared/lib/auth-context";
 
 /** Przycisk „Samouczek” w nagłówku i automatyczny start przy pierwszym logowaniu. */
@@ -18,7 +19,7 @@ export function TourButton() {
   useEffect(() => {
     if (!user || started.current || wasDone(user)) return;
     // Tryb nagrywania demo prowadzi własny scenariusz, bez samouczka.
-    if (new URLSearchParams(window.location.search).has("demo")) return;
+    if (isDemoRecording()) return;
     started.current = true;
     start();
   }, [user, start]);
