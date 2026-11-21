@@ -122,7 +122,7 @@ class NmapAdapter:
         if not isinstance(network, ScopedNetwork):
             raise TypeError("nmap.discover przyjmuje wyłącznie ScopedNetwork")
         if network.intrusiveness > Intrusiveness.LIGHT:
-            raise ToolError("nmap: odkrywanie hostów działa tylko na poziomach L0 i L1")
+            raise ToolError("nmap: odkrywanie hostów działa tylko na poziomie L1")
         args = ["-sn", "-n", f"-PS{DISCOVERY_PORTS}", "-T4", "-oX", "-"]
         if network.excluded:
             args += ["--exclude", ",".join(str(n) for n in network.excluded)]

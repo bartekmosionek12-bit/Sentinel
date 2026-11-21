@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Zestaw „mock”: patrz ai-tests/README.md. Uruchamiaj przez ./run.sh mock (tryb prywatny).
+description: "Sentinel ASI: pośrednie prompt injection przez opisy CVE (atrapa-posluszna)"
+prompts:
+  - "{{case}}"
+providers:
+  - id: file://provider.py
+    label: atrapa-posluszna
+    config:
+      backend: obedient
+tests: file://cases.js:mock

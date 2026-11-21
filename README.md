@@ -8,8 +8,8 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Stan:** Etapy 0–3 zrobione, Etap 3b (aktualizacja architektury pod pełną specyfikację)
-> czeka na akceptację. Ścieżka krytyczna działa od początku do końca, bez internetu: import
+> **Stan:** Etapy 0–3b zrobione, Etap 4 (Keycloak, MFA, RBAC, dwie konsole) w przeglądzie.
+> Ścieżka krytyczna działa od początku do końca, bez internetu: import
 > inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów, ocena ryzyka
 > z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia zagrożeń na trzech
 > poziomach z lokalnego modelu, sprawdzane przez kod. Architektura i plan Etapów 4–9:
@@ -19,12 +19,14 @@ wyników na ludzki język.
 ## Uruchomienie
 
 ```bash
-cp .env.example .env        # ustaw POSTGRES_PASSWORD
+cp .env.example .env        # ustaw POSTGRES_PASSWORD i KEYCLOAK_ADMIN_PASSWORD
 docker compose up --build
 ```
 
-Interfejs: <http://localhost:8080>. Dokumentacja API: <http://localhost:8080/api/docs>.
-Po takim starcie zakres skanowania jest pusty i system niczego nie skanuje.
+Konsola operacyjna (admin): <http://localhost:8080/admin/>. Dashboard menedżera:
+<http://localhost:8080/dashboard/>. Dokumentacja API: <http://localhost:8080/api/docs>.
+Po takim starcie zakres skanowania jest pusty, system niczego nie skanuje i nie ma kont
+użytkowników (patrz [Logowanie i role](#logowanie-i-role)).
 
 ## Demo w 3 minuty (bez internetu)
 
@@ -35,7 +37,17 @@ Po takim starcie zakres skanowania jest pusty i system niczego nie skanuje.
 
 Skrypt uruchamia stos razem z celowo podatnym [demo-lab](demo-lab/README.md), importuje
 fikcyjny inwentarz, wczytuje feedy ze snapshotów, skanuje sieć demo-lab i liczy ryzyko.
-Trwa około minuty po zbudowaniu obrazów. Co zobaczysz:
+Trwa około minuty po zbudowaniu obrazów. Na końcu zakłada w Keycloaku trzy fikcyjne konta
+demo i wypisuje ich hasła oraz sekret TOTP admina (zapisane też w
+`data/demo-credentials.env`, poza Gitem):
+
+| Konto | Gdzie | Logowanie |
+|---|---|---|
+| `admin` (Anna Demonstracyjna) | `/admin/` | hasło + kod TOTP: dodaj sekret z wypisanego `otpauth://` do aplikacji uwierzytelniającej |
+| `manager` (Marek Demonstracyjny) | `/dashboard/` | hasło; dane techniczne i osobowe zredagowane, `/admin/` kończy się odmową zapisaną w audycie |
+| `auditor` (Alicja Demonstracyjna) | `/dashboard/` | hasło; odczyt i dziennik audytu |
+
+W konsoli operacyjnej (`admin`) zobaczysz:
 
 | Widok | Co pokazuje |
 |---|---|
@@ -49,6 +61,31 @@ Trwa około minuty po zbudowaniu obrazów. Co zobaczysz:
 Żeby zobaczyć zatwierdzanie przez człowieka, uruchom skrypt z pustą zgodą:
 `DEMO_APPROVAL_EXPIRES_AT=1970-01-01T00:00:00Z ./scripts/seed_demo.sh`. Skan L2 pojawi się
 wtedy w widoku Skany jako „Czeka na zgodę”.
+
+### Raport dla menedżera i scenariusz zero-day
+
+Po `seed_demo` w skrzynce menedżera (`/dashboard/`, konto `manager`) czeka raport o stanie
+z czerwonym światłem. Warstwa „W skrócie” odpowiada na pięć pytań (Co się stało? Czy jesteśmy
+zagrożeni? Co najgorszego może się stać? Co trzeba zrobić? Kto i do kiedy?) prostym językiem,
+z podpowiedzią przy każdym terminie ze słownika; „Szczegóły techniczne” są zwinięte. Światło i
+fakty liczy kod, a model tylko formułuje zdania w tle: raport jest w skrzynce od razu, z
+odpowiedziami z szablonu, i zostaje przy nich, jeśli tekst modelu nie przejdzie walidacji.
+
+Scenariusz zero-day na prezentacji (tylko `DEMO_MODE=true`):
+
+```bash
+./scripts/inject_kev.sh               # syntetyczny wpis KEV dla CVE-2021-23017 (nginx na proxy-01)
+```
+
+Wpis przechodzi tą samą ścieżką co prawdziwy feed KEV: dopasowanie, ocena ryzyka,
+powiadomienie i raport „zero-day” w skrzynce menedżera, bez modelu językowego. Skrypt wypisuje
+czasy kolejnych kroków (lokalnie około 50 ms, CI pilnuje progu 5 s). W konsoli menedżera
+pojawia się czerwony baner z linkiem do raportu i znika po jego przeczytaniu. W dzienniku
+audytu wpis jest oznaczony jako syntetyczny.
+
+![Skrzynka menedżera](docs/screenshots/etap4b-skrzynka.png)
+![Raport „W skrócie”](docs/screenshots/etap4b-raport.png)
+![Baner zero-day](docs/screenshots/etap4b-baner-zero-day.png)
 
 ![Zagrożenia](docs/screenshots/etap2-zagrozenia.png)
 ![Skany](docs/screenshots/etap2-skany.png)
@@ -99,6 +136,44 @@ audytu.
 
 ![Wyjaśnienie generowane na żywo](docs/screenshots/etap3-strumien.png)
 
+## Logowanie i role
+
+Logowanie obsługuje Keycloak (OIDC, kod autoryzacji z PKCE), wystawiony przez ten sam nginx
+pod `/auth`. Realm `sentinel` jest importowany przy starcie z
+[`infra/keycloak/sentinel-realm.json`](infra/keycloak/sentinel-realm.json) i nie zawiera
+haseł ani sekretów.
+
+- **Role:** `admin`, `manager`, `auditor`, `agent`, `system`. Keycloak trzyma tylko
+  przynależność do ról; uprawnienia ról są w [`rules/roles.yaml`](rules/roles.yaml), a
+  sprawdza je backend na każdym endpoincie (deny-by-default). Test przegląda wszystkie
+  trasy i nie przechodzi, gdy któraś nie deklaruje uprawnienia; macierz rola × endpoint
+  sprawdza 2xx, 403 i 401.
+- **MFA:** admin loguje się do `/admin/` hasłem i kodem TOTP. Backend uznaje MFA wyłącznie
+  na podstawie claimu `amr` w tokenie, więc konsola operacyjna i zgody na skany L2/L3 bez
+  drugiego składnika kończą się odmową.
+- **Sesje:** token dostępu 5 minut z odświeżaniem, 30 minut bezczynności, maksymalnie 12 h.
+  Wylogowanie unieważnia sesję w Keycloaku i w backendzie (lista w Redisie; gdy Redis nie
+  odpowiada, backend odmawia). Po 5 nieudanych próbach konto jest blokowane na 1–15 minut.
+- **Redakcja dla menedżera:** adresy IP, banery, dowody i parametry techniczne są usuwane w
+  warstwie serializacji API, nie w interfejsie.
+- **Odmowy w audycie:** każda odpowiedź 403 trafia do dziennika audytu z aktorem i
+  identyfikatorem żądania (`X-Request-ID`).
+- **Break-glass:** `./scripts/breakglass.sh` ustawia hasło i TOTP konta `breakglass-admin` i
+  wypisuje je raz; skrypt niczego nie zapisuje. Każde logowanie tym kontem tworzy alert i
+  wpis w audycie. Do Etapu 5 hasło trzeba samodzielnie przechować w sejfie; od Etapu 5
+  trafi do OpenBao.
+
+**Dostęp spoza localhost.** Na razie interfejs nasłuchuje tylko na `127.0.0.1`. Dostęp z
+sieci powstanie w Etapie 9 jako profil Compose `tls`: Caddy z certyfikatem lokalnym jako
+reverse proxy dla obu konsol, API i Keycloaka. Bez HTTPS logowanie spoza localhost i tak by
+nie zadziałało: przeglądarka udostępnia Web Crypto (potrzebne do PKCE) tylko w bezpiecznym
+kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
+
+![Drugi składnik logowania admina](docs/screenshots/etap4-totp.png)
+![Odmowy w dzienniku audytu](docs/screenshots/etap4-audyt-odmowy.png)
+![Menedżer w konsoli operacyjnej](docs/screenshots/etap4-odmowa-menedzera.png)
+![Dashboard menedżera](docs/screenshots/etap4-dashboard.png)
+
 ## Wymagania sprzętowe
 
 4+ rdzenie CPU, 16 GB RAM, około 30 GB SSD, Docker z Compose. **GPU nie jest wymagane.**
@@ -117,8 +192,16 @@ audytu.
 | Ocena ryzyka | Jawna formuła z wagami w [`rules/scoring.yaml`](rules/scoring.yaml), rozbicie na składniki i zdanie „dlaczego” budowane przez kod. |
 | Powiadomienia | Reguły w [`rules/notifications.yaml`](rules/notifications.yaml): grupowanie per zasób, bez powtórek w ciągu doby. E-mail, Slack i Teams są wyłączone do czasu konfiguracji w `.env`. |
 | AI Explainer | Wyjaśnienia na trzech poziomach z lokalnego modelu (Ollama), generowane raz i trzymane w cache, z walidatorem faktów i wersją z szablonu, gdy model jest niedostępny albo się myli. Streaming przez SSE. Prompty wersjonowane w `backend/app/explainer/prompts/`, limity w [`rules/explainer.yaml`](rules/explainer.yaml). |
-| Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz). |
-| Interfejs | Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. |
+| Raporty | Raport dwuwarstwowy: światło z reguł [`rules/reports.yaml`](rules/reports.yaml), „W skrócie” z modelu po walidacji (albo z szablonu), słownik terminów [`rules/glossary.yaml`](rules/glossary.yaml), szczegóły techniczne. Doręczenie do skrzynki ról z potwierdzeniem odczytu per osoba. Nazwy zasobów i osób model widzi tylko jako tokeny (`asset_1`, `person_1`). |
+| Scenariusz zero-day | `scripts/inject_kev.sh`: syntetyczny wpis KEV, raport w skrzynce i baner w konsoli menedżera w czasie poniżej 5 s, bez modelu. |
+| Testy własnego AI | [promptfoo w `ai-tests/`](ai-tests/README.md): pośrednie prompt injection przez opisy CVE na prawdziwej ścieżce aplikacji, z posłuszną atrapą (każdy PR) i z Qwen3 4B (9 przypadków w każdym PR, pełny zestaw nocą), wyniki osobno. Nocą także generowany red team OWASP LLM Top 10 (generator i sędzia przez API na syntetycznych danych, bez klucza Bielik 4.5B). |
+| Agent AI | Polecenie → plan (model albo szablon) → walidacja kodem → zatwierdzenie przez admina → wykonanie przez serwer MCP `mcp-scanner` (polityka zdolności → `scope_guard` → adapter). Sześć narzędzi: `discover_hosts`, `scan_services`, `probe_http` (L1), `scan_all_ports`, `verify_cve` z nuclei (szablony detekcyjne), `collect_software_authenticated` (L2). Jedna runda kroków uzupełniających, też do zatwierdzenia. Kill switch jednym kliknięciem. |
+| Poświadczenia JIT | OpenBao: certyfikat SSH podpisywany na zadanie z TTL 15 min, klucz tylko w pamięci, odwołanie leasu po zadaniu. Sekret nie trafia do modelu, logów, API ani audytu (testy z kanarkami). |
+| Test agenta (moduł 19) | Niezależny harness na osobnej kolejce i osobnym użytkowniku bazy, tryb dry-run z atrapami narzędzi i kanarkami, 11 przypadków w sześciu kategoriach, dwie oceny (model i kod), wynik podpisany Ed25519 i w audycie. Bramka zmian konfiguracji agenta z wymuszeniem wymagającym uzasadnienia. Nocny przebieg w CI. |
+| Sygnały bez CPE | Wpis KEV bez zakresu wersji w NVD trafia do kolejki weryfikacji jako sygnał; finding powstaje wyłącznie po decyzji człowieka. |
+| Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz), `agent`, `agent_tests`. |
+| Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla admina, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Uprawnienie na każdym endpoincie, redakcja danych dla menedżera, odmowy w audycie. |
+| Interfejs | Konsola operacyjna `/admin/`: Pulpit, Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Dziennik audytu. Konsola operacyjna ma też Raporty (nowy raport o stanie, ponowne zlecenie „W skrócie”). Dashboard `/dashboard/`: strona główna, najważniejsze zagrożenia, Skrzynka, Raporty i baner zero-day (pełna konsola menedżera w Etapie 6). |
 
 ## Zakres skanowania
 
@@ -142,7 +225,13 @@ uv run pytest                 # bez sieci, bez bazy, bez modelu
 cd frontend
 npm ci
 npm run lint && npm run typecheck && npm run build
-npm run dev                   # http://localhost:5173, proxy /api na :8000
+
+# testy własnego AI (promptfoo), szczegóły w ai-tests/README.md
+cd ../ai-tests && npm ci && ./run.sh mock
+npm run dev:admin             # http://localhost:5173/admin/, proxy /api na :8000
+PORT=5174 npm run dev:dashboard  # http://localhost:5174/dashboard/
+# /auth trafia do Keycloaka z docker compose (SENTINEL_AUTH_URL, domyślnie :8080);
+# PUBLIC_URL w .env musi wtedy wskazywać adres serwera deweloperskiego
 ```
 
 Zmiany trafiają do `main` wyłącznie przez pull requesty z gałęzi etapowych
@@ -160,11 +249,28 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
 - System wykrywa i weryfikuje, **nie eksploatuje** podatności.
 - Nie „wykrywa zero-dayów”. Szybko łapie wczesne sygnały i odpowiada, czy i gdzie
   organizacja jest narażona.
-- API nie ma jeszcze logowania użytkowników, dlatego interfejs jest dostępny tylko z
-  `localhost`. Keycloak, MFA i RBAC to Etap 4.
-- Skany inwazyjne (L2) to na razie pełny skan portów. Weryfikacja podatności szablonami
-  (nuclei) dochodzi w Etapie 5 razem z serwerem MCP skanerów.
-- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka powstaje w Etapie 4b.
+- Dostęp spoza localhost dopiero w Etapie 9 (profil `tls`, sekcja
+  [Logowanie i role](#logowanie-i-role)).
+- Keycloak i aplikacja korzystają z jednej instancji PostgreSQL, ale z osobnymi
+  użytkownikami: każdy jest właścicielem tylko własnego schematu (`public` albo `keycloak`) i
+  nie ma dostępu do drugiego, co sprawdza test w CI. Hasło administratora bazy zna tylko
+  jednorazowa usługa `db-init`. Osobna instancja bazy jest w [ROADMAP](docs/ROADMAP.md).
+- Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) nie powstało: Keycloak mieści się w
+  budżecie pamięci, więc fallback nie był potrzebny.
+- Weryfikacja podatności (nuclei) używa wyłącznie szablonów detekcyjnych z jawnej listy i
+  potwierdza podatność po wersji; nic nie jest eksploatowane.
+- Przez serwer MCP idzie tylko agent. Pipeline skanów woła adaptery bezpośrednio, zawsze
+  przez `scope_guard` (przejście na MCP w [ROADMAP](docs/ROADMAP.md)).
+- Certyfikatu SSH nie da się odwołać przed czasem bez listy KRL na hoście: granicą jest TTL
+  15 min. Kill switch blokuje każde kolejne wywołanie agenta od razu, ale nie wyłącza klienta
+  w Keycloak i nie odwołuje leasów OpenBao hurtowo (ROADMAP).
+- OpenBao w demo trzyma klucz rozpieczętowania w wolumenie `openbao-init`, dostępnym tylko
+  dla usługi inicjalizującej. Produkcja: auto-unseal przez KMS/HSM.
+- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka, e-mail i PDF raportów
+  powstają w Etapie 6; Slack, Teams i baner przez SSE są w [ROADMAP](docs/ROADMAP.md).
+- Reguły przeciw pośredniemu prompt injection (sprzeczności, prośby o hasła) są słownikowe i
+  nie złapią każdej parafrazy. Twarda gwarancja: ocenę ryzyka, światło i terminy liczy kod,
+  a model nie może ich zmienić (sprawdza to [`ai-tests/`](ai-tests/README.md)).
 - Walidator wyjaśnień sprawdza pochodzenie identyfikatorów, wersji, dat, poleceń i linków,
   ale nie sens zdań. Model może więc nieprecyzyjnie streścić fakt (przykłady w
   [eval/RESULTS.md](eval/RESULTS.md)). Dlatego decyzje i ocena ryzyka nigdy nie zależą od

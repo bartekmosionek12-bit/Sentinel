@@ -99,3 +99,41 @@ def test_db_sink_persists_in_own_transaction(session_factory: sessionmaker[Sessi
         rows = session.scalars(select(AuditLog).order_by(AuditLog.id)).all()
         assert [r.object_id for r in rows] == ["1", "2"]
         assert verify_chain(session).ok
+
+
+def test_chain_mixes_format_1_and_format_2(session: Session) -> None:
+    """Wpisy sprzed Etapu 4 (format 1) weryfikują się dalej, nowe są w formacie 2."""
+    ts = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    old_hash = compute_hash(GENESIS_HASH, ts, "api", "asset_created", "asset", "1", "r", {})
+    session.add(
+        AuditLog(
+            ts=ts,
+            actor="api",
+            action="asset_created",
+            object_type="asset",
+            object_id="1",
+            reason="r",
+            inputs={},
+            prev_hash=GENESIS_HASH,
+            hash=old_hash,
+            hash_version=1,
+        )
+    )
+    session.flush()
+    entry = record(
+        session,
+        AuditEvent(
+            actor="user:anna",
+            action="asset_created",
+            reason="r",
+            actor_type="human",
+            actor_id="sub-anna",
+            request_id="req-1",
+        ),
+    )
+    assert (entry.prev_hash, entry.hash_version) == (old_hash, 2)
+    assert verify_chain(session).ok
+    # Format 2 obejmuje tożsamość: podmiana aktora jest wykrywalna.
+    session.execute(update(AuditLog).where(AuditLog.id == entry.id).values(actor_id="sub-jan"))
+    session.expire_all()
+    assert verify_chain(session).broken_at_id == entry.id

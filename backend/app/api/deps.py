@@ -48,6 +48,16 @@ class Dispatcher(Protocol):
         background: bool = False,
     ) -> str: ...
 
+    def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str: ...
+
+    def plan_agent_task(self, task_id: uuid.UUID) -> str: ...
+
+    def execute_agent_task(self, task_id: uuid.UUID) -> str: ...
+
+    def run_agent_test(
+        self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
+    ) -> str: ...
+
 
 class CeleryDispatcher:
     def _send(self, name: str, *args: str) -> str:
@@ -84,6 +94,38 @@ class CeleryDispatcher:
             args=[cve_id, audience, actor, job_id, regenerate, use_external],
             # Żądanie użytkownika wyprzedza generowanie w tle.
             priority=5 if background else 0,
+        )
+        return str(result.id)
+
+    def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str:
+        from app.workers.celery_app import celery_app
+
+        result = celery_app.send_task(
+            "app.workers.tasks.llm.generate_report_summary",
+            args=[str(report_id), actor],
+            priority=5,
+        )
+        return str(result.id)
+
+    def plan_agent_task(self, task_id: uuid.UUID) -> str:
+        return self._send("app.workers.tasks.agent.plan_task", str(task_id))
+
+    def execute_agent_task(self, task_id: uuid.UUID) -> str:
+        return self._send("app.workers.tasks.agent.execute_task", str(task_id))
+
+    def run_agent_test(
+        self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
+    ) -> str:
+        from app.workers.celery_app import celery_app
+
+        result = celery_app.send_task(
+            "app.workers.tasks.agent_tests.run_agent_test",
+            kwargs={
+                "suite": suite,
+                "trigger": trigger,
+                "requested_by": requested_by,
+                "config_version_id": str(config_version_id) if config_version_id else None,
+            },
         )
         return str(result.id)
 

@@ -34,11 +34,22 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 - Rola `auditor` z eksportem paczki dowodów (audit log, wyniki, raporty) podpisanej cyfrowo.
 - Formalna akceptacja ryzyka przez menedżera z terminem wygaśnięcia i przypomnieniami.
 - WebAuthn jako domyślne MFA dla adminów.
+- Osobna instancja PostgreSQL dla Keycloaka (dziś ta sama instancja, osobni użytkownicy i schematy).
+- Logowanie bez Keycloaka (`AUTH_PROVIDER=local`) dla bardzo małych instalacji.
+- Certyfikat z ACME albo firmowego CA w profilu `tls` (w Etapie 9 certyfikat lokalny Caddy).
 
 ### Poświadczenia i skanowanie
 
 - Dynamiczne konta chmurowe (AWS, Azure, GCP) w OpenBao, skan konfiguracji chmury.
-- Auto-unseal OpenBao przez KMS albo HSM zamiast klucza w `.env` (dziś: tylko tryb demo).
+- Auto-unseal OpenBao przez KMS albo HSM zamiast klucza w wolumenie `openbao-init` (dziś:
+  tylko tryb demo).
+- Silnik `database` w OpenBao: konto tylko do odczytu na czas zadania agenta.
+- Pipeline skanów przez `mcp-scanner` z tokenem `sentinel-pipeline` (dziś przez MCP idzie
+  tylko agent; pipeline woła adaptery bezpośrednio, zawsze przez `scope_guard`).
+- Pełny kill switch: wyłączenie klienta `sentinel-agent` w Keycloak, `revoke` zadań Celery i
+  `sys/leases/revoke-prefix` w OpenBao (dziś flaga blokuje każde kolejne wywołanie od razu).
+- Narzędzia agenta `resolve_dns`, `check_tls`, `check_compliance`, `probe_ai_endpoint` i
+  adaptery subfinder, dnsx, httpx, naabu, testssl.sh.
 - Pełne odwołanie certyfikatów SSH przez listy KRL dystrybuowane na hosty produkcyjne.
 - Feedy OVAL dystrybucji Linuksa: rozstrzyganie backportów bez ręcznej weryfikacji.
 - Pozostałe narzędzia odkrywania: subfinder z kluczami API źródeł pasywnych, skan IPv6.
@@ -51,11 +62,17 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 - Sandbox WebAssembly dla wtyczek z regułami: reguły od społeczności bez dostępu do sieci,
   plików i bazy.
 
+### Raporty
+
+- Baner zero-day i powiadomienia przez SSE zamiast odpytywania co 5 s.
+- Doręczanie raportów i powiadomień do Slacka i Teams (PDF, digesty i e-mail w Etapie 6).
+
 ### AI
 
 - Większy model lokalny na sprzęcie z GPU, wybierany tym samym eval.
 - Eval z rubryką ocenianą przez kilku ludzi i z większą liczbą przypadków.
 - Testy MITRE ATLAS dla agentów z narzędziami (nie tylko chatbotów).
+- Klasyfikator parafraz bagatelizujących ryzyko zamiast list zwrotów (dziś reguły słownikowe).
 
 ### Integracje i skala
 

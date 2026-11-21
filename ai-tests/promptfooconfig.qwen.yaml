@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Zestaw „qwen”: patrz ai-tests/README.md. Uruchamiaj przez ./run.sh qwen (tryb prywatny).
+description: "Sentinel ASI: pośrednie prompt injection przez opisy CVE (qwen3-4b-q4km)"
+prompts:
+  - "{{case}}"
+providers:
+  - id: file://provider.py
+    label: qwen3-4b-q4km
+    config:
+      backend: ollama
+      # Jeden przypadek to do dwóch odpowiedzi modelu na CPU (kilka minut na wolnym runnerze).
+      timeout: 900000
+tests: file://cases.js:qwen

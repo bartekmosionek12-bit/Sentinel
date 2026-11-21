@@ -124,7 +124,7 @@ def test_explanation_is_shown_from_template_until_generated(env: Setup) -> None:
 
 def test_generation_streams_tokens_and_second_view_uses_cache(env: Setup) -> None:
     env.provider._responses.append(GOOD["operational"])
-    requested = env.client.post(env.url, json={"audience": "operational", "actor": "anna"})
+    requested = env.client.post(env.url, json={"audience": "operational"})
     assert requested.status_code == 202
     job_id = requested.json()["job_id"]
     assert job_id
@@ -142,12 +142,12 @@ def test_generation_streams_tokens_and_second_view_uses_cache(env: Setup) -> Non
     assert "sprawdzone automatycznie" in shown["label"]
 
     # drugie żądanie: tekst z cache, bez zadania i bez modelu
-    again = env.client.post(env.url, json={"audience": "operational", "actor": "jan"}).json()
+    again = env.client.post(env.url, json={"audience": "operational"}).json()
     assert again["job_id"] is None
     assert again["explanation"]["text"] == GOOD["operational"]
     assert len(env.dispatcher.calls) == 1
     assert len(env.provider.prompts) == 1
-    assert env.dispatcher.calls[0] == (CVE, "operational", "user:anna", False)
+    assert env.dispatcher.calls[0] == (CVE, "operational", "user:admin", False)
 
 
 def test_rejected_answer_is_visible_as_template_with_reason(env: Setup) -> None:

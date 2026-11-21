@@ -1,0 +1,11 @@
+{
+  "key_type": "ca",
+  "allow_user_certificates": true,
+  "allowed_users": "sentinel-scan",
+  "default_user": "sentinel-scan",
+  "ttl": "15m",
+  "max_ttl": "15m",
+  "allowed_extensions": "",
+  "default_extensions": {},
+  "algorithm_signer": "default"
+}

@@ -1,5 +1,15 @@
 """Modele SQLAlchemy. Import tego pakietu rejestruje wszystkie tabele w Base.metadata."""
 
+from app.models.agent import (
+    AgentCapability,
+    AgentConfigVersion,
+    AgentStep,
+    AgentSwitch,
+    AgentTask,
+    AgentTestCaseResult,
+    AgentTestRun,
+    CredentialLease,
+)
 from app.models.base import Base
 from app.models.finding import (
     ComplianceResult,
@@ -8,16 +18,17 @@ from app.models.finding import (
     FindingEvent,
     UpdateRecommendation,
 )
+from app.models.iam import Permission, Role, RolePermission, User
 from app.models.inventory import (
     Asset,
     AssetHistory,
     AssetRelation,
     CpeProduct,
     MatchCandidate,
+    SignalMatch,
     Software,
 )
 from app.models.ops import (
-    AppUser,
     AuditLog,
     FeedSync,
     LLMCache,
@@ -25,10 +36,17 @@ from app.models.ops import (
     ScanAction,
     ScanRun,
 )
+from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
 
 __all__ = [
-    "AppUser",
+    "AgentCapability",
+    "AgentConfigVersion",
+    "AgentStep",
+    "AgentSwitch",
+    "AgentTask",
+    "AgentTestCaseResult",
+    "AgentTestRun",
     "Asset",
     "AssetHistory",
     "AssetRelation",
@@ -37,16 +55,25 @@ __all__ = [
     "ComplianceResult",
     "ComplianceRule",
     "CpeProduct",
+    "CredentialLease",
     "FeedSync",
     "Finding",
     "FindingEvent",
     "LLMCache",
     "MatchCandidate",
     "Notification",
+    "Permission",
+    "Report",
+    "ReportDelivery",
+    "ReportRead",
+    "Role",
+    "RolePermission",
     "ScanAction",
     "ScanRun",
+    "SignalMatch",
     "Software",
     "UpdateRecommendation",
+    "User",
     "VulnAffected",
     "Vulnerability",
 ]

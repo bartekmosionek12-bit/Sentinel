@@ -18,7 +18,19 @@ ALLOWED: dict[str, set[str]] = {
     "socket": {"core/scope_guard.py"},
     "subprocess": {"scanners/runner.py"},
     "asyncio.subprocess": {"scanners/runner.py"},
-    "httpx": {"feeds/http.py", "notifications/channels.py", "explainer/providers.py"},
+    "httpx": {
+        "feeds/http.py",
+        "notifications/channels.py",
+        "explainer/providers.py",
+        "iam/jwks.py",
+        # Etap 5: adapter WWW przyjmuje ScopedTarget; OpenBao i token agenta to stałe adresy
+        # usług wewnętrznych; brama agenta łączy się wyłącznie z serwerem MCP.
+        "scanners/http_probe.py",
+        "credentials/openbao.py",
+        "agent/gateway.py",
+    },
+    # Serwer MCP (mcp-scanner) i jego jedyny klient (wykonawca agenta).
+    "mcp": {"mcp_server/server.py", "agent/gateway.py"},
     "requests": set(),
     "aiohttp": set(),
     "urllib.request": set(),
@@ -27,7 +39,7 @@ ALLOWED: dict[str, set[str]] = {
     "ftplib": set(),
     "telnetlib": set(),
     "smtplib": {"notifications/channels.py"},
-    "paramiko": set(),
+    "paramiko": {"scanners/ssh.py"},
     "scapy": set(),
     "nmap": set(),
     "pty": set(),

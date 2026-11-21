@@ -34,6 +34,8 @@ COPY backend/alembic.ini ./
 COPY backend/alembic ./alembic
 COPY backend/app ./app
 COPY rules /app/rules
+# Katalog na klucz podpisu harnessu (moduł 19); wolumen dziedziczy właściciela przy tworzeniu.
+RUN mkdir -p /app/data/harness && chown 10001 /app/data/harness && chmod 700 /app/data/harness
 
 USER 10001
 

@@ -12,7 +12,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, CreatedAt, UuidPk, utcnow
 from app.models.inventory import _in
 
-USER_ROLES = ("admin", "manager", "viewer")
 SCAN_ACTION_STATUSES = (
     "planned",
     "awaiting_approval",
@@ -22,17 +21,6 @@ SCAN_ACTION_STATUSES = (
     "failed",
 )
 AUDIENCES = ("technical", "operational", "executive")
-
-
-class AppUser(Base):
-    __tablename__ = "app_user"
-    __table_args__ = (CheckConstraint(_in("role", USER_ROLES), name="role_valid"),)
-
-    id: Mapped[UuidPk]
-    email: Mapped[str] = mapped_column(String(255), unique=True)
-    role: Mapped[str] = mapped_column(String(16), default="viewer")
-    password_hash: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[CreatedAt]
 
 
 class ScanRun(Base):
@@ -52,7 +40,7 @@ class ScanAction(Base):
     __tablename__ = "scan_action"
     __table_args__ = (
         CheckConstraint(_in("status", SCAN_ACTION_STATUSES), name="status_valid"),
-        CheckConstraint("intrusiveness BETWEEN 0 AND 2", name="intrusiveness_range"),
+        CheckConstraint("intrusiveness BETWEEN 1 AND 3", name="intrusiveness_range"),
     )
 
     id: Mapped[UuidPk]
@@ -65,10 +53,10 @@ class ScanAction(Base):
     target: Mapped[str] = mapped_column(String(255))
     tool: Mapped[str] = mapped_column(String(32))
     rule_name: Mapped[str] = mapped_column(String(128))
-    intrusiveness: Mapped[int] = mapped_column(default=0)
+    intrusiveness: Mapped[int] = mapped_column(default=1)
     status: Mapped[str] = mapped_column(String(20), default="planned", index=True)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("app_user.id", ondelete="SET NULL")
+        ForeignKey("iam_user.id", ondelete="SET NULL")
     )
     approval_source: Mapped[str | None] = mapped_column(String(32))
     scope_decision: Mapped[str | None] = mapped_column(String(64))
@@ -102,6 +90,10 @@ class Notification(Base):
     id: Mapped[UuidPk]
     finding_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("finding.id", ondelete="SET NULL"), index=True
+    )
+    # Powiadomienie o nowym raporcie (np. zero-day) wskazuje raport w skrzynce.
+    report_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("report.id", ondelete="SET NULL"), index=True
     )
     rule_name: Mapped[str] = mapped_column(String(128))
     channel: Mapped[str] = mapped_column(String(16))
@@ -140,6 +132,13 @@ class AuditLog(Base):
     )
     ts: Mapped[datetime] = mapped_column(default=utcnow, index=True)
     actor: Mapped[str] = mapped_column(String(255))
+    # Od formatu 2: rodzaj i identyfikator aktora, w czyim imieniu działał (agent → admin)
+    # oraz identyfikator żądania. Stare wpisy (format 1) weryfikują się po starym wzorze.
+    actor_type: Mapped[str | None] = mapped_column(String(16))
+    actor_id: Mapped[str | None] = mapped_column(String(255))
+    on_behalf_of: Mapped[str | None] = mapped_column(String(255))
+    request_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    hash_version: Mapped[int] = mapped_column(default=1)
     action: Mapped[str] = mapped_column(String(64), index=True)
     object_type: Mapped[str | None] = mapped_column(String(64))
     object_id: Mapped[str | None] = mapped_column(String(255))

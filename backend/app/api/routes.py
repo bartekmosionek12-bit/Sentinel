@@ -7,7 +7,7 @@ import uuid
 from typing import Annotated
 
 import redis
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -28,17 +28,22 @@ from app.api.schemas import (
 )
 from app.core import audit
 from app.core.scope_guard import Intrusiveness, ScopeError
+from app.iam.deps import public_endpoint, require
+from app.iam.redaction import RedactingRoute
+from app.iam.tokens import Principal
 from app.inventory.service import asset_fingerprint
 from app.models import Asset, AuditLog
 
 logger = logging.getLogger("sentinel.api")
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", route_class=RedactingRoute)
 
 Limit = Annotated[int, Query(ge=1, le=500)]
 Offset = Annotated[int, Query(ge=0)]
 
 
-@router.get("/health", response_model=HealthOut, tags=["system"])
+@router.get(
+    "/health", response_model=HealthOut, tags=["system"], dependencies=[Depends(public_endpoint())]
+)
 def health(session: SessionDep, settings: SettingsDep) -> HealthOut:
     database = True
     try:
@@ -61,7 +66,12 @@ def health(session: SessionDep, settings: SettingsDep) -> HealthOut:
     )
 
 
-@router.get("/assets", response_model=Page[AssetOut], tags=["inwentarz"])
+@router.get(
+    "/assets",
+    response_model=Page[AssetOut],
+    tags=["inwentarz"],
+    dependencies=[Depends(require("inventory:read"))],
+)
 def list_assets(
     session: SessionDep,
     type: AssetType | None = None,
@@ -84,7 +94,11 @@ def list_assets(
 @router.post(
     "/assets", response_model=AssetOut, status_code=status.HTTP_201_CREATED, tags=["inwentarz"]
 )
-def create_asset(payload: AssetIn, session: SessionDep) -> AssetOut:
+def create_asset(
+    payload: AssetIn,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require("inventory:write"))],
+) -> AssetOut:
     fingerprint = asset_fingerprint(payload.type, payload.name)
     if session.scalar(select(Asset.id).where(Asset.fingerprint == fingerprint)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Zasób o tej nazwie i typie już istnieje")
@@ -94,7 +108,7 @@ def create_asset(payload: AssetIn, session: SessionDep) -> AssetOut:
     audit.record(
         session,
         audit.AuditEvent(
-            actor="api",
+            actor=principal.actor,
             action="asset_created",
             reason="Zasób dodany ręcznie przez API",
             inputs=payload.model_dump(),
@@ -105,7 +119,12 @@ def create_asset(payload: AssetIn, session: SessionDep) -> AssetOut:
     return AssetOut.model_validate(asset)
 
 
-@router.get("/assets/{asset_id}", response_model=AssetOut, tags=["inwentarz"])
+@router.get(
+    "/assets/{asset_id}",
+    response_model=AssetOut,
+    tags=["inwentarz"],
+    dependencies=[Depends(require("inventory:read"))],
+)
 def get_asset(asset_id: uuid.UUID, session: SessionDep) -> AssetOut:
     asset = session.get(Asset, asset_id)
     if asset is None:
@@ -113,7 +132,12 @@ def get_asset(asset_id: uuid.UUID, session: SessionDep) -> AssetOut:
     return AssetOut.model_validate(asset)
 
 
-@router.get("/audit-log", response_model=Page[AuditLogOut], tags=["audit"])
+@router.get(
+    "/audit-log",
+    response_model=Page[AuditLogOut],
+    tags=["audit"],
+    dependencies=[Depends(require("audit:read"))],
+)
 def list_audit_log(
     session: SessionDep,
     action: str | None = None,
@@ -130,7 +154,12 @@ def list_audit_log(
     )
 
 
-@router.get("/audit-log/verify", response_model=AuditChainOut, tags=["audit"])
+@router.get(
+    "/audit-log/verify",
+    response_model=AuditChainOut,
+    tags=["audit"],
+    dependencies=[Depends(require("audit:read"))],
+)
 def verify_audit_log(session: SessionDep) -> AuditChainOut:
     result = audit.verify_chain(session)
     return AuditChainOut(
@@ -141,7 +170,12 @@ def verify_audit_log(session: SessionDep) -> AuditChainOut:
     )
 
 
-@router.get("/scope", response_model=ScopeOut, tags=["zakres"])
+@router.get(
+    "/scope",
+    response_model=ScopeOut,
+    tags=["zakres"],
+    dependencies=[Depends(require("scope:read"))],
+)
 def get_scope(guard: ScopeGuardDep, settings: SettingsDep) -> ScopeOut:
     config = guard.config
     return ScopeOut(
@@ -156,7 +190,12 @@ def get_scope(guard: ScopeGuardDep, settings: SettingsDep) -> ScopeOut:
     )
 
 
-@router.post("/scope/check", response_model=ScopeCheckOut, tags=["zakres"])
+@router.post(
+    "/scope/check",
+    response_model=ScopeCheckOut,
+    tags=["zakres"],
+    dependencies=[Depends(require("scope:manage"))],
+)
 def check_scope(payload: ScopeCheckIn, guard: ScopeGuardDep) -> ScopeCheckOut:
     """Podgląd decyzji bramy dla celu. Niczego nie skanuje; decyzja trafia do audit logu."""
     try:

@@ -144,3 +144,35 @@ class CpeProduct(Base):
     vendor: Mapped[str] = mapped_column(String(255))
     product: Mapped[str] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(512), default="")
+
+
+class SignalMatch(Base):
+    """Sygnał bez CPE: podatność z KEV wskazuje producenta i produkt, ale bez zakresu wersji.
+
+    Dopasowanie do oprogramowania z inwentarza ma tylko pewność nazwy, więc nigdy nie tworzy
+    findingu samo: zawsze czeka na decyzję człowieka w kolejce weryfikacji.
+    """
+
+    __tablename__ = "signal_match"
+    __table_args__ = (UniqueConstraint("vulnerability_id", "software_id"),)
+
+    id: Mapped[UuidPk]
+    vulnerability_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vulnerability.id", ondelete="CASCADE"), index=True
+    )
+    software_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("software.id", ondelete="CASCADE"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(20), default="kev")
+    vendor: Mapped[str] = mapped_column(String(255), default="")
+    product: Mapped[str] = mapped_column(String(255), default="")
+    score: Mapped[float]
+    method: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    decision: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    decided_by: Mapped[str | None] = mapped_column(String(255))
+    decided_at: Mapped[datetime | None]
+    finding_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("finding.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[CreatedAt]

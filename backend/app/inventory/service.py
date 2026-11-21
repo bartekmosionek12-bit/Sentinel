@@ -364,3 +364,89 @@ def record_host_scan(
         )
         session.flush()
     return diff
+
+
+PACKAGE_SOURCE = "ssh"
+
+
+def host_asset(session: Session, address: str, hostname: str | None = None) -> Asset:
+    """Zasób hosta o danym adresie. Nieznany host trafia do inwentarza jako shadow IT."""
+    fingerprint = asset_fingerprint("host", address, address)
+    asset = session.scalar(select(Asset).where(Asset.fingerprint == fingerprint))
+    if asset is not None:
+        return asset
+    now = utcnow()
+    asset = Asset(
+        type="host",
+        name=hostname or address,
+        fingerprint=fingerprint,
+        status="shadow",
+        attributes={"address": address, "discovered_by": "agent"},
+        first_seen=now,
+        last_seen=now,
+    )
+    session.add(asset)
+    session.flush()
+    _history(session, asset, "discovered", {"address": address, "note": "Host z zadania agenta"})
+    return asset
+
+
+def record_packages(
+    session: Session, asset: Asset, manager: str, packages: Sequence[tuple[str, str]]
+) -> ServiceDiff:
+    """Zapisuje pakiety odczytane skanem uwierzytelnionym (źródło `ssh`) i zwraca różnicę."""
+    now = utcnow()
+    existing = {
+        (s.product, s.version): s
+        for s in session.scalars(
+            select(Software).where(Software.asset_id == asset.id, Software.source == PACKAGE_SOURCE)
+        )
+    }
+    diff = ServiceDiff()
+    seen: set[tuple[str, str]] = set()
+    for name, version in packages:
+        key = (name[:255], version[:128])
+        if key in seen:
+            continue
+        seen.add(key)
+        software = existing.get(key)
+        if software is not None:
+            software.last_seen = now
+            continue
+        software = Software(
+            asset_id=asset.id,
+            product=key[0],
+            version=key[1],
+            raw_banner=f"{manager}: {key[0]} {key[1]}",
+            source=PACKAGE_SOURCE,
+            first_seen=now,
+            last_seen=now,
+        )
+        session.add(software)
+        diff.added.append(software)
+    for key, software in existing.items():
+        if key not in seen:
+            diff.removed.append(_describe(software))
+            session.delete(software)
+    attributes = dict(asset.attributes or {})
+    first = "package_manager" not in attributes
+    asset.attributes = {
+        **attributes,
+        "package_manager": manager,
+        "last_authenticated_scan": now.isoformat(),
+    }
+    asset.last_seen = now
+    session.flush()
+    if diff.changed or first:
+        _history(
+            session,
+            asset,
+            "packages_scanned" if first else "packages_changed",
+            {
+                "manager": manager,
+                "added": len(diff.added),
+                "removed": [f"{r['product']} {r['version']}" for r in diff.removed][:50],
+            },
+        )
+        session.flush()
+    return diff

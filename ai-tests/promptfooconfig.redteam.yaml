@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Generowany red team (ARCHITECTURE §13.1, §23.2): ataki z redteam/generate.py na Qwen3 4B.
+# Uruchamiaj przez ./run.sh redteam (najpierw generuje ataki, tryb prywatny promptfoo).
+description: "Sentinel ASI: generowany red team OWASP (qwen3-4b-q4km)"
+prompts:
+  - "{{payload}}"
+providers:
+  - id: file://provider.py
+    label: qwen3-4b-q4km
+    config:
+      backend: ollama
+      timeout: 900000
+tests: file://redteam/generated/tests.json

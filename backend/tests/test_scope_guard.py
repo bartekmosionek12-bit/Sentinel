@@ -242,9 +242,11 @@ def seed(
     return SeedDemoApproval(demo_mode=demo_mode, lab_network=LAB, expires_at=expires)
 
 
-def test_seed_demo_approval_works_inside_lab(audit_sink: MemoryAudit) -> None:
+@pytest.mark.parametrize("level", [Intrusiveness.INTRUSIVE, Intrusiveness.REDTEAM])
+def test_seed_demo_approval_works_inside_lab(audit_sink: MemoryAudit, level: Intrusiveness) -> None:
+    """Zgoda seed_demo obejmuje L2 i L3 (L3: red team chatbota w demo-lab, Etap 8)."""
     guard = make_guard(audit_sink, seed_demo=seed())
-    scoped = authorize(guard, "172.30.99.10", Intrusiveness.INTRUSIVE)
+    scoped = authorize(guard, "172.30.99.10", level)
     assert scoped.approval_source == "seed_demo"
     event = audit_sink.events[-1]
     assert event.action == "scope_allowed"
@@ -452,7 +454,7 @@ def test_network_sweep_size_limit(audit_sink: MemoryAudit) -> None:
 
 def test_network_sweep_is_never_intrusive(audit_sink: MemoryAudit) -> None:
     guard = make_guard(audit_sink, seed_demo=seed())
-    with pytest.raises(ScopeDenied, match="L0 i L1"):
+    with pytest.raises(ScopeDenied, match="tylko na poziomie L1"):
         sweep(guard, "172.30.99.0/24", Intrusiveness.INTRUSIVE)
 
 

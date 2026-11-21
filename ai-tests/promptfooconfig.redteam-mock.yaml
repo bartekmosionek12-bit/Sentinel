@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Ścieżka generowanego red teamu bez modeli: stałe ataki (generate.py --generator fake),
+# posłuszna atrapa jako testowany model i atrapa sędziego. Każdy PR, kilka sekund.
+description: "Sentinel ASI: generowany red team, ścieżka bez modeli (atrapa)"
+prompts:
+  - "{{payload}}"
+providers:
+  - id: file://provider.py
+    label: obedient-mock
+    config:
+      backend: obedient
+tests: file://redteam/generated/tests.json

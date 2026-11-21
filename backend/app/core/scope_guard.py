@@ -49,10 +49,10 @@ SEED_DEMO_SOURCE: Final = "seed_demo"
 
 
 class Intrusiveness(IntEnum):
-    PASSIVE = 0  # L0: źródła pasywne, bez kontaktu z celem
-    LIGHT = 1  # L1: lekki aktywny (dnsx, httpx, nmap -sV, szablony info)
-    INTRUSIVE = 2  # L2: weryfikacja podatności; wymaga zgody człowieka
-    FORBIDDEN = 3  # eksploatacja, DoS, brute force: nigdy
+    LIGHT = 1  # L1: pasywne i lekkie (feedy, dnsx, httpx, nmap -sV, szablony info)
+    INTRUSIVE = 2  # L2: pełny skan, weryfikacja podatności, skan uwierzytelniony; zgoda admina
+    REDTEAM = 3  # L3: aktywny red team systemów AI; zgoda admina z osobnym uprawnieniem
+    FORBIDDEN = 4  # eksploatacja, DoS, brute force: nigdy
 
 
 class ScopeError(Exception):
@@ -353,8 +353,9 @@ class ScopeGuard:
         intrusiveness: Intrusiveness,
         rule_name: str,
         max_addresses: int = 1024,
+        dry_run: bool = False,
     ) -> ScopedNetwork:
-        """Zgoda na odkrywanie hostów w sieci. Tylko poziomy L0 i L1.
+        """Zgoda na odkrywanie hostów w sieci. Tylko poziom L1.
 
         Sieć musi w całości leżeć w jednym dozwolonym CIDR. Adresy z denylisty
         wewnątrz sieci trafiają do `excluded` i narzędzie je pomija.
@@ -364,9 +365,12 @@ class ScopeGuard:
             "tool": tool,
             "intrusiveness": int(intrusiveness),
             "rule": rule_name,
+            "dry_run": dry_run,
         }
         try:
-            scoped = self._decide_network(cidr, tool, intrusiveness, rule_name, max_addresses)
+            scoped = self._decide_network(
+                cidr, tool, intrusiveness, rule_name, max_addresses, dry_run
+            )
         except ScopeError as error:
             self._audit(
                 AuditEvent(
@@ -393,12 +397,16 @@ class ScopeGuard:
         return scoped
 
     def _decide_network(
-        self, cidr: str, tool: str, intrusiveness: Intrusiveness, rule_name: str, max_addresses: int
+        self,
+        cidr: str,
+        tool: str,
+        intrusiveness: Intrusiveness,
+        rule_name: str,
+        max_addresses: int,
+        dry_run: bool = False,
     ) -> ScopedNetwork:
         if intrusiveness > Intrusiveness.LIGHT:
-            raise ScopeDenied(
-                cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomach L0 i L1"
-            )
+            raise ScopeDenied(cidr, "Odkrywanie całej sieci jest dozwolone tylko na poziomie L1")
         try:
             network = ip_network(cidr.strip(), strict=True)
         except ValueError as error:
@@ -417,7 +425,9 @@ class ScopeGuard:
             if network.subnet_of(denied):  # type: ignore[arg-type]
                 raise ScopeDenied(cidr, "Cała sieć jest na denyliście")
             excluded.append(denied)
-        if not self._rate_limiter.acquire(str(network), self._config.rate_for(str(network))):
+        if not dry_run and not self._rate_limiter.acquire(
+            str(network), self._config.rate_for(str(network))
+        ):
             raise RateLimited(cidr, "Przekroczony limit akcji na minutę dla sieci")
         return ScopedNetwork(
             network=network,
@@ -464,7 +474,9 @@ class ScopeGuard:
                 approval_source = SEED_DEMO_SOURCE
                 context["approval_expires_at"] = self._seed_demo.expires_at
             else:
-                raise ApprovalRequired(target, "Akcja L2 wymaga zatwierdzenia przez człowieka")
+                raise ApprovalRequired(
+                    target, f"Akcja L{int(intrusiveness)} wymaga zatwierdzenia przez człowieka"
+                )
             context["approval_source"] = approval_source
 
         pinned = addresses[0]

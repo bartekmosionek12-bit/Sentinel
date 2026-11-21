@@ -85,6 +85,6 @@ def test_invalid_rules_are_rejected(rule: dict[str, Any]) -> None:
 def test_forbidden_intrusiveness_cannot_be_configured() -> None:
     rule = {"name": "x", "trigger": "host_seen", "tool": "nmap", "mode": "services"}
     with pytest.raises(ValueError, match="Nieprawidłowa reguła"):
-        ScanPlanner.from_dict({"rules": [{**rule, "intrusiveness": 3}]})
+        ScanPlanner.from_dict({"rules": [{**rule, "intrusiveness": 4}]})
     with pytest.raises(ValueError, match="unikalne"):
         ScanPlanner.from_dict({"rules": [rule, rule]})

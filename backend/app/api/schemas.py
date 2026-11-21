@@ -58,6 +58,10 @@ class AuditLogOut(OrmModel):
     id: int
     ts: datetime
     actor: str
+    actor_type: str | None = None
+    actor_id: str | None = None
+    on_behalf_of: str | None = None
+    request_id: str | None = None
     action: str
     object_type: str | None
     object_id: str | None
@@ -65,6 +69,7 @@ class AuditLogOut(OrmModel):
     inputs: dict[str, Any]
     hash: str
     prev_hash: str
+    hash_version: int = 1
 
 
 class AuditChainOut(BaseModel):
@@ -87,7 +92,7 @@ class ScopeOut(BaseModel):
 
 class ScopeCheckIn(BaseModel):
     target: str = Field(min_length=1, max_length=255)
-    intrusiveness: Literal[0, 1, 2] = 1
+    intrusiveness: Literal[1, 2, 3] = 1
 
 
 class ScopeCheckOut(BaseModel):
@@ -208,7 +213,6 @@ class FindingPatchIn(BaseModel):
     status: FindingStatus | None = None
     assignee: str | None = Field(default=None, max_length=255)
     reason: str = Field(default="", max_length=2000)
-    actor: str = Field(default="operator", min_length=1, max_length=255)
 
 
 class AffectedAssetOut(BaseModel):
@@ -269,9 +273,30 @@ class ReviewItemOut(BaseModel):
     asset: AssetRef
 
 
+class SignalItemOut(BaseModel):
+    """Sygnał bez CPE w kolejce weryfikacji: produkt z KEV dopasowany po nazwie."""
+
+    id: uuid.UUID
+    cve_id: str
+    source: str
+    vendor: str
+    product: str
+    score: float
+    method: str
+    reason: str
+    kev_due_date: date | None
+    created_at: datetime
+    software: SoftwareOut
+    asset: AssetRef
+
+
+class SignalDecisionOut(BaseModel):
+    decision: str
+    findings_created: int
+
+
 class ReviewDecisionIn(BaseModel):
     accept: bool
-    decided_by: str = Field(default="operator", min_length=1, max_length=255)
 
 
 class ReviewDecisionOut(BaseModel):
@@ -307,12 +332,9 @@ class ScanRunOut(OrmModel):
     actions: list[ScanActionOut] = Field(default_factory=list)
 
 
-class ScanTriggerIn(BaseModel):
-    actor: str = Field(default="operator", min_length=1, max_length=255)
-
-
 class ApprovalIn(BaseModel):
-    actor: str = Field(min_length=1, max_length=255)
+    """Kto zatwierdza, wynika z tokenu; klient podaje tylko uzasadnienie."""
+
     reason: str = Field(min_length=3, max_length=2000)
 
 

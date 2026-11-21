@@ -23,9 +23,20 @@ from app.core.db import get_sessionmaker
 from app.core.scope_guard import ScopeConfig
 from app.feeds.base import FeedError, OfflineSource, as_utc
 from app.feeds.service import FEEDS, sync_all
+from app.iam.rbac import RoleCatalog
+from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
 from app.pipeline import analyze
-from app.runtime import channel_sender, feed_source, get_rulebook, scan_service
+from app.reports.service import create_report
+from app.reports.zero_day import ZeroDayError, inject_kev
+from app.runtime import (
+    channel_sender,
+    feed_source,
+    get_reports_config,
+    get_rulebook,
+    local_provider,
+    scan_service,
+)
 
 
 def _out(text: str) -> None:
@@ -185,12 +196,105 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
     feeds = sync_all(session, OfflineSource(feeds_dir), actor="seed_demo")
     session.commit()
     run = service.run(trigger="seed_demo", actor="seed_demo")
+    report = create_report(session, get_reports_config(), kind="assessment", actor="seed_demo")
+    session.commit()
+    _queue_summary(settings, report.id, "seed_demo")
     return {
+        "report": {"id": str(report.id), "light": report.light, "title": report.title},
         "assets": assets,
         "feeds_source": "pobrane snapshoty" if has_snapshots else "miniaturowy zestaw demo",
         "feeds": feeds.results,
         "l2_approval": "seed_demo" if approval_active else "wymaga człowieka",
         "scan": run.summary,
+    }
+
+
+DEMO_AGENT_NOTE = "Demo-lab: assessment agenta (seed_demo)"
+
+
+def cmd_agent_bootstrap(
+    session: Session, settings: Settings, dispatcher: Any | None = None
+) -> dict[str, Any]:
+    """Demo: zdolności agenta dla sieci demo-lab. Wchodzą w życie po zaliczonym teście agenta."""
+    from app.agent.catalog import CATALOG
+    from app.agent.service import create_capability
+    from app.agent_tests.gate import request_change
+    from app.models import AgentCapability
+    from app.runtime import agent_runtime_config
+
+    check_demo_preconditions(settings, ScopeConfig.from_file(settings.scope_file))
+    existing = session.scalar(select(AgentCapability).where(AgentCapability.active.is_(True)))
+    if existing is not None:
+        return {"capability": existing.version, "state": "active", "test_queued": False}
+    capability = create_capability(
+        session,
+        actor="seed_demo",
+        tools=sorted(CATALOG),
+        targets=[settings.demo_lab_cidr],
+        max_level=2,
+        note=DEMO_AGENT_NOTE,
+    )
+    config = request_change(
+        session,
+        agent_runtime_config(settings),
+        capability_version=capability.version,
+        reason=f"Nowe zdolności v{capability.version}: {DEMO_AGENT_NOTE}",
+        actor="seed_demo",
+    )
+    session.commit()
+    if dispatcher is None:
+        from app.api.deps import CeleryDispatcher
+
+        dispatcher = CeleryDispatcher()
+    dispatcher.run_agent_test("quick", "config_change", "seed_demo", config.id)
+    return {
+        "capability": capability.version,
+        "state": config.state,
+        "config": str(config.id),
+        "test_queued": True,
+    }
+
+
+def _queue_summary(settings: Settings, report_id: Any, actor: str) -> bool:
+    """Zleca workerowi llm warstwę „W skrócie”, jeśli model jest skonfigurowany."""
+    if local_provider(settings) is None:
+        return False
+    from app.api.deps import CeleryDispatcher
+
+    CeleryDispatcher().generate_report_summary(report_id, actor)
+    return True
+
+
+def cmd_report(session: Session, settings: Settings) -> dict[str, Any]:
+    report = create_report(session, get_reports_config(), kind="assessment", actor="cli:report")
+    session.commit()
+    queued = _queue_summary(settings, report.id, "cli:report")
+    return {"id": str(report.id), "title": report.title, "light": report.light, "model": queued}
+
+
+def cmd_inject_kev(session: Session, settings: Settings, cve_id: str) -> dict[str, Any]:
+    """Scenariusz zero-day: syntetyczny wpis KEV. Tylko w trybie demo."""
+    if not settings.demo_mode:
+        raise CliError("inject-kev działa tylko przy DEMO_MODE=true (syntetyczne dane demo).")
+    try:
+        result = inject_kev(
+            session,
+            get_rulebook(),
+            get_reports_config(),
+            cve_id.upper(),
+            sender=channel_sender(),
+        )
+    except ZeroDayError as error:
+        raise CliError(str(error)) from error
+    session.commit()
+    queued = _queue_summary(settings, result.report.id, "zero_day_demo")
+    return {
+        "report": {"id": str(result.report.id), "title": result.report.title},
+        "light": result.report.light,
+        "findings_rescored": result.findings_rescored,
+        "notifications": result.notifications,
+        "timings_ms": {**result.timings_ms, "total": result.total_ms},
+        "model_summary_queued": queued,
     }
 
 
@@ -212,6 +316,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym"
     ).add_argument("--queue", action="store_true", help="zleć workerowi llm w tle")
     commands.add_parser("seed-demo", help="dane i skan demo-lab (tylko DEMO_MODE=true)")
+    commands.add_parser(
+        "agent-bootstrap", help="zdolności agenta dla demo-lab i test agenta (tylko DEMO_MODE)"
+    )
+    commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
+    commands.add_parser("report", help="raport o otwartych zagrożeniach do skrzynek menedżerów")
+    commands.add_parser(
+        "inject-kev", help="scenariusz zero-day: syntetyczny wpis KEV (tylko DEMO_MODE=true)"
+    ).add_argument("cve_id")
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -230,6 +342,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = analyze(session, get_rulebook(), channel_sender()).summary()
             elif args.command == "explain":
                 result = cmd_explain(session, settings, queue=args.queue)
+            elif args.command == "report":
+                result = cmd_report(session, settings)
+            elif args.command == "inject-kev":
+                result = cmd_inject_kev(session, settings, args.cve_id)
+            elif args.command == "agent-bootstrap":
+                result = cmd_agent_bootstrap(session, settings)
+            elif args.command == "sync-roles":
+                result = sync_catalog(
+                    session, RoleCatalog.from_file(settings.rules_dir / "roles.yaml")
+                )
             else:
                 result = cmd_seed_demo(session, settings)
             session.commit()

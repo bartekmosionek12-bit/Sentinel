@@ -1,0 +1,153 @@
+name: AI tests (promptfoo)
+
+# Testy własnego AI: pośrednie prompt injection przez opisy CVE (ai-tests/README.md).
+# - mock: posłuszna atrapa, wszystkie przypadki, każdy PR (wywołanie z ci.yml)
+# - qwen: Qwen3 4B, przypadki z `qwen: true`, każdy PR (wywołanie z ci.yml)
+# - full: Qwen3 4B, wszystkie przypadki, nocą i ręcznie
+# - redteam-mock: ścieżka generowanego red teamu bez modeli, każdy PR (wywołanie z ci.yml)
+# - redteam: generowane ataki OWASP na Qwen3 4B, nocą i ręcznie. Generator i sędzia:
+#   zewnętrzny model z sekretem REDTEAM_API_KEY (wyjątek od lokalności, tylko dane
+#   syntetyczne, ARCHITECTURE §13.1); bez klucza lokalny Bielik 4.5B z adnotacją
+# - agent: moduł 19 (ai-tests/agent/cases.yaml) na planiście Qwen3 4B, nocą i ręcznie
+on:
+  workflow_call:
+    inputs:
+      suite:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      suite:
+        type: choice
+        options: [full, qwen, mock, redteam, redteam-mock, agent]
+        default: full
+  schedule:
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: read
+
+env:
+  LLM_MODEL: qwen3-4b-q4km
+  OLLAMA_URL: http://localhost:11434
+  OLLAMA_IMAGE: ollama/ollama:0.40.16
+  # Plik i suma jak w scripts/fetch_models.sh.
+  MODEL_URL: https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf
+  MODEL_FILE: Qwen3-4B-Q4_K_M.gguf
+  MODEL_SHA256: 7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
+  # Lokalny sędzia i generator red teamu bez klucza: oficjalna kwantyzacja Q8_0 Bielika.
+  BIELIK_URL: https://huggingface.co/speakleash/Bielik-4.5B-v3.0-Instruct-GGUF/resolve/c80ffe0e154fab9f7af170993a16d6f8acc83903/Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+  BIELIK_FILE: Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+  BIELIK_SHA256: 562f2291de257890adf2b4a914da8b194affe6a7a838a6b7ef3d342f306c1b7f
+  REDTEAM_BIELIK_MODEL: bielik-4.5b-q8
+
+jobs:
+  promptfoo:
+    name: promptfoo (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Nocą trzy zestawy z prawdziwym modelem, inaczej ten wskazany w wywołaniu.
+        suite: ${{ fromJSON(github.event_name == 'schedule' && '["full","redteam","agent"]' || format('["{0}"]', inputs.suite || 'full')) }}
+    timeout-minutes: ${{ (matrix.suite == 'mock' || matrix.suite == 'redteam-mock') && 15 || (matrix.suite == 'qwen' && 60 || 240) }}
+    env:
+      SUITE: ${{ matrix.suite }}
+      NEEDS_MODEL: ${{ matrix.suite != 'mock' && matrix.suite != 'redteam-mock' }}
+      HAS_REDTEAM_KEY: ${{ secrets.REDTEAM_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Zależności backendu (ta sama ścieżka co aplikacja)
+        working-directory: backend
+        run: uv sync --frozen --extra dev --python 3.12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ai-tests/package-lock.json
+      - name: promptfoo (wersja przypięta w package-lock.json)
+        working-directory: ai-tests
+        run: npm ci --no-audit --no-fund
+      - name: Ruff (ai-tests)
+        working-directory: backend
+        run: uv run ruff check ../ai-tests && uv run ruff format --check ../ai-tests
+
+      - name: Model w cache
+        if: env.NEEDS_MODEL == 'true'
+        id: model-cache
+        uses: actions/cache@v6
+        with:
+          path: data/models/${{ env.MODEL_FILE }}
+          key: model-${{ env.MODEL_SHA256 }}
+      - name: Pobranie modelu (tylko bez cache, z kontrolą SHA-256)
+        if: env.NEEDS_MODEL == 'true' && steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data/models
+          curl -fL --retry 5 -o "data/models/$MODEL_FILE" "$MODEL_URL"
+          echo "$MODEL_SHA256  data/models/$MODEL_FILE" | sha256sum -c
+      - name: Ollama z modelem (bez internetu dla modelu)
+        if: env.NEEDS_MODEL == 'true'
+        run: |
+          docker run -d --name ollama -p 127.0.0.1:11434:11434 \
+            -e OLLAMA_KEEP_ALIVE=-1 -e OLLAMA_NUM_PARALLEL=1 \
+            -v "$PWD/data/models:/models:ro" -v "$PWD/llm:/modelfiles:ro" "$OLLAMA_IMAGE"
+          for _ in $(seq 1 60); do curl -fs "$OLLAMA_URL/api/tags" >/dev/null && break; sleep 1; done
+          docker exec ollama ollama create "$LLM_MODEL" -f /modelfiles/Modelfile.qwen3-4b
+          echo "CPU: $(nproc) rdzeni, RAM: $(free -g | awk '/Mem:/ {print $2}') GB"
+
+      - name: Bielik w cache (sędzia red teamu bez klucza)
+        if: env.SUITE == 'redteam' && env.HAS_REDTEAM_KEY != 'true'
+        id: bielik-cache
+        uses: actions/cache@v6
+        with:
+          path: data/models/${{ env.BIELIK_FILE }}
+          key: model-${{ env.BIELIK_SHA256 }}
+      - name: Bielik 4.5B Q8_0 (tylko bez klucza, z kontrolą SHA-256)
+        if: env.SUITE == 'redteam' && env.HAS_REDTEAM_KEY != 'true'
+        run: |
+          echo "::warning::Brak REDTEAM_API_KEY: generator i sędzia to lokalny Bielik 4.5B (ograniczona wiarygodność)."
+          mkdir -p data/models
+          if [ "${{ steps.bielik-cache.outputs.cache-hit }}" != "true" ]; then
+            curl -fL --retry 5 -o "data/models/$BIELIK_FILE" "$BIELIK_URL"
+            echo "$BIELIK_SHA256  data/models/$BIELIK_FILE" | sha256sum -c
+          fi
+          docker exec ollama ollama create "$REDTEAM_BIELIK_MODEL" -f /modelfiles/Modelfile.bielik-4.5b-q8
+
+      - name: promptfoo ${{ env.SUITE }}
+        if: env.SUITE != 'agent'
+        working-directory: ai-tests
+        env:
+          # Klucz tylko dla generatora i sędziego (promptfoo czyta ANTHROPIC_API_KEY).
+          REDTEAM_API_KEY: ${{ env.SUITE == 'redteam' && secrets.REDTEAM_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ env.SUITE == 'redteam' && secrets.REDTEAM_API_KEY || '' }}
+          REDTEAM_MODEL: ${{ vars.REDTEAM_MODEL }}
+        run: ./run.sh "$SUITE"
+      - name: Moduł 19, przypadki agenta na Qwen3 4B
+        if: env.SUITE == 'agent'
+        working-directory: ai-tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: |
+          mkdir -p results
+          status=0
+          ../backend/.venv/bin/python agent/run.py --backend ollama --suite full > results/agent.md || status=$?
+          cat results/agent.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+      - name: Wyniki w podsumowaniu zadania
+        if: always() && env.SUITE != 'agent'
+        working-directory: ai-tests
+        run: python3 summary.py "results/$SUITE.json" >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Wyniki jako artefakt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-tests-${{ env.SUITE }}
+          path: ai-tests/results/
+          retention-days: 14
+      - name: Zużycie pamięci przez Ollamę
+        if: always() && env.NEEDS_MODEL == 'true'
+        run: docker stats --no-stream ollama || true

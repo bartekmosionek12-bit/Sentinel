@@ -17,6 +17,9 @@ dependencies = [
     "httpx>=0.27,<1",
     "rapidfuzz>=3.10,<4",
     "defusedxml>=0.7.1,<1",
+    "pyjwt[crypto]>=2.9,<3",
+    "mcp>=1.30,<2",
+    "paramiko>=3.5,<4",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +60,11 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+# paramiko nie ma typów w pakiecie; types-paramiko jest za starą wersją 3.x.
+module = ["paramiko", "paramiko.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
