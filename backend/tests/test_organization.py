@@ -253,3 +253,15 @@ def test_retention_erases_names_of_people_who_left_long_ago(session: Session) ->
     assert leaver.full_name == pseudonym(leaver)
     entry = session.scalar(select(AuditLog).where(AuditLog.action == "personal_data_erased"))
     assert entry is not None
+
+
+def test_demo_coverage_history_is_derived_and_idempotent(session: Session) -> None:
+    from app.cli import seed_coverage_history
+
+    sync_organization(session, _demo_snapshot(), actor="test")
+    today = record_snapshot(session)
+    assert seed_coverage_history(session, today) == 6
+    assert seed_coverage_history(session, today) == 0
+    rows = session.scalars(select(CoverageSnapshot).order_by(CoverageSnapshot.day)).all()
+    assert len(rows) == 7
+    assert rows[0].with_owner <= rows[-1].with_owner

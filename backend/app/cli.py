@@ -11,7 +11,7 @@ import json
 import sys
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ from app.feeds.service import FEEDS, sync_all
 from app.iam.rbac import RoleCatalog
 from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
-from app.models import Report
+from app.models import CoverageSnapshot, Report
 from app.org.coverage import as_view, record_snapshot
 from app.org.sources import collect, demo_sources
 from app.org.sync import sync_organization
@@ -227,6 +227,7 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
     run = service.run(trigger="seed_demo", actor="seed_demo")
     report = create_report(session, get_reports_config(), kind="assessment", actor="seed_demo")
     coverage = record_snapshot(session)
+    seed_coverage_history(session, coverage)
     session.commit()
     _queue_summary(settings, report.id, "seed_demo")
     return {
@@ -239,6 +240,49 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
         "l2_approval": "seed_demo" if approval_active else "wymaga człowieka",
         "scan": run.summary,
     }
+
+
+DEMO_HISTORY_DAYS = 6
+
+
+def seed_coverage_history(session: Session, today: CoverageSnapshot) -> int:
+    """Tylko DEMO_MODE: historia pokrycia z 6 dni przed seedem, żeby wykres trendu miał punkty.
+
+    Wartości są wyprowadzone z dzisiejszego pomiaru (rosnące pokrycie właścicieli, te same
+    liczby urządzeń), a cały tryb demo ma etykietę „dane demonstracyjne”. Nie nadpisuje
+    istniejących dni.
+    """
+    created = 0
+    for back in range(DEMO_HISTORY_DAYS, 0, -1):
+        day = today.day - timedelta(days=back)
+        if session.scalar(select(CoverageSnapshot.id).where(CoverageSnapshot.day == day)):
+            continue
+        factor = 1 - 0.06 * back
+        session.add(
+            CoverageSnapshot(
+                day=day,
+                assets_total=today.assets_total,
+                with_owner=int(today.with_owner * factor),
+                scanned_recently=int(today.scanned_recently * max(0.0, factor - 0.2)),
+                known_version=int(today.known_version * max(0.0, factor - 0.2)),
+                unknown_devices=today.unknown_devices + (1 if back > 3 else 0),
+                open_findings=today.open_findings,
+                critical_findings=today.critical_findings,
+            )
+        )
+        created += 1
+    if created:
+        audit.record(
+            session,
+            audit.AuditEvent(
+                actor="seed_demo",
+                action="demo_coverage_history",
+                reason=f"Demo: historia pokrycia z {created} dni (dane demonstracyjne)",
+                inputs={"days": created},
+                object_type="inventory",
+            ),
+        )
+    return created
 
 
 DEMO_AGENT_NOTE = "Demo-lab: assessment agenta (seed_demo)"
