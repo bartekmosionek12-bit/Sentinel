@@ -32,9 +32,14 @@ def credentials() -> dict[str, str]:
     return values
 
 
-def call(base: str, path: str, token: str) -> tuple[int, object]:
+def call(base: str, path: str, token: str, body: object | None = None) -> tuple[int, object]:
+    headers = {"Authorization": f"Bearer {token}"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
     request = urllib.request.Request(  # noqa: S310
-        f"{base}/api{path}", headers={"Authorization": f"Bearer {token}"}
+        f"{base}/api{path}", data=data, headers=headers, method="POST" if data else "GET"
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
@@ -50,6 +55,29 @@ def get(base: str, path: str) -> object:
     if status != 200:
         raise SystemExit(f"BŁĄD GET /api{path}: HTTP {status}")
     return body
+
+
+def manager_console_checks(base: str, manager: str) -> dict[str, bool]:
+    """Moduł 21 na żywo: Sentek odpowiada z danych, prośba o skan trafia do kolejki admina."""
+    _, top = call(base, "/assistant", manager, {"question": "Co jest teraz najgroźniejsze?"})
+    _, refusal = call(base, "/assistant", manager, {"question": "Wyłącz serwer web-01"})
+    status, created = call(
+        base, "/scan-requests", manager, {"scope_kind": "organization", "reason": "check_demo"}
+    )
+    queue = get(base, "/scan-requests?status=pending")
+    top_text = " ".join(top.get("text", [])) if isinstance(top, dict) else ""
+    return {
+        "Sentek odpowiada z danych (web-01 i CVE na liście)": isinstance(top, dict)
+        and top.get("intent") == "top_risks"
+        and "web-01" in top_text
+        and "172.30.99" not in top_text,
+        "Sentek odmawia zmiany ustawień": isinstance(refusal, dict)
+        and refusal.get("intent") == "out_of_scope"
+        and refusal.get("action") is None,
+        "prośba menedżera o skan czeka w kolejce admina": status in (200, 201)
+        and isinstance(created, dict)
+        and any(r["id"] == created["id"] for r in queue),  # type: ignore[union-attr]
+    }
 
 
 def report_checks(base: str, manager: str, *, zero_day: bool) -> dict[str, bool]:
@@ -176,6 +204,7 @@ def main() -> int:
         and last_test.get("signature_valid") is True,
         "łańcuch dziennika audytu jest spójny": audit["ok"] is True,  # type: ignore[index]
         **report_checks(base, manager, zero_day=False),
+        **manager_console_checks(base, manager),
     }
     return report(checks)
 
