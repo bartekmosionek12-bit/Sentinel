@@ -398,6 +398,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** Pobranie pliku z autoryzacją (np. PDF raportu): fetch → blob → link tymczasowy. */
+async function download(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`/api${path}`, { headers: { ...authHeaders() } });
+  if (response.status === 401) tokenSource.onUnauthorized();
+  if (!response.ok) throw new ApiError(response.status, `Błąd serwera (${response.status})`);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Strumień SSE przez fetch: EventSource nie potrafi wysłać nagłówka Authorization. */
 function streamEvents<E extends { type: string }>(
   path: string,
@@ -458,7 +473,7 @@ export type ReportLight = "red" | "yellow" | "green";
 
 export interface ReportListItem {
   id: string;
-  kind: "assessment" | "zero_day";
+  kind: "assessment" | "zero_day" | "digest" | "ai_test";
   title: string;
   light: ReportLight;
   light_reason: string;
@@ -470,6 +485,14 @@ export interface ReportListItem {
 export interface Inbox {
   unread: number;
   items: ReportListItem[];
+}
+
+export interface AiTestCaseRow {
+  case_id: string;
+  category: string;
+  title: string;
+  model_resisted: boolean;
+  code_held: boolean;
 }
 
 export interface ReportTechnicalRow {
@@ -497,6 +520,7 @@ export interface Report extends ReportListItem {
   summary_problems: string[];
   summary_updated_at: string | null;
   facts: Record<string, string[]>;
+  /** Dla `kind === "ai_test"` wiersze mają postać `AiTestCaseRow`. */
   technical: ReportTechnicalRow[];
   created_by: string;
 }
@@ -601,11 +625,22 @@ export interface AgentTestRunDetail extends AgentTestRun {
   cases: AgentCaseResult[];
 }
 
+export interface KillEffect {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
 export interface AgentStatus {
   killed: boolean;
   killed_by: string | null;
   killed_reason: string | null;
   killed_at: string | null;
+  last_killed_at: string | null;
+  effects: KillEffect[];
+  scanner_stopped_at: string | null;
+  scanner_stopped: number | null;
+  certificate_gap: string;
   capability: AgentCapability | null;
   config: AgentConfig | null;
   pending: AgentConfig[];
@@ -741,6 +776,7 @@ export const api = {
   reports: () => request<ReportListItem[]>("/reports"),
   report: (id: string) => request<Report>(`/reports/${id}`),
   inbox: () => request<Inbox>("/inbox"),
+  downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>

@@ -28,6 +28,9 @@ ALLOWED: dict[str, set[str]] = {
         "scanners/http_probe.py",
         "credentials/openbao.py",
         "agent/gateway.py",
+        # Kill switch: admin API Keycloaka i OpenBao, tylko adresy usług wewnętrznych
+        # (is_local_url), nigdy cele skanowania.
+        "agent/killswitch.py",
     },
     # Serwer MCP (mcp-scanner) i jego jedyny klient (wykonawca agenta).
     "mcp": {"mcp_server/server.py", "agent/gateway.py"},

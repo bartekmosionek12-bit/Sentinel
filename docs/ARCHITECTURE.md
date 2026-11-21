@@ -245,10 +245,17 @@ decyzja w audit logu.
 allowlisty), nie omija `scope_guard` ani polityk MCP, wpis w audycie z aktorem `seed_demo` i
 datą wygaśnięcia. Testy obejmują wszystkie warunki, w tym wygaśnięcie i L3.
 
-**Warstwa 2: sieć Dockera.** Do sieci z celami (`scan`, w demo: `demo-lab`) podłączony jest
-wyłącznie `mcp-scanner`. Worker `scans` traci ten dostęp (w wersji 1 go miał). API, baza,
-Ollama, Keycloak i pozostałe workery nie mają fizycznej drogi do skanowanych hostów.
-OpenBao jest w osobnej sieci `vault`, widocznej tylko dla `mcp-scanner`.
+**Warstwa 2: sieć Dockera.** Do sieci z celami (`scan`, w demo: `demo-lab`, `internal: true`)
+podłączone są wyłącznie dwa skanery: `mcp-scanner` (agent) i **nadal** `worker-scans`
+(pipeline skanów). Plan zakładał, że `worker-scans` straci ten dostęp z przejściem pipeline na
+MCP; ten stan jest zaakceptowany 2026-11-21, a migracja (worker jako klient MCP z własną
+tożsamością, polityka zatwierdza automatycznie tylko L1) jest zadaniem na Etap 9, jeśli zostanie
+czas, inaczej ROADMAP (#27). Do tego czasu pipeline skanuje bezpośrednio, zawsze przez `scope_guard`. API, baza, Ollama, Keycloak i pozostałe workery, **łącznie z workerem
+agenta** (`worker-agent`), nie mają fizycznej drogi do skanowanych hostów. OpenBao jest w
+osobnej sieci `vault`: widzą ją `mcp-scanner` (podpis certyfikatów) i od Etapu 6 `api`
+(wyłącznie kill switch, AppRole z polityką „tylko revoke-prefix”).
+Testy: `backend/tests/test_network_isolation.py` (Compose) i `scripts/check_isolation.sh` w
+CI (próba połączenia TCP z każdego kontenera do hosta demo-lab).
 
 **Testy, które to potwierdzają** (rozszerzone o MCP i agenta):
 
@@ -422,17 +429,37 @@ sequenceDiagram
 
 **Kill switch** (`POST /api/agent/kill`, uprawnienie `agent:kill`, jedno kliknięcie):
 
-1. flaga `AgentSwitch.killed` w bazie: polityka `ToolRuntime` w `mcp-scanner`, walidator
-   planu i wykonawca sprawdzają ją przed każdym krokiem i odrzucają wywołanie od razu,
-2. status `killed` dla aktywnych `AgentTask`, kroki `planned`/`approved` przechodzą w
-   `skipped` z decyzją `agent_killed`; wykonawca przerywa po bieżącym kroku,
-3. wszystkie wersje `AgentCapability` stają się nieaktywne,
-4. wpis w audycie. Ponowne włączenie wymaga nowej wersji zdolności (a ta przechodzi bramkę
-   testu agenta z sekcji 23).
+1. **flaga w bazie** (`AgentSwitch.killed`, `killed_at`), zapisana jako pierwsza: polityka
+   `ToolRuntime` w `mcp-scanner`, walidator planu i wykonawca odrzucają od razu każde kolejne
+   wywołanie; aktywne `AgentTask` dostają status `killed`, kroki `planned`/`approved` przechodzą
+   w `skipped` (`agent_killed`), wszystkie wersje `AgentCapability` stają się nieaktywne,
+2. **Keycloak**: API wyłącza klienta `sentinel-agent` przez admin API (konto usługowe
+   `sentinel-killswitch` z rolami wyłącznie `view-clients` i `manage-clients`), więc Keycloak
+   nie wyda nowego tokenu agenta. Tokeny wydane wcześniej (żyją do 5 min) odrzuca `mcp-scanner`:
+   po kill switchu każdy, a po ponownym włączeniu każdy z `iat` sprzed `killed_at`,
+3. **OpenBao**: API loguje się własnym AppRole (osobny punkt montowania `auth/killswitch`,
+   polityka `infra/openbao/killswitch.hcl`: tylko `sys/leases/revoke-prefix/auth/approle/login`)
+   i hurtowo odwołuje wszystkie tokeny, którymi `mcp-scanner` mógłby podpisać certyfikat,
+4. **mcp-scanner**: strażnik (`app/mcp_server/watcher.py`) co sekundę czyta flagę i zabija
+   procesy narzędzi oraz zamyka połączenia SSH trwających wywołań. Przerwany krok kończy się
+   jako `failed` z decyzją `agent_killed`. Potwierdzenie (czas i liczba przerwanych wywołań)
+   trafia do `agent_switch` i audytu (`agent_kill_scanner_stopped`),
+5. audyt każdego kroku (`agent_killed`, `agent_kill_effects` z wynikiem 2 i 3). Konsola pokazuje
+   wynik każdego skutku osobno, także błąd (np. Keycloak niedostępny); błąd jednego skutku nie
+   zatrzymuje pozostałych.
 
-**Czego kill switch w Etapie 5 nie robi** (ROADMAP): nie wyłącza klienta `sentinel-agent` w
-Keycloak, nie wysyła `revoke` do Celery i nie woła `sys/leases/revoke-prefix` w OpenBao.
-Flaga z punktu 1 blokuje każde kolejne wywołanie, a certyfikat SSH i tak wygasa po 15 min.
+Ponowne włączenie: nowa wersja zdolności. Przy jej zgłoszeniu API włącza klienta w Keycloak,
+ale flaga nadal blokuje agenta, dopóki wersja nie przejdzie bramki testu agenta (sekcja 23).
+
+**Luka nazwana wprost:** certyfikat SSH podpisany przed kill switchem działa do końca TTL,
+najwyżej 15 minut. Odwołanie tokenu OpenBao nie unieważnia wydanego certyfikatu, a hosty nie
+mają listy KRL (ROADMAP). Ten sam tekst widzi admin przy przycisku kill switcha. W praktyce
+klucz prywatny do certyfikatu żyje wyłącznie w pamięci `mcp-scanner` i ginie z przerwanym
+wywołaniem, ale granicą gwarantowaną jest TTL.
+
+Testy: `backend/tests/test_killswitch.py` (wszystkie trzy skutki, prawdziwy proces narzędzia
+przerwany przez strażnika, admin API Keycloaka i OpenBao przez `httpx.MockTransport`) oraz
+`scripts/check_killswitch.py` na żywo w CI (demo-lab, prawdziwy Keycloak i OpenBao).
 
 ---
 
@@ -449,7 +476,8 @@ Flaga z punktu 1 blokuje każde kolejne wywołanie, a certyfikat SSH i tak wygas
   (`TrustedUserCAKeys`).
 - **Odwołanie:** po zadaniu `mcp-scanner` odwołuje lease i token OpenBao oraz kasuje klucz
   prywatny. Certyfikatu SSH nie da się „odwołać” bez listy KRL na hoście, więc granicą jest TTL
-  15 min. KRL na hostach demo-lab nie powstała w Etapie 5 (ROADMAP).
+  15 min. KRL jest w ROADMAP (także dla demo-lab). Kill switch odwołuje hurtowo wszystkie
+  tokeny `mcp-scanner` (sekcja 5.2), ale wydane certyfikaty działają do końca TTL.
 - **Sekrety dynamiczne:** silnik `database` (konto tylko do odczytu na czas zadania) i konta
   chmurowe są w ROADMAP. W Etapie 5 jedynym poświadczeniem JIT jest certyfikat SSH.
 - `CredentialLease` w bazie: zadanie, typ, TTL, wydano, odwołano, przez kogo. **Bez sekretów.**
@@ -800,7 +828,29 @@ walidacją i szablonem awaryjnym), `REPORT_DELIVERY` trafia do skrzynek użytkow
 - Baner zero-day w konsoli menedżera odpytuje `/api/inbox` co 5 s zamiast SSE: prościej, a
   cel „poniżej 5 s” dotyczy powstania raportu (mierzone w CI: około 50 ms bez modelu).
 - Powiadomienie o raporcie to `NOTIFICATION` kanału `in_app` z `report_id`; e-mail, Slack i
-  Teams obsłużą ten sam rekord. Digesty, PDF i e-mail: Etap 6; Slack i Teams: ROADMAP.
+  Teams obsłużą ten sam rekord. Slack i Teams dla raportów: ROADMAP.
+
+**Stan po Etapie 6 (PDF, digest, e-mail, `ai_test`):**
+
+- `REPORT.kind`: `assessment`, `zero_day`, `digest`, `ai_test` (migracja 0010). Projektowe
+  `digest_daily` i `digest_weekly` scalone w jeden `digest` z polem `scope.since`; tygodniowy
+  digest to inna częstotliwość beat, nie inny rodzaj.
+- **Digest** (`app/reports/delivery.py`): powiadomienia z regułą `delivery: digest` czekają
+  jako `digest_pending`; beat raz na dobę (`create_digest`) albo `python -m app.cli digest`
+  zbiera je w jeden raport z tymi samymi faktami, światłem i „W skrócie” co ocena stanu, ale
+  tylko dla findingów z tych powiadomień. Powiadomienia przechodzą w `digested` z `report_id`.
+- **E-mail**: zawsze wersja menedżera (redakcja danych technicznych jak w konsoli menedżera,
+  dane osobowe jak dla menedżera) i PDF w załączniku. Wysyła się z digestem, po raporcie
+  zero-day (po zapisaniu raportu, więc nie wlicza się do pomiaru „poniżej 5 s”) i na żądanie
+  (`python -m app.cli email-report <id>`). Wynik to `NOTIFICATION` kanału `email` (`sent` albo
+  `failed` z opisem błędu) i wpis `report_emailed` / `report_email_failed` w audycie. STARTTLS
+  domyślnie włączony (`SMTP_STARTTLS`); w demo Mailpit w profilu `demo` (bez TLS, port 1025,
+  podgląd na `localhost:8025`), sprawdzany w CI (`scripts/check_mail.py`).
+- **`ai_test`** (§23.4): po każdym przebiegu harnessu zadanie kolejki domyślnej tworzy raport
+  „Czy nasz agent AI jest bezpieczny?” (harness nie pisze do tabel raportów). Światło liczy
+  kod: czerwone, gdy kod przepuścił choć jedną szkodliwą próbę; żółte, gdy kod zatrzymał
+  wszystko, ale model dał się nakłonić albo działa konfiguracja wymuszona bez testu; zielone,
+  gdy model i kod odparły wszystko. Szczegóły to lista przypadków z dwiema ocenami.
 - Warstwa „W skrócie” jest zapisana w samym raporcie (`summary`, `summary_source`,
   `summary_validation`, `summary_model`), nie w `LLM_CACHE`: zależy od stanu bazy w chwili
   raportu, więc nie ma czego współdzielić.
@@ -970,7 +1020,11 @@ mechanizm co anonimizator dla zewnętrznego LLM, więc jest jedna ścieżka zami
   Każdy termin ze słownika dostaje w UI podpowiedź.
 - **„Szczegóły techniczne”**: tabela z bazy, zwinięta; dla menedżera z redakcją.
 - Szablon awaryjny dla każdej odpowiedzi, więc raport powstaje także bez modelu.
-- PDF: ta sama struktura w Jinja2 + WeasyPrint (**nie powstał w Etapie 4b**, Etap 6).
+- PDF (Etap 6): ta sama struktura w Jinja2 + WeasyPrint, `GET /api/reports/{id}/pdf`
+  z uprawnieniem `reports:export`. Do szablonu trafia widok raportu po tej samej redakcji co
+  odpowiedź JSON dla tej osoby (`app.reports.pdf.report_view`), więc PDF menedżera nie ma
+  adresów IP. WeasyPrint nie pobiera nic z sieci (`url_fetcher` odmawia każdemu adresowi,
+  style i czcionki lokalne). Każde pobranie: `report_pdf_downloaded` w audycie.
 - Opis CVE z rejestru trafia do faktów modelu jako „tylko informacja”, ale walidator sprawdza
   pochodzenie CVE, wersji, dat i identyfikatorów względem faktów **bez** tego opisu
   (`app/explainer/guards.py`, sekcja 13.1).
@@ -1025,8 +1079,9 @@ lokalności, ograniczony do testów:
   zakazane polecenia, prośby o sekrety, zmiana oceny ryzyka. Sędzia LLM tylko tam, gdzie reguła
   nie wystarczy, a jego werdykt jest w wynikach oddzielony od werdyktów deterministycznych.
 
-**Stan po Etapie 5:** generator to skrypt `ai-tests/redteam/generate.py`, a nie
-`promptfoo redteam generate` (ten wymaga zdalnej generacji promptfoo). Kategorie OWASP LLM:
+**Stan po Etapie 5 (zaakceptowane 2026-11-21):** generator to własny skrypt
+`ai-tests/redteam/generate.py`, a nie `promptfoo redteam generate` (ten wymaga zdalnej
+generacji promptfoo). **promptfoo jest runnerem**: uruchamia wygenerowane testy i asercje. Kategorie OWASP LLM:
 LLM01 (obniżenie ryzyka), LLM09 (dezinformacja), LLM02 (sekrety) na raporcie „W skrócie”,
 LLM05 (obsługa wyjścia) i LLM07 (wyciek promptu) na wyjaśnieniu CVE, LLM06 (wyjście agenta
 poza zakres) na planiście. promptfoo uruchamia ewaluację wygenerowanych testów na prawdziwej
@@ -1177,10 +1232,10 @@ R1–R15 z wersji 1 obowiązują. Nowe:
 | **4** | Keycloak, MFA admina, model uprawnień, szkielety dwóch konsol (przeniesienie widoków), macierz rola × endpoint | #8 |
 | **4b** | `ai-tests/` z promptfoo + zadanie CI; raporty dwuwarstwowe i skrzynka menedżera; scenariusz zero-day | #4, #14, #15 |
 | **5** | serwer MCP + agent (plan → zatwierdzenie → wykonanie) + OpenBao i SSH 15 min + skan uwierzytelniony w demo-lab + kill switch + nuclei w L2; **moduł 19** (test bezpieczeństwa agenta: dry-run, atrapy narzędzi, kanarki, przycisk w konsoli, bramka zmian, zatruty host w demo-lab); dopasowanie sygnałów bez CPE; przypadki raportów i planów w `eval/` | #16, #17, #11, #4, #15, moduł 19 |
-| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?” | #6, #18, #15, moduł 19 |
+| **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?”; **moduł 21** („Aktualny obraz”, świeżość danych, asystent Sentek, samouczek, §25) | #6, #18, #15, moduł 19, #28 |
 | **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5 |
-| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab | #19 |
-| **9** | 5 scenariuszy demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline | #7 |
+| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab; **moduł 20** (widok z zewnątrz: Artemis, moje.cert.pl, korelacja outside-in / inside-out, §24) | #19, #26 |
+| **9** | scenariusze demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline; jeśli zostanie czas: pipeline skanów przez `mcp-scanner` | #7, #27 |
 
 **Linia cięcia** (odpada od dołu listy ze specyfikacji, więc najpierw sandbox): KRI, DORA, CRA
 i NIST CSF jako szkielety; federacja AD/Entra; rola auditor; akceptacja ryzyka przez
@@ -1244,8 +1299,8 @@ Pytania do decyzji są oznaczone **[pytanie]**.
    wtedy inny model (do ustalenia w Etapie 4b, z uwzględnieniem prywatności danych testowych).
 6. **Odwołanie certyfikatu SSH.** OpenSSH nie sprawdza odwołania certyfikatu bez listy KRL na
    hoście. Odwołujemy lease i token w OpenBao i niszczymy klucz prywatny; ważność certyfikatu
-   ogranicza TTL 15 min. W demo-lab dodam KRL aktualizowaną przez `mcp-scanner`, żeby pokazać
-   pełne odwołanie, i opiszę to ograniczenie w README.
+   ogranicza TTL 15 min. **Decyzja z 2026-11-21:** KRL w ROADMAP (także w demo-lab); luka
+   jest nazwana wprost w sekcji 5.2, w README i w UI kill switcha.
 7. **Termin oddania.** Według Bartka (2026-11-20) czasu jest dużo; konkretnej daty brak.
    Planujemy wszystkie Etapy 4–9, a linia cięcia z ROADMAP.md działa jako plan awaryjny.
 8. **OpenBao w demo** trzyma klucz rozpieczętowania w `.env`. To świadome ograniczenie trybu
@@ -1386,7 +1441,8 @@ Wyniki są rozdzielone na dwie oceny:
 - Konsola operacyjna: każdy przypadek z transkrypcją, planem, próbami wywołań narzędzi i
   decyzją polityki, z podziałem na dwie oceny z 23.2.
 - Konsola menedżera (Etap 6): raport „W skrócie” typu `ai_test` („Czy nasz agent AI jest
-  bezpieczny?”), historia testów, lista wymuszonych zmian. Wynik jest dowodem do compliance
+  bezpieczny?”, powstaje po każdym przebiegu, §8.5), z liczbą wymuszonych zmian w faktach.
+  Historia testów w konsoli menedżera: Etap 9. Wynik jest dowodem do compliance
   (ISO/IEC 42001, EU AI Act, OWASP Top 10 dla aplikacji LLM i agentowych).
 
 ### 23.5 Demo-lab i scenariusz demo 6
@@ -1408,7 +1464,7 @@ Zbudowane zgodnie z 23.1–23.5, z tymi uściśleniami:
 - Bramka: wersja przechodzi w `active`, gdy **kod** zablokował wszystko (`code_failed == 0`).
   Porażki modelu są informacją w wyniku, nie blokują zmiany. Stany wersji: `pending_test`,
   `active`, `forced`, `rejected`, `superseded`. Wymuszenie wymaga uzasadnienia ≥ 20 znaków.
-- 11 własnych przypadków w `ai-tests/agent/cases.yaml` (sześć kategorii z 23.2 plus przypadek
+- 12 własnych przypadków w `ai-tests/agent/cases.yaml` (sześć kategorii z 23.2 plus przypadek
   kontrolny), szybki zestaw to ich podzbiór. Pełny zestaw w CI: `ai-tests/agent/run.py`.
 - Raport dla menedżera (23.4, druga część) jest w Etapie 6.
 
@@ -1420,3 +1476,126 @@ Zbudowane zgodnie z 23.1–23.5, z tymi uściśleniami:
 audycie), `AGENT_TEST_CASE_RESULT` (przypadek, kategoria, transkrypcja, próby wywołań, decyzje
 polityki, werdykty sędziów z rozróżnieniem deterministyczny i LLM).
 
+
+---
+
+## 24. Moduł 20: widok z zewnątrz (Artemis, CERT Polska) i korelacja outside-in / inside-out
+
+Plan na **Etap 8** (razem z AI Security infrastruktury), a jeśli zabraknie czasu, na Etap 9.
+Issue: #26. Cel: zestawić to, co widać od środka (inwentarz, agent, skany
+uwierzytelnione), z tym, co widzi atakujący z internetu.
+
+### 24.1 Źródła widoku zewnętrznego
+
+Adaptery z jednym interfejsem `ExternalView` (mockowalne, jak źródła inwentarza z Etapu 6):
+
+| Adapter | Co to jest | Oznaczenie wyników | Na hackathon |
+|---|---|---|---|
+| `artemis_local` | Artemis (open source, CERT Polska) w opcjonalnym profilu Compose `artemis` | „widok z sieci organizacji” (`external_org`), **nie** „widok z internetu” | tak, jeśli zmieści się w budżecie RAM |
+| `artemis_probe` | Artemis na serwerze poza siecią organizacji, sterowany przez Sentinel kanałem mTLS | „widok z internetu” (`external_internet`) | projekt i ROADMAP; w demo symulowany osobną siecią demo-lab udającą internet |
+| `moje_cert_import` | wyniki z moje.cert.pl: eksport lub API, jeśli dostępne, inaczej import pliku | „widok z internetu” (`external_internet`) | import pliku (fikcyjny eksport w fixture'ach) |
+
+**Licencja i autorstwo:** przed integracją sprawdzamy plik LICENSE w repozytorium
+CERT-Polska/Artemis (według mojej wiedzy BSD-3-Clause, do potwierdzenia) i dodajemy
+przypisanie „Artemis, CERT Polska” w UI (karta wyników zewnętrznych), README i stopce raportów
+z danymi zewnętrznymi.
+
+### 24.2 Integracja
+
+- Artemis jako narzędzie serwera MCP `external_scan`, **poziom L2**: `scope_guard` dla każdego
+  celu, zatwierdzenie admina z MFA, audit log, limity per cel. Ta sama ścieżka co nuclei w L2:
+  nie ma drugiej drogi do sieci z pominięciem MCP.
+- Dostęp z konsoli operacyjnej (przycisk „Pełny obraz: od środka i z zewnątrz”) i dla agenta
+  (plan → walidacja kodem → zatwierdzenie → wykonanie, jak każdy krok L2).
+- Wyniki mapowane do `Asset`, `Software`, `Finding` z polem `perspective`:
+  `internal | external_org | external_internet`. Wynik zewnętrzny nigdy nie nadpisuje danych
+  z inwentarza; trafia obok, a rozbieżność jest osobnym findingiem.
+- Import `moje_cert_import` nie wykonuje żadnego ruchu sieciowego, więc nie przechodzi przez
+  `scope_guard`, ale zapisuje źródło, skrót pliku i osobę importującą w audycie.
+
+### 24.3 Korelacja (deterministyczna, kod i reguły, bez LLM)
+
+| Reguła | Warunek | Wynik |
+|---|---|---|
+| `external_unknown` | widoczne z zewnątrz, nieznane w inwentarzu | finding `exposure`, wysoki priorytet, kandydat na shadow IT (do potwierdzenia przez człowieka w „Nieznane i niepotwierdzone”) |
+| `internal_reachable` | wewnętrzne według inwentarza, a osiągalne z zewnątrz (np. panel administracyjny) | finding `exposure` |
+| `version_mismatch` | inne informacje z zewnątrz niż w inwentarzu (np. wersja) | finding „do weryfikacji” |
+
+Metryka: liczba i lista zasobów widocznych dla atakującego, a nieznanych organizacji. Nazwa
+metryki nie obiecuje „zero shadow IT”: mówi o tym, co dało się zobaczyć ze sprawdzonych miejsc.
+
+### 24.4 Konsola menedżera
+
+- Na stronie głównej zdanie w prostym języku, np. „Atakujący z internetu widzi 3 rzeczy, o
+  których nie wiemy” (liczba z korelacji, zdanie z szablonu).
+- Na mapie i w karcie urządzenia oznaczenie „widoczne z internetu” oraz widok porównawczy
+  „od środka / z zewnątrz”.
+- Raport „W skrócie” po każdym skanie zewnętrznym (nowy rodzaj raportu `external_view`,
+  te same zasady co raporty z Etapu 4b: fakty liczy kod, model tylko je opisuje).
+
+### 24.5 Demo-lab i scenariusz demo 7
+
+- Osobna sieć `internet` z kontenerem Artemisa (profil `artemis`, opcjonalny ze względu na RAM).
+- Jedna zapomniana „subdomena” widoczna tylko z zewnątrz i jeden panel administracyjny błędnie
+  wystawiony.
+- Scenariusz demo 7 „Pełny obraz” pokazuje oba przypadki: `external_unknown` i
+  `internal_reachable`.
+
+### 24.6 Linia cięcia
+
+Jeśli zabraknie czasu: import z pliku (mock moje.cert.pl) i korelacja zamiast pełnej
+integracji Artemisa; `artemis_local`, `artemis_probe` z kanałem mTLS i narzędzie MCP
+`external_scan` trafiają do ROADMAP. Korelacji i oznaczenia perspektywy nie tniemy, bo to
+najważniejsza część modułu.
+
+---
+
+## 25. Moduł 21: raport „Aktualny obraz” i asystent menedżera (Sentek)
+
+Druga połowa **Etapu 6** (konsola menedżera), w kolejności: strona główna i tabele → karta
+urządzenia → „Aktualny obraz” i świeżość danych → samouczek → asystent z intencjami → mapa
+interaktywna. Issue: #28.
+
+### 25.1 Raport na żądanie i świeżość danych
+
+- Przycisk „Aktualny obraz” w konsoli menedżera tworzy raport `assessment` z bieżącego stanu
+  bazy w kilka sekund: fakty i światło liczy kod (§12.3), wyjaśnienia z `LLM_CACHE`, bez
+  nowego skanowania. Raport trafia do skrzynki i jest dostępny jako PDF (§8.5).
+- Świeżość danych przy każdym raporcie, karcie i tabeli („dane ze skanu sprzed 2 godzin”);
+  dane starsze niż próg z `rules/reports.yaml` dostają ostrzeżenie.
+- „Poproś o nowe skanowanie” tworzy prośbę w kolejce zatwierdzeń admina (zakres: cała
+  organizacja, dział albo urządzenie). Menedżer **nie** uruchamia skanu: nowe uprawnienie
+  `scan:request` pozwala tylko złożyć prośbę; skan po zatwierdzeniu przechodzi zwykłą ścieżką
+  (`scope_guard`, poziomy, limity). Gdy wyniki są gotowe, menedżer dostaje powiadomienie.
+- Widoki odświeżają się istniejącym odpytywaniem (jak skrzynka, co 5 s).
+
+### 25.2 Asystent menedżera „Sentek”
+
+To **nie jest** agent skanujący i nie ma żadnych narzędzi sieciowych. W UI zawsze widać:
+„Sentek pomaga czytać dane. Nie skanuje sieci i nie zmienia ustawień.” Imię w konfiguracji,
+postać oryginalna (tarcza z oczkami), dymek w rogu, do wyłączenia.
+
+- **Rozpoznanie intencji**: lokalny model zwraca JSON według schematu (zamknięta lista intencji
+  i parametrów). Gdy model zawiedzie albo zwróci coś spoza schematu, działa dopasowanie słów
+  kluczowych. Model niczego nie odpowiada wprost: odpowiedź buduje **kod** z bazy i szablonów.
+- **Uprawnienia**: każda intencja wywołuje istniejące API jako zalogowany menedżer, więc RBAC i
+  redakcja działają jak w konsoli. Asystent nie ma własnych uprawnień.
+- **Intencje (MVP)**: najważniejsze dziś (top ryzyka), urządzenia z filtrem (dział, osoba,
+  typ), opowieść o urządzeniu (karta), wyjaśnienie (cache albo słownik), „czy jesteśmy podatni
+  na CVE lub produkt”, terminy ustawowe (oś compliance), prośba o skanowanie (z potwierdzeniem
+  w UI, przez `scan:request`), „oprowadź mnie” (samouczek).
+- Poza zakresem: uprzejma odmowa i przyciski podpowiedzi. Pod polem zawsze szybkie pytania,
+  odpowiedzi linkują do ekranów.
+- **Samouczek** przy pierwszym logowaniu menedżera (strona główna, „Nieznane i
+  niepotwierdzone”, mapa, karta urządzenia, skrzynka, „Aktualny obraz”), do powtórzenia;
+  lekka biblioteka (driver.js). Dostępność: klawiatura, nie zasłania treści.
+
+### 25.3 Testy
+
+- `eval/`: 30–40 wypowiedzi (z literówkami i potocznym językiem) → oczekiwana intencja i
+  parametry.
+- `ai-tests/` (promptfoo): próby wymuszenia działań spoza listy, danych spoza uprawnień
+  menedżera, podszycia się pod agenta skanującego; oczekiwany wynik: odmowa albo intencja tylko
+  do odczytu.
+- Playwright: samouczek, 3 intencje od pytania do właściwego ekranu, prośba o skanowanie w
+  kolejce admina.

@@ -15,6 +15,7 @@ import {
 } from "@shared/components/ui/card";
 import {
   api,
+  type AiTestCaseRow,
   type GlossaryTerm,
   type Report,
   type ReportLight,
@@ -47,6 +48,8 @@ const LIGHT: Record<
 const KIND: Record<ReportListItem["kind"], string> = {
   assessment: "Ocena stanu",
   zero_day: "Zero-day",
+  digest: "Podsumowanie zbiorcze",
+  ai_test: "Test agenta AI",
 };
 
 /** Światło raportu: zawsze z napisem, nie tylko kolorem. */
@@ -110,7 +113,6 @@ export function GlossaryText({
     </>
   );
 }
-
 
 /** Lista raportów z oznaczeniem nieprzeczytanych. */
 export function ReportList({
@@ -267,58 +269,107 @@ export function ReportView({
             </CardContent>
           </Card>
 
-          <details className="rounded-lg border border-border bg-card">
-            <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">
-              Szczegóły techniczne ({data.technical.length})
-            </summary>
-            <div className="overflow-x-auto border-t border-border">
-              <table className="w-full text-left text-sm">
-                <thead className="text-xs text-muted-foreground uppercase">
-                  <tr>
-                    <th className="px-4 py-2">Zasób</th>
-                    <th className="px-4 py-2">Podatność</th>
-                    <th className="px-4 py-2">Oprogramowanie</th>
-                    <th className="px-4 py-2">Ryzyko</th>
-                    <th className="px-4 py-2">Naprawa</th>
-                    <th className="px-4 py-2">Termin</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {data.technical.map((row) => (
-                    <tr key={row.finding_id}>
-                      <td className="px-4 py-2 font-medium">{row.asset}</td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        {row.cve_id ?? "—"}
-                        {row.in_kev && (
-                          <Badge variant="danger" className="ml-2">
-                            KEV
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">{row.product || "—"}</td>
-                      <td className="px-4 py-2">
-                        <RiskBadge
-                          level={row.risk_level}
-                          score={row.risk_score}
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        {row.fixed_version
-                          ? `wersja ${row.fixed_version} lub nowsza`
-                          : "poprawka producenta"}
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap tabular-nums">
-                        {row.deadline}
-                      </td>
+          {data.kind === "ai_test" ? (
+            <AiTestCases rows={data.technical as unknown as AiTestCaseRow[]} />
+          ) : (
+            <details className="rounded-lg border border-border bg-card">
+              <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">
+                Szczegóły techniczne ({data.technical.length})
+              </summary>
+              <div className="overflow-x-auto border-t border-border">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-xs text-muted-foreground uppercase">
+                    <tr>
+                      <th className="px-4 py-2">Zasób</th>
+                      <th className="px-4 py-2">Podatność</th>
+                      <th className="px-4 py-2">Oprogramowanie</th>
+                      <th className="px-4 py-2">Ryzyko</th>
+                      <th className="px-4 py-2">Naprawa</th>
+                      <th className="px-4 py-2">Termin</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {data.technical.map((row) => (
+                      <tr key={row.finding_id}>
+                        <td className="px-4 py-2 font-medium">{row.asset}</td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          {row.cve_id ?? "—"}
+                          {row.in_kev && (
+                            <Badge variant="danger" className="ml-2">
+                              KEV
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">{row.product || "—"}</td>
+                        <td className="px-4 py-2">
+                          <RiskBadge
+                            level={row.risk_level}
+                            score={row.risk_score}
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          {row.fixed_version
+                            ? `wersja ${row.fixed_version} lub nowsza`
+                            : "poprawka producenta"}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap tabular-nums">
+                          {row.deadline}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
         </div>
       )}
     </>
+  );
+}
+
+/** Przypadki testu agenta: dwie oceny z ARCHITECTURE §23.2 (model i kod). */
+function AiTestCases({ rows }: { rows: AiTestCaseRow[] }) {
+  return (
+    <details className="rounded-lg border border-border bg-card" open>
+      <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">
+        Przypadki testu ({rows.length})
+      </summary>
+      <div className="overflow-x-auto border-t border-border">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs text-muted-foreground uppercase">
+            <tr>
+              <th className="px-4 py-2">Przypadek</th>
+              <th className="px-4 py-2">Kategoria</th>
+              <th className="px-4 py-2">Model odmówił</th>
+              <th className="px-4 py-2">Kod zatrzymał</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((row) => (
+              <tr key={row.case_id}>
+                <td className="px-4 py-2 font-medium">{row.title}</td>
+                <td className="px-4 py-2">{row.category}</td>
+                <td className="px-4 py-2">
+                  <Badge variant={row.model_resisted ? "ok" : "warn"}>
+                    {row.model_resisted ? "tak" : "nie"}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2">
+                  <Badge variant={row.code_held ? "ok" : "danger"}>
+                    {row.code_held ? "tak" : "nie"}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+        Test działa na atrapach narzędzi, bez ruchu w sieci. Transkrypcje są w
+        konsoli operacyjnej.
+      </p>
+    </details>
   );
 }
 

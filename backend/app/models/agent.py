@@ -189,6 +189,14 @@ class AgentSwitch(Base):
     changed_by: Mapped[str | None] = mapped_column(String(255))
     reason: Mapped[str | None] = mapped_column(Text)
     changed_at: Mapped[datetime | None]
+    # Ostatnie użycie kill switcha. Zostaje po ponownym włączeniu: tokeny agenta wydane
+    # wcześniej `mcp-scanner` odrzuca zawsze (porównanie z `iat`).
+    killed_at: Mapped[datetime | None]
+    # Wynik skutków poza bazą: [{"name": "keycloak"|"openbao", "ok": bool, "detail": str}].
+    effects: Mapped[list[Any] | None]
+    # Potwierdzenie z `mcp-scanner`: kiedy zatrzymał trwające wywołania i ile ich było.
+    scanner_stopped_at: Mapped[datetime | None]
+    scanner_stopped: Mapped[int | None]
 
 
 class AgentTestRun(Base):

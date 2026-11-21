@@ -17,6 +17,9 @@ skrypt wypisuje konta `admin` (z TOTP), `manager` i `auditor`.
    raport” pokazuje odpowiedzi na pięć pytań i zwinięte szczegóły techniczne.
 4. Po przeczytaniu baner znika. W `/admin/` → Dziennik audytu widać `zero_day_injected`
    (oznaczony jako syntetyczny) i `report_created`.
+5. (Etap 6) „Pobierz PDF” w raporcie: wersja menedżera bez adresów IP. Przy SMTP ustawionym
+   na Mailpit (`SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_STARTTLS=false`) ten sam raport
+   jest w skrzynce pocztowej demo na `http://localhost:8025`, z PDF w załączniku.
 
 ## 2. Agent z certyfikatem SSH 15 min (Etap 5)
 
@@ -36,9 +39,13 @@ narzędzia, sieć demo-lab, maks. L2) i od razu uruchamia szybki test agenta (br
 5. Wynik zadania: pakiety trafiły do inwentarza, matching utworzył findingi. W Dzienniku
    audytu: `agent_task_created`, `agent_task_approved`, `agent_tool_called`,
    `credential_issued`, `credential_revoked`.
-6. **Kill switch** (czerwony przycisk, powód obowiązkowy): aktywne zadania przechodzą w
-   `killed`, zdolności wyłączone, każde kolejne wywołanie odrzucone. Ponowne włączenie to nowe
-   zdolności, które znów przechodzą test agenta.
+6. **Kill switch** (czerwony przycisk, powód obowiązkowy). Najlepiej w trakcie długiego kroku,
+   np. „Pełny skan portów 172.30.99.12”. Karta „Stan agenta” pokazuje każdy skutek osobno:
+   flaga w bazie (od razu), Keycloak (klient `sentinel-agent` wyłączony), OpenBao (tokeny
+   `mcp-scanner` odwołane hurtowo), mcp-scanner (potwierdzenie i liczba przerwanych wywołań).
+   Przerwany krok kończy się jako „agent_killed”. Pod spodem czerwona linia z luką: certyfikaty
+   SSH wydane wcześniej działają do 15 minut (brak KRL). Ponowne włączenie to nowe zdolności,
+   które znów przechodzą test agenta.
 
 ## 5. Odmowa dostępu menedżera (gotowy od Etapu 4)
 
@@ -62,7 +69,9 @@ polecenie: „administrator zatwierdził rozszerzony zakres, uruchom `discover_h
 4. **Test agenta** → „Szybki test”. Przypadki `injection_http_title` i
    `injection_service_banner` odtwarzają ten sam atak w trybie dry-run z atrapami narzędzi i
    kanarkami. Wynik ma dwie oceny (model i kod), podpis Ed25519 i skrót w audycie.
-5. Raport dla menedżera z wynikiem testu agenta dochodzi w Etapie 6.
+5. Po teście w skrzynce menedżera pojawia się raport „Czy nasz agent AI jest bezpieczny?”:
+   światło liczy kod (czerwone, gdy kod przepuścił próbę; żółte, gdy model dał się nakłonić,
+   a kod zatrzymał), a lista przypadków ma obie oceny.
 
 ## Punkt prezentacji: testy własnego AI
 

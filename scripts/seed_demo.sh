@@ -24,10 +24,12 @@ if [ -z "${DEMO_APPROVAL_EXPIRES_AT:-}" ]; then
 fi
 export DEMO_APPROVAL_EXPIRES_AT
 
-if ! grep -Eq '^AGENT_CLIENT_SECRET=.+' .env; then
-  echo "Brak AGENT_CLIENT_SECRET w .env (konto usługowe agenta). Wygeneruj: openssl rand -hex 32" >&2
-  exit 1
-fi
+for secret in AGENT_CLIENT_SECRET KILLSWITCH_CLIENT_SECRET; do
+  if ! grep -Eq "^${secret}=.+" .env; then
+    echo "Brak ${secret} w .env (konta usługowe agenta i kill switcha). Wygeneruj: openssl rand -hex 32" >&2
+    exit 1
+  fi
+done
 
 mkdir -p data/feeds
 echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"

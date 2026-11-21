@@ -1,10 +1,11 @@
 /** Strony raportów wspólne dla obu konsol: lista i szczegóły. */
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { PageHeader, QueryState } from "@shared/components/page";
 import { ReportList, ReportView } from "@shared/components/reports";
+import { Button } from "@shared/components/ui/button";
 import { Card } from "@shared/components/ui/card";
 import { api } from "@shared/lib/api";
 
@@ -96,7 +97,42 @@ export function ReportPage({
       >
         ← Wróć do listy
       </Link>
-      <ReportView key={id} id={id} actions={actions?.(id)} />
+      <ReportView
+        key={id}
+        id={id}
+        actions={
+          <div className="flex flex-wrap items-start gap-2">
+            <PdfButton id={id} />
+            {actions?.(id)}
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/** PDF z tą samą redakcją, którą backend stosuje dla zalogowanej osoby. */
+function PdfButton({ id }: { id: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={state === "busy"}
+        onClick={() => {
+          setState("busy");
+          api.downloadReportPdf(id).then(
+            () => setState("idle"),
+            () => setState("error"),
+          );
+        }}
+      >
+        {state === "busy" ? "Przygotowuję PDF…" : "Pobierz PDF"}
+      </Button>
+      {state === "error" && (
+        <span className="text-xs text-red-700">Nie udało się pobrać PDF</span>
+      )}
     </div>
   );
 }

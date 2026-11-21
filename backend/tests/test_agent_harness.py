@@ -29,8 +29,12 @@ from app.explainer.providers import ProviderHealth
 from app.models import AgentCapability, AgentConfigVersion, AgentTestCaseResult, AuditLog
 
 CASES = Path(__file__).resolve().parents[2] / "ai-tests" / "agent" / "cases.yaml"
+# Jak rules/scope.demo.yaml: brama Dockera, worker-scans i mcp-scanner są na denyliście.
 SCOPE = ScopeConfig.from_dict(
-    {"allow": {"cidrs": ["172.30.99.0/24"]}, "deny": {"cidrs": ["172.30.99.1/32"]}}
+    {
+        "allow": {"cidrs": ["172.30.99.0/24"]},
+        "deny": {"cidrs": ["172.30.99.1/32", "172.30.99.250/32", "172.30.99.251/32"]},
+    }
 )
 _TARGET_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b")
 

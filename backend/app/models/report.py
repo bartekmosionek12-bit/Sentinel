@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, CreatedAt, UuidPk
 from app.models.inventory import _in
 
-REPORT_KINDS = ("assessment", "zero_day")
+REPORT_KINDS = ("assessment", "zero_day", "digest", "ai_test")
 REPORT_LIGHTS = ("red", "yellow", "green")
 SUMMARY_SOURCES = ("model", "template")
 # none: modelu nie pytano (jeszcze); passed: tekst modelu po walidacji; rejected: odrzucony,

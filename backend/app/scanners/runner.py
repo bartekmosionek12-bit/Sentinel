@@ -8,10 +8,12 @@ Reguły:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shutil
 import subprocess
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -76,7 +78,52 @@ def build_argv(
     return (binary, *args, "--", target.address)
 
 
+class Cancellations:
+    """Trwające operacje sieciowe, które kill switch może przerwać (procesy, połączenia SSH).
+
+    `mcp-scanner` rejestruje tu każdy proces i połączenie na czas wywołania; strażnik kill
+    switcha (`app.mcp_server.watcher`) woła `cancel_all`. Rejestr jest wspólny dla procesu.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: dict[int, Callable[[], None]] = {}
+        self._next = 0
+        self.cancelled = 0
+
+    def add(self, cancel: Callable[[], None]) -> int:
+        with self._lock:
+            self._next += 1
+            self._items[self._next] = cancel
+            return self._next
+
+    def remove(self, handle: int) -> None:
+        with self._lock:
+            self._items.pop(handle, None)
+
+    def active(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+    def cancel_all(self) -> int:
+        with self._lock:
+            items = list(self._items.values())
+            self._items.clear()
+        for cancel in items:
+            # Przerwanie jest najlepszym wysiłkiem: proces mógł się właśnie zakończyć.
+            with contextlib.suppress(Exception):
+                cancel()
+        self.cancelled += len(items)
+        return len(items)
+
+
+CANCELLATIONS = Cancellations()
+
+
 class SubprocessRunner:
+    def __init__(self, cancellations: Cancellations | None = None) -> None:
+        self._cancellations = cancellations or CANCELLATIONS
+
     def run(
         self,
         binary: str,
@@ -92,20 +139,32 @@ class SubprocessRunner:
             raise ToolError(f"Brak narzędzia {binary} w tym kontenerze")
         logger.info("tool_start", extra={"tool": binary, "target": target.address})
         try:
-            completed = subprocess.run(  # noqa: S603 - argv z listy, bez powłoki
+            process = subprocess.Popen(  # noqa: S603 - argv z listy, bez powłoki
                 (executable, *argv[1:]),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout,
-                check=False,
                 shell=False,
             )
-        except subprocess.TimeoutExpired as error:
-            raise ToolError(f"{binary}: przekroczony limit czasu {timeout:.0f} s") from error
         except OSError as error:
             raise ToolError(f"{binary}: nie udało się uruchomić ({error})") from error
-        if completed.returncode != 0:
-            raise ToolError(
-                f"{binary}: kod wyjścia {completed.returncode}: {completed.stderr.strip()[:300]}"
-            )
-        return ToolOutput(completed.stdout, completed.stderr, completed.returncode, argv)
+        stopped = threading.Event()
+
+        def cancel() -> None:
+            stopped.set()
+            process.kill()
+
+        handle = self._cancellations.add(cancel)
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            process.kill()
+            process.communicate()
+            raise ToolError(f"{binary}: przekroczony limit czasu {timeout:.0f} s") from error
+        finally:
+            self._cancellations.remove(handle)
+        if stopped.is_set():
+            raise ToolError(f"{binary}: przerwane przez kill switch")
+        if process.returncode != 0:
+            raise ToolError(f"{binary}: kod wyjścia {process.returncode}: {stderr.strip()[:300]}")
+        return ToolOutput(stdout, stderr, process.returncode, argv)

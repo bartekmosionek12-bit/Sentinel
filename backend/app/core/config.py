@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    # Mailpit w demo nie ma TLS; w produkcji zostaje STARTTLS.
+    smtp_starttls: bool = True
     notify_email_to: str = ""
     slack_webhook_url: str = ""
     teams_webhook_url: str = ""
@@ -83,6 +85,14 @@ class Settings(BaseSettings):
     oidc_token_url: str = "http://keycloak:8080/auth/realms/sentinel/protocol/openid-connect/token"  # noqa: S105
     agent_client_id: str = "sentinel-agent"
     agent_client_secret: str = ""
+    # Kill switch: konto usługowe `sentinel-killswitch` (w Keycloak tylko view/manage-clients)
+    # wyłącza klienta agenta przez admin API; AppRole `killswitch` w OpenBao odwołuje hurtowo
+    # tokeny `mcp-scanner`. Pusty sekret albo brak pliku = skutek „nie skonfigurowano” w konsoli.
+    keycloak_url: str = "http://keycloak:8080/auth"
+    keycloak_realm: str = "sentinel"
+    killswitch_client_id: str = "sentinel-killswitch"
+    killswitch_client_secret: str = ""
+    openbao_killswitch_file: Path = Path("/run/openbao-killswitch/approle.json")
     # Wersja promptów planisty (zmiana = nowa wersja konfiguracji agenta i test, moduł 19).
     agent_prompt_version: str = "planner-v1"
     # OpenBao: poświadczenia JIT. Pusty adres = skan uwierzytelniony wyłączony.

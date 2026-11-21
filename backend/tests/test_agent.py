@@ -524,3 +524,28 @@ def test_injected_follow_up_from_obedient_model_is_blocked_and_audited(
     assert "192.0.2.0/24" in provider.prompts[1].user  # model widział treść jako dane
     blocked = session.scalars(select(AuditLog).where(AuditLog.action == "agent_step_blocked")).one()
     assert blocked.inputs["target"] == "192.0.2.0/24"
+
+
+def test_follow_up_steps_are_validated_again_and_wait_for_a_new_approval(
+    session: Session, service: AgentService, runtime: ToolRuntime
+) -> None:
+    """Runda uzupełniająca: ten sam walidator i ponowne zatwierdzenie przez admina."""
+    task = service.create_task("Przeprowadź assessment hosta 172.30.99.10", actor="user:admin")
+    service.plan_task(task.id)
+    service.approve(task.id, actor="user:admin", reason="ok", step_ids=None, can_approve_level=_all)
+    service.execute(task.id, LocalGateway(runtime))
+    session.expire_all()
+    follow = [s for s in _planned(session, task) if s.source == "follow_up"]
+    assert follow
+    assert all(s.status == "planned" for s in follow)
+    assert task.status == "awaiting_approval"
+    # Bez nowej zgody serwer MCP nie wykona kroku uzupełniającego.
+    step = follow[0]
+    task.status = "running"
+    session.commit()
+    refused = runtime.call(ToolRequest(step.id, step.tool, step.target, dict(step.params)))
+    assert refused.code == "step_not_approved"
+    validated = session.scalars(
+        select(AuditLog).where(AuditLog.action == "agent_follow_up_validated")
+    ).all()
+    assert len(validated) == 1

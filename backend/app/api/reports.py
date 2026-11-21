@@ -6,22 +6,26 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DispatcherDep, SessionDep
+from app.core.audit import AuditEvent, record
 from app.iam.deps import authenticated, require
-from app.iam.redaction import PERSONAL_PERMISSION, RedactingRoute
+from app.iam.redaction import PERSONAL_PERMISSION, VIEW_PERMISSION, RedactingRoute
 from app.iam.tokens import Principal
 from app.models import Report, ReportDelivery, ReportRead, User
+from app.models.base import utcnow
 from app.reports.config import ReportsConfig
+from app.reports.pdf import PdfError, filename, render_pdf, report_view
 from app.reports.service import create_report, present
 from app.runtime import get_reports_config
 
 router = APIRouter(prefix="/api", tags=["raporty"], route_class=RedactingRoute)
 
 Reader = Annotated[Principal, Depends(require("reports:read"))]
+Exporter = Annotated[Principal, Depends(require("reports:export"))]
 Generator = Annotated[Principal, Depends(require("reports:generate"))]
 ConfigDep = Annotated[ReportsConfig, Depends(get_reports_config)]
 
@@ -153,6 +157,36 @@ def inbox(
 def get_report(report_id: uuid.UUID, session: SessionDep, principal: Reader) -> ReportOut:
     report = _get(session, report_id)
     return _detail(report, principal, _read_ids(session, principal))
+
+
+@router.get("/reports/{report_id}/pdf", response_class=Response)
+def report_pdf(report_id: uuid.UUID, session: SessionDep, principal: Exporter) -> Response:
+    """PDF raportu z tą samą redakcją co odpowiedź JSON dla tej osoby."""
+    report = _get(session, report_id)
+    technical = not principal.can(VIEW_PERMISSION)
+    personal = not principal.can(PERSONAL_PERMISSION)
+    view = report_view(report, technical=technical, personal=personal)
+    audience = "menedżer (bez danych technicznych)" if technical else "konsola operacyjna"
+    try:
+        pdf = render_pdf(view, generated_at=utcnow(), audience=audience)
+    except PdfError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+    record(
+        session,
+        AuditEvent(
+            actor=principal.actor,
+            action="report_pdf_downloaded",
+            reason=f"PDF raportu „{report.title}” ({audience})",
+            inputs={"redacted": technical, "personal_hidden": personal},
+            object_type="report",
+            object_id=str(report.id),
+        ),
+    )
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename(view)}"'},
+    )
 
 
 @router.post("/reports/{report_id}/read", status_code=status.HTTP_204_NO_CONTENT)

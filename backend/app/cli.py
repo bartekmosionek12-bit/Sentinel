@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,7 +27,9 @@ from app.feeds.service import FEEDS, sync_all
 from app.iam.rbac import RoleCatalog
 from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
+from app.models import Report
 from app.pipeline import analyze
+from app.reports.delivery import create_digest, email_report
 from app.reports.service import create_report
 from app.reports.zero_day import ZeroDayError, inject_kev
 from app.runtime import (
@@ -272,6 +275,24 @@ def cmd_report(session: Session, settings: Settings) -> dict[str, Any]:
     return {"id": str(report.id), "title": report.title, "light": report.light, "model": queued}
 
 
+def cmd_digest(session: Session) -> dict[str, Any]:
+
+    report = create_digest(
+        session, get_reports_config(), actor="cli:digest", mailer=channel_sender()
+    )
+    if report is None:
+        return {"report": None, "reason": "brak powiadomień czekających na digest"}
+    return {"report": {"id": str(report.id), "title": report.title}, "light": report.light}
+
+
+def cmd_email_report(session: Session, report_id: str) -> dict[str, Any]:
+
+    report = session.get(Report, uuid.UUID(report_id))
+    if report is None:
+        raise CliError(f"Nie ma raportu {report_id}")
+    return {"status": email_report(session, report, channel_sender(), actor="cli:email-report")}
+
+
 def cmd_inject_kev(session: Session, settings: Settings, cve_id: str) -> dict[str, Any]:
     """Scenariusz zero-day: syntetyczny wpis KEV. Tylko w trybie demo."""
     if not settings.demo_mode:
@@ -288,6 +309,10 @@ def cmd_inject_kev(session: Session, settings: Settings, cve_id: str) -> dict[st
         raise CliError(str(error)) from error
     session.commit()
     queued = _queue_summary(settings, result.report.id, "zero_day_demo")
+    # E-mail po zapisaniu raportu: nie wlicza się do czasu „od wpisu KEV do skrzynki”.
+
+    emailed = email_report(session, result.report, channel_sender(), actor="zero_day_demo")
+    session.commit()
     return {
         "report": {"id": str(result.report.id), "title": result.report.title},
         "light": result.report.light,
@@ -295,6 +320,7 @@ def cmd_inject_kev(session: Session, settings: Settings, cve_id: str) -> dict[st
         "notifications": result.notifications,
         "timings_ms": {**result.timings_ms, "total": result.total_ms},
         "model_summary_queued": queued,
+        "email": emailed,
     }
 
 
@@ -321,6 +347,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
     commands.add_parser("report", help="raport o otwartych zagrożeniach do skrzynek menedżerów")
+    commands.add_parser("digest", help="digest z powiadomień czekających (wersja menedżera)")
+    commands.add_parser(
+        "email-report", help="e-mail z raportem i PDF w wersji menedżera"
+    ).add_argument("report_id")
     commands.add_parser(
         "inject-kev", help="scenariusz zero-day: syntetyczny wpis KEV (tylko DEMO_MODE=true)"
     ).add_argument("cve_id")
@@ -344,6 +374,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = cmd_explain(session, settings, queue=args.queue)
             elif args.command == "report":
                 result = cmd_report(session, settings)
+            elif args.command == "digest":
+                result = cmd_digest(session)
+            elif args.command == "email-report":
+                result = cmd_email_report(session, args.report_id)
             elif args.command == "inject-kev":
                 result = cmd_inject_kev(session, settings, args.cve_id)
             elif args.command == "agent-bootstrap":

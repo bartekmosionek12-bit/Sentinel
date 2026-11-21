@@ -44,13 +44,15 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 - Auto-unseal OpenBao przez KMS albo HSM zamiast klucza w wolumenie `openbao-init` (dziś:
   tylko tryb demo).
 - Silnik `database` w OpenBao: konto tylko do odczytu na czas zadania agenta.
-- Pipeline skanów przez `mcp-scanner` z tokenem `sentinel-pipeline` (dziś przez MCP idzie
-  tylko agent; pipeline woła adaptery bezpośrednio, zawsze przez `scope_guard`).
-- Pełny kill switch: wyłączenie klienta `sentinel-agent` w Keycloak, `revoke` zadań Celery i
-  `sys/leases/revoke-prefix` w OpenBao (dziś flaga blokuje każde kolejne wywołanie od razu).
+- Pipeline skanów przez `mcp-scanner` (Etap 9, jeśli zostanie czas; inaczej tutaj): worker jako
+  klient MCP z własną tożsamością `sentinel-pipeline`, polityka zatwierdza automatycznie tylko
+  L1, a L2 i L3 nadal czekają na admina. Dziś przez MCP idzie tylko agent, a pipeline woła
+  adaptery bezpośrednio, zawsze przez `scope_guard`. Po migracji `worker-scans` traci dostęp
+  do sieci z celami i zostaje w niej tylko `mcp-scanner` (stan zaakceptowany 2026-11-21, #27).
 - Narzędzia agenta `resolve_dns`, `check_tls`, `check_compliance`, `probe_ai_endpoint` i
   adaptery subfinder, dnsx, httpx, naabu, testssl.sh.
-- Pełne odwołanie certyfikatów SSH przez listy KRL dystrybuowane na hosty produkcyjne.
+- Pełne odwołanie certyfikatów SSH przez listy KRL (najpierw w demo-lab, potem dystrybucja na
+  hosty produkcyjne). Dziś certyfikat wydany przed kill switchem działa do końca TTL 15 min.
 - Feedy OVAL dystrybucji Linuksa: rozstrzyganie backportów bez ręcznej weryfikacji.
 - Pozostałe narzędzia odkrywania: subfinder z kluczami API źródeł pasywnych, skan IPv6.
 
@@ -73,6 +75,14 @@ wszystkie etapy, a ta lista działa jako plan awaryjny.
 - Eval z rubryką ocenianą przez kilku ludzi i z większą liczbą przypadków.
 - Testy MITRE ATLAS dla agentów z narzędziami (nie tylko chatbotów).
 - Klasyfikator parafraz bagatelizujących ryzyko zamiast list zwrotów (dziś reguły słownikowe).
+
+### Widok z zewnątrz (moduł 20, ARCHITECTURE §24)
+
+- Plan na Etap 8 (#26). Jeśli zabraknie czasu, na hackathonie zostaje import z pliku (mock
+  moje.cert.pl) i korelacja, a tu trafiają: Artemis w profilu `artemis` (`artemis_local`),
+  narzędzie MCP `external_scan` w L2 i sonda zewnętrzna `artemis_probe` z kanałem mTLS.
+- Sonda zewnętrzna na stałe: Artemis na serwerze poza siecią organizacji, harmonogram skanów
+  z zewnątrz i porównanie w czasie.
 
 ### Integracje i skala
 

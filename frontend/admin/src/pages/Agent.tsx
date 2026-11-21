@@ -127,6 +127,7 @@ function StatusCard({ status }: { status: AgentStatus }) {
             obowiązuje poprzednia. Szczegóły: <Link className="underline" to="/agent/test">Test agenta</Link>.
           </p>
         )}
+        {status.killed && <KillEffects status={status} />}
         {!status.killed && (
           <div className="flex flex-wrap items-end gap-3 border-t pt-4">
             <label className="min-w-64 flex-1 text-xs font-medium">
@@ -146,6 +147,11 @@ function StatusCard({ status }: { status: AgentStatus }) {
             >
               Kill switch: wyłącz agenta
             </Button>
+            <p className="w-full text-xs text-muted-foreground">
+              Kill switch od razu blokuje każde wywołanie, przerywa trwające skany, wyłącza konto
+              agenta w Keycloak i odwołuje jego tokeny w OpenBao.{" "}
+              <strong className="text-foreground">Luka: {status.certificate_gap}</strong>
+            </p>
           </div>
         )}
         {kill.error && (
@@ -155,6 +161,48 @@ function StatusCard({ status }: { status: AgentStatus }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const EFFECT_LABELS: Record<string, string> = {
+  keycloak: "Keycloak: konto agenta",
+  openbao: "OpenBao: tokeny serwera MCP",
+};
+
+function KillEffects({ status }: { status: AgentStatus }) {
+  return (
+    <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm">
+      <p className="mb-2 font-medium">Skutki kill switcha</p>
+      <ul className="space-y-1">
+        <li>
+          <Badge variant="ok">od razu</Badge> Flaga w bazie: serwer MCP, walidator i wykonawca
+          odrzucają każde wywołanie.
+        </li>
+        {status.effects.length === 0 && (
+          <li className="text-muted-foreground">Keycloak i OpenBao: trwa…</li>
+        )}
+        {status.effects.map((effect) => (
+          <li key={effect.name}>
+            <Badge variant={effect.ok ? "ok" : "danger"}>{effect.ok ? "wykonano" : "błąd"}</Badge>{" "}
+            {EFFECT_LABELS[effect.name] ?? effect.name}: {effect.detail}
+          </li>
+        ))}
+        <li>
+          {status.scanner_stopped_at ? (
+            <>
+              <Badge variant="ok">potwierdzono</Badge> mcp-scanner przerwał trwające wywołania (
+              {status.scanner_stopped ?? 0}), {formatDateTime(status.scanner_stopped_at)}.
+            </>
+          ) : (
+            <>
+              <Badge variant="warn">czekam</Badge> mcp-scanner jeszcze nie potwierdził zatrzymania
+              (sprawdza co sekundę).
+            </>
+          )}
+        </li>
+      </ul>
+      <p className="mt-2 font-medium text-red-800">Luka: {status.certificate_gap}</p>
+    </div>
   );
 }
 

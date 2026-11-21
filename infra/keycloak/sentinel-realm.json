@@ -193,6 +193,23 @@
       ]
     },
     {
+      "clientId": "sentinel-killswitch",
+      "name": "Sentinel ASI: kill switch agenta",
+      "description": "Konto usługowe API do kill switcha: wyłącza i włącza klienta sentinel-agent (tylko view-clients i manage-clients). Sekret z KILLSWITCH_CLIENT_SECRET w .env.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KILLSWITCH_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["basic", "roles", "kc-admin-api"],
+      "optionalClientScopes": [],
+      "attributes": {"access.token.lifespan": "60"}
+    },
+    {
       "clientId": "sentinel-pipeline",
       "name": "Sentinel ASI: potok i workery",
       "description": "Konto usługowe procesów systemowych. Sekret generuje Keycloak; tokeny ważne 5 minut.",
@@ -222,6 +239,12 @@
       "enabled": true,
       "serviceAccountClientId": "sentinel-agent",
       "realmRoles": ["agent"]
+    },
+    {
+      "username": "service-account-sentinel-killswitch",
+      "enabled": true,
+      "serviceAccountClientId": "sentinel-killswitch",
+      "clientRoles": {"realm-management": ["view-clients", "manage-clients"]}
     },
     {
       "username": "service-account-sentinel-pipeline",

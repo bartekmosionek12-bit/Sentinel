@@ -5,7 +5,7 @@
 # when.in_kev   podatność w katalogu CISA KEV
 # when.exposure ekspozycja zasobu: internet albo internal
 # when.min_level najniższy poziom ryzyka: krytyczny, wysoki, średni, niski
-# delivery      immediate = od razu, digest = zbiorczo (wysyłka digestów: Etap 5)
+# delivery      immediate = od razu, digest = zbiorczo (digest raz na dobę i `python -m app.cli digest`, Etap 6)
 # channels      in_app zawsze działa; email, slack i teams tylko po skonfigurowaniu w .env
 
 # Ten sam finding nie wraca w tej samej regule przez tyle godzin.
