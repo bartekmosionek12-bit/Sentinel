@@ -1,0 +1,34 @@
+{
+  "builtin": [
+    {
+      "id": "gitea",
+      "name": "Gitea",
+      "kind": "technology",
+      "match": [{"type": "title", "pattern": "\\bgitea\\b"}]
+    },
+    {
+      "id": "wordpress-login",
+      "name": "Logowanie WordPressa",
+      "kind": "panel",
+      "match": [{"type": "path", "path": "/wp-login.php", "status": [200], "pattern": "user_login"}]
+    }
+  ],
+  "custom": [
+    {
+      "id": "intranet-demo",
+      "definition": {
+        "id": "intranet-demo",
+        "name": "Intranet demo",
+        "kind": "staging",
+        "match": [{"type": "title", "pattern": "intranet \\(test\\)"}]
+      },
+      "updated_by": "admin",
+      "updated_at": "2026-11-21T12:00:00"
+    }
+  ],
+  "rules": {
+    "kinds": ["panel", "staging", "technology"],
+    "match_types": ["cookie", "favicon_hash", "generator", "header", "html", "path", "title"],
+    "max_paths": 10
+  }
+}

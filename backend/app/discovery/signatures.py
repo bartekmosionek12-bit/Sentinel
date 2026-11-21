@@ -168,6 +168,20 @@ def parse_signatures(data: Any) -> tuple[Signature, ...]:
     return tuple(out)
 
 
+def load_raw(path: Path) -> list[dict[str, Any]]:
+    """Wbudowane sygnatury z pliku w postaci surowej (do pokazania i łączenia z własnymi)."""
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    items = data.get("signatures") if isinstance(data, dict) else None
+    return [dict(item) for item in items or [] if isinstance(item, dict)]
+
+
+def combine(builtin: list[dict[str, Any]], custom: list[dict[str, Any]]) -> tuple[Signature, ...]:
+    """Wbudowane i własne razem, przez ten sam walidator (unikalne id, limit ścieżek)."""
+    return parse_signatures({"signatures": [*builtin, *custom]})
+
+
 def load_signatures(path: Path) -> tuple[Signature, ...]:
     if not path.exists():
         return ()

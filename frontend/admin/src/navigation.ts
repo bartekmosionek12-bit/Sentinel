@@ -13,6 +13,7 @@ import {
   ScrollText,
   Server,
   ShieldAlert,
+  Fingerprint,
   UserCog,
 } from "lucide-react";
 
@@ -55,6 +56,12 @@ export const NAV_GROUPS: NavGroup[] = [
         path: "/discovery/porownanie",
         label: "Porównanie i stany",
         icon: GitCompareArrows,
+        permission: "scan:read",
+      },
+      {
+        path: "/discovery/sygnatury",
+        label: "Sygnatury detekcyjne",
+        icon: Fingerprint,
         permission: "scan:read",
       },
     ],

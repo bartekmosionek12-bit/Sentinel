@@ -101,3 +101,18 @@ class DefectDojoExport(Base):
     remote_id: Mapped[int | None] = mapped_column(Integer)
     exported_by: Mapped[str] = mapped_column(String(255))
     exported_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class CustomSignature(Base):
+    """Własna sygnatura detekcyjna dodana w konsoli (obok wbudowanych z rules/signatures.yaml).
+
+    `definition` ma ten sam kształt co pozycja w pliku YAML i przechodzi ten sam walidator.
+    """
+
+    __tablename__ = "custom_signature"
+
+    id: Mapped[UuidPk]
+    signature_id: Mapped[str] = mapped_column(String(64), unique=True)
+    definition: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    updated_by: Mapped[str] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow)

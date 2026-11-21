@@ -560,6 +560,26 @@ export interface DojoStatus {
   last_export: string | null;
 }
 
+/** Własna sygnatura detekcyjna: czego szukać w odpowiedziach GET fingerprintera. */
+export interface SignatureDefinition {
+  id: string;
+  name?: string;
+  kind: "technology" | "panel" | "staging";
+  description?: string;
+  match: Record<string, unknown>[];
+}
+
+export interface SignatureList {
+  builtin: SignatureDefinition[];
+  custom: {
+    id: string;
+    definition: SignatureDefinition;
+    updated_by: string;
+    updated_at: string;
+  }[];
+  rules: { kinds: string[]; match_types: string[]; max_paths: number };
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -1194,6 +1214,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content, filename, name: `Import ${filename}` }),
     }),
+  signatures: () => request<SignatureList>("/discovery/signatures"),
+  checkSignature: (yaml: string) =>
+    request<{ ok: boolean; definition: SignatureDefinition }>("/discovery/signatures/check", {
+      method: "POST",
+      body: JSON.stringify({ yaml }),
+    }),
+  saveSignature: (id: string, yaml: string) =>
+    request<{ id: string; definition: SignatureDefinition }>(
+      `/discovery/signatures/${encodeURIComponent(id)}`,
+      { method: "PUT", body: JSON.stringify({ yaml }) },
+    ),
+  deleteSignature: (id: string) =>
+    request<void>(`/discovery/signatures/${encodeURIComponent(id)}`, { method: "DELETE" }),
   dojoStatus: () => request<DojoStatus>("/discovery/defectdojo/status"),
   dojoExport: (runId: string, ips: string[]) =>
     request<{

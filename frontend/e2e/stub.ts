@@ -28,6 +28,7 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/discovery\/states/, "discovery_states"],
   [/^\/api\/discovery\/defectdojo\/status/, "dojo_status"],
   [/^\/api\/discovery\/settings/, "discovery_config"],
+  [/^\/api\/discovery\/signatures$/, "signatures"],
   [/^\/api\/discovery\/targets\/preview/, "discovery_preview"],
 ];
 
@@ -104,6 +105,12 @@ export async function stubApi(
       const users = fixture("iam_users") as { id: string }[];
       const user = users.find((u) => url.pathname.includes(u.id)) ?? users[0];
       return route.fulfill({ json: user });
+    }
+    if (url.pathname.startsWith("/api/discovery/signatures") && request.method() !== "GET") {
+      if (request.method() === "DELETE") return route.fulfill({ status: 204 });
+      const definition = { id: "moja-aplikacja", kind: "technology", match: [] };
+      if (url.pathname.endsWith("/check")) return route.fulfill({ json: { ok: true, definition } });
+      return route.fulfill({ json: { id: definition.id, definition } });
     }
     const hit = ROUTES.find(([pattern]) => pattern.test(where));
     if (!hit) return route.fulfill({ json: [] });
