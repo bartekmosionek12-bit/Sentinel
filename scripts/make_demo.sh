@@ -15,7 +15,7 @@
 #   ONLY=skan ./scripts/make_demo.sh      # tylko jedna scena (poprawka), bez montażu
 set -euo pipefail
 # Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
 bash ./scripts/ensure_env.sh   # .env, DEMO_MODE=true i brakujące hasła bez ręcznych ustawień

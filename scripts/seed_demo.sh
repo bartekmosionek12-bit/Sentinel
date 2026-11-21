@@ -6,7 +6,7 @@
 # brakujące hasła. Zakres skanowania to wyłącznie izolowana sieć demo-lab.
 set -euo pipefail
 # Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
 bash ./scripts/ensure_env.sh

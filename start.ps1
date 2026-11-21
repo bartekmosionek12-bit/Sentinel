@@ -38,6 +38,10 @@ Get-ChildItem -Path $PSScriptRoot -Recurse -File -Include *.sh, .env, .env.examp
         }
     }
 
+# Katalog docker.exe przekazujemy do Git Bash, gdyby nie miał go w PATH.
+$dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+if ($dockerCmd) { $env:SENTINEL_DOCKER_DIR = Split-Path $dockerCmd.Source }
+
 $unixPath = $PSScriptRoot -replace '\\', '/'
 & $bash -lc "cd '$unixPath' && bash ./start.sh"
 exit $LASTEXITCODE

@@ -10,7 +10,7 @@
 # Nazwiska są fikcyjne, adresy e-mail w domenie example (RFC 2606).
 set -euo pipefail
 # Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
 if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
