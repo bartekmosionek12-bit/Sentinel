@@ -118,23 +118,51 @@ class NmapAdapter:
     def __init__(self, runner: ToolRunner | None = None) -> None:
         self._runner = runner or SubprocessRunner()
 
-    def discover(self, network: ScopedNetwork, *, timeout: float = 120) -> list[DiscoveredHost]:
+    def discover(
+        self, network: ScopedNetwork, *, timeout: float = 120, packets_per_second: int = 100
+    ) -> list[DiscoveredHost]:
         if not isinstance(network, ScopedNetwork):
             raise TypeError("nmap.discover przyjmuje wyłącznie ScopedNetwork")
         if network.intrusiveness > Intrusiveness.LIGHT:
             raise ToolError("nmap: odkrywanie hostów działa tylko na poziomie L1")
-        args = ["-sn", "-n", f"-PS{DISCOVERY_PORTS}", "-T4", "-oX", "-"]
+        args = [
+            "-sn",
+            "-n",
+            "-PE",
+            f"-PS{DISCOVERY_PORTS}",
+            "-T3",
+            "--max-rate",
+            str(packets_per_second),
+            "-oX",
+            "-",
+        ]
         if network.excluded:
             args += ["--exclude", ",".join(str(n) for n in network.excluded)]
         output = self._runner.run(self.binary, args, network, timeout=timeout)
         return [DiscoveredHost(ip=h.ip, hostname=h.hostname) for h in parse_nmap_xml(output.stdout)]
 
     def scan_services(
-        self, target: ScopedTarget, *, ports: str = DEFAULT_PORTS, timeout: float = 300
+        self,
+        target: ScopedTarget,
+        *,
+        ports: str = DEFAULT_PORTS,
+        timeout: float = 300,
+        packets_per_second: int = 100,
     ) -> HostScan:
         if not isinstance(target, ScopedTarget):
             raise TypeError("nmap.scan_services przyjmuje wyłącznie ScopedTarget")
-        args: Sequence[str] = ["-sV", "-Pn", "-n", "-T4", *_port_args(ports), "--open", "-oX", "-"]
+        args: Sequence[str] = [
+            "-sV",
+            "-Pn",
+            "-n",
+            "-T3",
+            "--max-rate",
+            str(packets_per_second),
+            *_port_args(ports),
+            "--open",
+            "-oX",
+            "-",
+        ]
         output = self._runner.run(self.binary, args, target, timeout=timeout)
         for host in parse_nmap_xml(output.stdout):
             if host.ip == target.address:

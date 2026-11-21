@@ -76,6 +76,8 @@ export interface Scope {
   denied_domains: string[];
   denied_cidrs: string[];
   default_rate_per_minute: number;
+  scan_packets_per_second: number;
+  scan_workers: number;
   demo_mode: boolean;
   demo_lab_cidr: string;
   demo_approval_expires_at: string | null;

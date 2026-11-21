@@ -293,6 +293,9 @@ export function Scans() {
                 <Badge variant="neutral">uruchomiony: {TRIGGERS[run.trigger] ?? run.trigger}</Badge>
               </div>
               <CardDescription>
+                {typeof run.summary.addresses_done === "number" && (
+                  <span>Postęp: {run.summary.addresses_done}/{String(run.summary.total_addresses ?? "?")} adresów; czas: {String(run.summary.duration_seconds ?? "w toku")} s; ETA: {String(run.summary.eta_seconds ?? "?")} s. </span>
+                )}
                 {typeof run.summary.note === "string" && run.summary.note
                   ? run.summary.note
                   : `Odpowiada hostów: ${String(run.summary.hosts_up ?? 0)}, nowych: ${String(

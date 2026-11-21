@@ -184,6 +184,8 @@ def get_scope(guard: ScopeGuardDep, settings: SettingsDep) -> ScopeOut:
         denied_domains=list(config.denied_domains),
         denied_cidrs=[str(n) for n in config.denied_cidrs],
         default_rate_per_minute=config.default_rate_per_minute,
+        scan_packets_per_second=config.scan_packets_per_second,
+        scan_workers=config.scan_workers,
         demo_mode=settings.demo_mode,
         demo_lab_cidr=settings.demo_lab_cidr,
         demo_approval_expires_at=settings.demo_approval_expires_at,
