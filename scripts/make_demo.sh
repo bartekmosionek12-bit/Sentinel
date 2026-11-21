@@ -10,23 +10,15 @@
 #   6. montaż ffmpeg z wypalonymi napisami.
 # Kroki 4–6 działają w kontenerze narzędzi (docker-compose.demo-video.yml), więc na komputerze
 # potrzebny jest tylko Docker z compose oraz bash, curl i python3.
-# Wymaga DEMO_MODE=true w .env (patrz README, „Film demo”). Nic nie trafia do Gita (demo/out).
+# Bez ręcznych ustawień (.env przygotowuje scripts/ensure_env.sh). Nic nie trafia do Gita (demo/out).
 #   SKIP_STAGE=1 ./scripts/make_demo.sh   # nagraj ponownie na istniejących przebiegach
 #   ONLY=skan ./scripts/make_demo.sh      # tylko jedna scena (poprawka), bez montażu
 set -euo pipefail
+# Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-[ -f .env ] || { echo "Brak .env: cp .env.example .env i uzupełnij hasła (README)." >&2; exit 1; }
-if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
-  echo "Film demo nagrywamy tylko przy DEMO_MODE=true w pliku .env." >&2
-  exit 1
-fi
-for name in DD_ADMIN_PASSWORD DD_DATABASE_PASSWORD DD_SECRET_KEY DD_CREDENTIAL_AES_256_KEY; do
-  if ! grep -Eq "^${name}=.+" .env; then
-    echo "${name}=$(python3 -c 'import secrets;print(secrets.token_hex(24))')" >> .env
-    echo "Wygenerowałem ${name} w .env"
-  fi
-done
+./scripts/ensure_env.sh   # .env, DEMO_MODE=true i brakujące hasła bez ręcznych ustawień
 
 export COMPOSE_FILE=docker-compose.yml:docker-compose.defectdojo.yml:docker-compose.demo-video.yml
 export COMPOSE_PROFILES=demo,defectdojo
@@ -53,7 +45,8 @@ done
 
 echo "==> 3/6 Stan do nagrania (trzy przebiegi discovery przez API)"
 if [ -z "${SKIP_STAGE:-}" ] || [ ! -f "$OUT/stage.json" ]; then
-  python3 scripts/demo_stage.py "$BASE" "$OUT/stage.json"
+  PY=$(command -v python3 >/dev/null && python3 -c "" 2>/dev/null && echo python3 || echo python)
+  "$PY" scripts/demo_stage.py "$BASE" "$OUT/stage.json"
 fi
 docker compose stop lab-poisoned >/dev/null 2>&1 || true
 trap 'docker compose start lab-poisoned >/dev/null 2>&1 || true' EXIT

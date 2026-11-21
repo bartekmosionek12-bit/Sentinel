@@ -17,17 +17,26 @@ wyników na ludzki język.
 > jest jedna konsola zespołu IT i cztery role z briefu ([docs/ROLES.md](docs/ROLES.md));
 > pozostałe sekcje poniżej przepisujemy w kolejnych etapach.
 
-## Uruchomienie
+## Uruchomienie (jedna komenda, bez ustawień)
 
-```bash
-cp .env.example .env        # ustaw POSTGRES_PASSWORD i KEYCLOAK_ADMIN_PASSWORD
-docker compose up --build
-```
+Potrzebny tylko Docker Desktop (Windows, macOS) albo Docker z compose (Linux); na Windowsie
+także Git for Windows (z niego bierzemy bash).
+
+| System | Komenda |
+|---|---|
+| Windows | dwuklik `start.cmd` albo w terminalu: `.\start.cmd` |
+| Linux, Git Bash | `./start.sh` |
+
+Skrypt sam tworzy `.env` z `.env.example`, włącza `DEMO_MODE=true`, generuje losowe hasła i
+sekrety (tylko w `.env`, poza Gitem), buduje obrazy i stawia demo razem z labem, a na końcu
+wypisuje konta demo i sekret TOTP (zapisane też w `data/demo-credentials.env`).
+Pierwszy start pobiera obrazy i trwa kilka minut.
 
 Konsola zespołu IT: <http://localhost:8080/admin/> (`/` przekierowuje tutaj). Dokumentacja
 API: <http://localhost:8080/api/docs>.
-Po takim starcie zakres skanowania jest pusty, system niczego nie skanuje i nie ma kont
-użytkowników (patrz [Logowanie i role](#logowanie-i-role)).
+
+Bez trybu demo (pusty zakres, brak kont): `cp .env.example .env`, ustaw hasła i
+`docker compose up --build`.
 
 ## Demo w 3 minuty (bez internetu)
 

@@ -9,12 +9,24 @@
 # (poza Gitem, uprawnienia 600), żeby kolejne uruchomienia używały tych samych.
 # Nazwiska są fikcyjne, adresy e-mail w domenie example (RFC 2606).
 set -euo pipefail
+# Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
 if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
   echo "Konta demo tworzymy tylko przy DEMO_MODE=true w pliku .env." >&2
   exit 1
 fi
+
+# python3 albo python (na Windowsie w Git Bash zwykle jest tylko `python`).
+PY=""
+for candidate in "${PYTHON:-}" python3 python; do
+  if [ -n "$candidate" ] && "$candidate" -c "import secrets" >/dev/null 2>&1; then
+    PY=$candidate
+    break
+  fi
+done
+[ -n "$PY" ] || { echo "Potrzebny Python 3 (python3 albo python) do utworzenia kont demo." >&2; exit 1; }
 
 CREDS=data/demo-credentials.env
 mkdir -p data
@@ -30,7 +42,7 @@ value() {  # value NAZWA: z .env, potem z pliku kont demo
   printf '%s' "$found"
 }
 
-random() { python3 -c "import secrets; print(secrets.token_urlsafe($1))"; }
+random() { "$PY" -c "import secrets; print(secrets.token_urlsafe($1))"; }
 
 ADMIN_PASSWORD=$(value DEMO_ADMIN_PASSWORD); ADMIN_PASSWORD=${ADMIN_PASSWORD:-$(random 18)}
 TOTP_SECRET=$(value DEMO_ADMIN_TOTP_SECRET); TOTP_SECRET=${TOTP_SECRET:-$(random 15)}
@@ -39,7 +51,7 @@ MODIFIER_PASSWORD=$(value DEMO_MODIFIER_PASSWORD); MODIFIER_PASSWORD=${MODIFIER_
 VIEWER_PASSWORD=$(value DEMO_VIEWER_PASSWORD); VIEWER_PASSWORD=${VIEWER_PASSWORD:-$(random 18)}
 
 # Aplikacje TOTP przyjmują sekret w Base32; Keycloak przechowuje jego surowe bajty.
-TOTP_BASE32=$(python3 -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
+TOTP_BASE32=$("$PY" -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
 
 cat > "$CREDS" <<CREDS
 # Konta demo (DEMO_MODE). Plik poza Gitem; usuń go, żeby wygenerować nowe hasła.
@@ -53,7 +65,7 @@ CREDS
 
 USERS=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" TOTP_SECRET="$TOTP_SECRET" \
   EDITOR_PASSWORD="$EDITOR_PASSWORD" MODIFIER_PASSWORD="$MODIFIER_PASSWORD" \
-  VIEWER_PASSWORD="$VIEWER_PASSWORD" python3 - <<'PY'
+  VIEWER_PASSWORD="$VIEWER_PASSWORD" "$PY" - <<'PY'
 import json, os
 
 def user(name, first, last, role, password, totp=None):

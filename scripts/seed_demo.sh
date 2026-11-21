@@ -2,19 +2,14 @@
 # Uruchamia demo: stos aplikacji + celowo podatny demo-lab, a potem pełną ścieżkę
 # (import inwentarza, feedy offline, skan, dopasowanie, ocena ryzyka, powiadomienia).
 #
-# Wymaga DEMO_MODE=true w pliku .env. Skrypt tego pliku nie zmienia: tryb demo włącza
-# świadomie człowiek. Zakres skanowania to wyłącznie izolowana sieć demo-lab.
+# Bez ręcznych ustawień: scripts/ensure_env.sh tworzy .env, włącza DEMO_MODE i generuje
+# brakujące hasła. Zakres skanowania to wyłącznie izolowana sieć demo-lab.
 set -euo pipefail
+# Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-if [ ! -f .env ]; then
-  echo "Brak pliku .env. Wykonaj: cp .env.example .env i ustaw POSTGRES_PASSWORD." >&2
-  exit 1
-fi
-if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
-  echo "seed_demo działa tylko przy DEMO_MODE=true w pliku .env (domyślnie false)." >&2
-  exit 1
-fi
+./scripts/ensure_env.sh
 
 # Zakres: tylko demo-lab. Zgoda seed_demo na skany inwazyjne wygasa po 4 godzinach.
 export SCOPE_FILE=/app/rules/scope.demo.yaml
@@ -23,13 +18,6 @@ if [ -z "${DEMO_APPROVAL_EXPIRES_AT:-}" ]; then
     || date -u -v+4H +%Y-%m-%dT%H:%M:%SZ)"
 fi
 export DEMO_APPROVAL_EXPIRES_AT
-
-for secret in AGENT_CLIENT_SECRET KILLSWITCH_CLIENT_SECRET; do
-  if ! grep -Eq "^${secret}=.+" .env; then
-    echo "Brak ${secret} w .env (konta usługowe agenta i kill switcha). Wygeneruj: openssl rand -hex 32" >&2
-    exit 1
-  fi
-done
 
 mkdir -p data/feeds
 echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"
