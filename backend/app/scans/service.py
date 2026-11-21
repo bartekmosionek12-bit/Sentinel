@@ -10,6 +10,7 @@ import time
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 from datetime import datetime
 from ipaddress import ip_network
 from typing import Any
@@ -28,11 +29,12 @@ from app.core.scope_guard import (
 from app.feeds.base import as_utc
 from app.inventory.service import record_discovery, record_host_scan
 from app.matching.engine import ACTIVE_STATUSES
-from app.models import Asset, Finding, ScanAction, ScanRun, Vulnerability
+from app.models import Asset, AssetHistory, Finding, ScanAction, ScanRun, Vulnerability
 from app.models.base import utcnow
 from app.notifications.channels import Sender
 from app.pipeline import AnalysisReport, Rulebook, analyze
 from app.planner.engine import FindingFact, HostFact, PlannedAction
+from app.scanners.http_probe import HttpProber
 from app.scanners.nmap import NmapAdapter
 from app.scanners.runner import ToolError
 
@@ -61,12 +63,14 @@ class ScanService:
         rulebook: Rulebook,
         *,
         nmap: NmapAdapter | None = None,
+        http_prober: HttpProber | None = None,
         sender: Sender | None = None,
     ) -> None:
         self._session = session
         self._guard = guard
         self._rulebook = rulebook
         self._nmap = nmap or NmapAdapter()
+        self._http_prober = http_prober or HttpProber()
         self._sender = sender
 
     @property
@@ -397,6 +401,46 @@ class ScanService:
             self._finish(action, "failed", "Zasób został usunięty przed zapisaniem wyniku")
             return 0
         diff = record_host_scan(session, asset, scan, action.scan_run_id, full=full)
+        web = dict((asset.attributes or {}).get("web", {}))
+        for service in scan.services:
+            if service.name not in {
+                "http",
+                "https",
+                "http-proxy",
+                "ssl/http",
+            } and service.port not in {80, 443, 8080, 8443}:
+                continue
+            scheme = (
+                "https"
+                if service.name in {"https", "ssl/http"} or service.port in {443, 8443}
+                else "http"
+            )
+            key = f"{scheme}:{service.port}"
+            try:
+                http_target = self._guard.authorize(
+                    action.target,
+                    tool="httpx",
+                    intrusiveness=Intrusiveness.LIGHT,
+                    rule_name="web_fingerprint",
+                )
+                probe = self._http_prober.probe(http_target, port=service.port, scheme=scheme)
+            except (ScopeError, ToolError):
+                continue
+            current = asdict(probe)
+            previous = web.get(key)
+            web[key] = current
+            if previous != current:
+                session.add(
+                    AssetHistory(
+                        asset_id=asset.id,
+                        scan_run_id=action.scan_run_id,
+                        change="web_changed",
+                        diff={"service": key, "before": previous, "after": current},
+                    )
+                )
+                totals["web_changed"] += 1
+        if web:
+            asset.attributes = {**asset.attributes, "web": web}
         totals["services_added"] += len(diff.added)
         totals["services_removed"] += len(diff.removed)
         self._finish(

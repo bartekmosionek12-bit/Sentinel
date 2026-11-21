@@ -14,6 +14,7 @@ from app.core.scope_guard import ScopeConfig, ScopeGuard, SeedDemoApproval
 from app.inventory.service import import_assets, parse_assets_csv
 from app.models import Asset, AuditLog, Finding, Notification, ScanAction, Software
 from app.pipeline import Rulebook
+from app.scanners.http_probe import HttpProbe
 from app.scanners.models import ServiceInfo
 from app.scanners.nmap import NmapAdapter
 from app.scans.service import ScanActionError, ScanService
@@ -60,7 +61,13 @@ def seeded(session: Session) -> Session:
 
 
 def _service(session: Session, guard: ScopeGuard, lab: FakeLab) -> ScanService:
-    return ScanService(session, guard, RULEBOOK, nmap=NmapAdapter(lab.runner))
+    class FakeHttpProber:
+        def probe(self, target: object, *, port: int, scheme: str) -> HttpProbe:
+            return HttpProbe(status=200, server="demo", title="Demo", port=port, scheme=scheme)
+
+    return ScanService(
+        session, guard, RULEBOOK, nmap=NmapAdapter(lab.runner), http_prober=FakeHttpProber()
+    )  # type: ignore[arg-type]
 
 
 def _actions(session: Session) -> list[tuple[str, str, str]]:
@@ -98,7 +105,7 @@ def test_full_run_discovers_scans_matches_scores_and_notifies(
     actions = seeded.scalars(select(AuditLog.action)).all()
     for expected in ("scan_started", "scan_action_done", "finding_created", "scan_finished"):
         assert expected in actions
-    assert audit_sink.actions.count("scope_allowed") == 4
+    assert audit_sink.actions.count("scope_allowed") == 7
     assert audit_sink.actions[-1] == "scope_awaiting_approval"
 
 
