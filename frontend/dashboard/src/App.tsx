@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { NAV_GROUPS } from "@/navigation";
@@ -6,7 +7,6 @@ import { TourButton } from "@/tour";
 import { DeviceCard } from "@/pages/DeviceCard";
 import { Devices, UnknownDevices } from "@/pages/Devices";
 import { Home } from "@/pages/Home";
-import { OrgMap } from "@/pages/OrgMap";
 import { People } from "@/pages/People";
 import { TopFindings } from "@/pages/TopFindings";
 import { AppShell } from "@shared/components/AppShell";
@@ -16,6 +16,9 @@ import { ZeroDayBanner } from "@shared/components/reports";
 import { Planned } from "@shared/components/Planned";
 import { AccessDenied } from "@shared/lib/auth";
 import { useAuth } from "@shared/lib/auth-context";
+
+// Mapa (Cytoscape) ładuje się dopiero przy wejściu na /mapa.
+const OrgMap = lazy(() => import("@/pages/OrgMap").then((m) => ({ default: m.OrgMap })));
 
 const planned = NAV_GROUPS.flatMap((group) => group.items).filter((item) => item.stage);
 
@@ -46,7 +49,14 @@ export function App() {
         <Route path="/zagrozenia" element={<TopFindings />} />
         <Route path="/urzadzenia" element={<Devices />} />
         <Route path="/urzadzenia/:id" element={<DeviceCard />} />
-        <Route path="/mapa" element={<OrgMap />} />
+        <Route
+          path="/mapa"
+          element={
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Ładuję mapę…</p>}>
+              <OrgMap />
+            </Suspense>
+          }
+        />
         <Route path="/nieznane" element={<UnknownDevices />} />
         <Route path="/ludzie" element={<People />} />
         <Route path="/skrzynka" element={<InboxPage basePath="/raporty" />} />
