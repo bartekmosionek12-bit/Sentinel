@@ -237,7 +237,7 @@ export function Assets() {
                       variant={asset.status === "active" ? "ok" : "warn"}
                       title={STATUS_HINTS[asset.status]}
                     >
-                      {STATUS_LABELS[asset.status]}
+                      {asset.type === "host" ? ({ active: "Aktywny", unstable: "Niestabilny", unconfirmed: "Niepotwierdzony", inactive: "Nieaktywny" }[asset.reachability] ?? STATUS_LABELS[asset.status]) : STATUS_LABELS[asset.status]}
                     </Badge>
                   </Td>
                   <Td className="whitespace-nowrap">{formatDateTime(asset.last_seen)}</Td>

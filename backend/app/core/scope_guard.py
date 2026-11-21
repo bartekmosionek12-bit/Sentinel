@@ -152,6 +152,7 @@ class ScopeConfig:
     rate_per_target: dict[str, int] = field(default_factory=dict)
     scan_packets_per_second: int = 100
     scan_workers: int = 2
+    missing_after_runs: int = 3
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> ScopeConfig:
@@ -170,6 +171,7 @@ class ScopeConfig:
             },
             scan_packets_per_second=max(1, min(1000, int(rates.get("packets_per_second", 100)))),
             scan_workers=max(1, min(8, int(rates.get("parallel_workers", 2)))),
+            missing_after_runs=max(1, min(20, int(data.get("missing_after_runs", 3)))),
         )
 
     @classmethod

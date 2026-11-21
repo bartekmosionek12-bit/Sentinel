@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.api.deps import DispatcherDep, RulebookDep, ScopeGuardDep, SessionDep
@@ -15,9 +18,45 @@ from app.iam.deps import AuditSinkDep, ensure, require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
 from app.models import ScanAction, ScanRun
+from app.scans.diff import compare_runs
 from app.scans.service import ScanActionError, ScanService
 
 router = APIRouter(prefix="/api", tags=["skany"], route_class=RedactingRoute)
+
+
+@router.get("/scan-diff", dependencies=[Depends(require("scan:read"))])
+def scan_diff(
+    session: SessionDep,
+    from_run: uuid.UUID,
+    to_run: uuid.UUID,
+    principal: Annotated[Principal, Depends(require("scan:read"))],
+    format: Annotated[str, Query(pattern="^(json|csv)$")] = "json",
+) -> Response:
+    before = session.get(ScanRun, from_run)
+    after = session.get(ScanRun, to_run)
+    if before is None or after is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
+    changes = compare_runs(
+        (before.summary or {}).get("snapshot", {}), (after.summary or {}).get("snapshot", {})
+    )
+    if format == "csv":
+        if not principal.can("secrets:redacted:view"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Eksport CSV wymaga pełnego wglądu")
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=("kind", "host", "item", "before", "after"))
+        writer.writeheader()
+        writer.writerows(changes)
+        return Response(
+            output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=scan-diff.csv"},
+        )
+    return Response(
+        json.dumps(changes, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=scan-diff.json"},
+    )
+
 
 # Zatwierdzenie akcji wymaga uprawnienia odpowiadającego jej poziomowi inwazyjności.
 _APPROVE_BASE = "scan:approve:l2"

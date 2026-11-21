@@ -31,6 +31,7 @@ export interface Asset {
   owner: string | null;
   tags: string[];
   status: "active" | "missing" | "retired" | "shadow";
+  reachability: string;
   first_seen: string;
   last_seen: string;
 }
@@ -78,6 +79,7 @@ export interface Scope {
   default_rate_per_minute: number;
   scan_packets_per_second: number;
   scan_workers: number;
+  missing_after_runs: number;
   demo_mode: boolean;
   demo_lab_cidr: string;
   demo_approval_expires_at: string | null;
@@ -287,6 +289,14 @@ export interface ScanRun {
   started_at: string;
   finished_at: string | null;
   actions: ScanAction[];
+}
+
+export interface ScanChange {
+  kind: string;
+  host: string;
+  item: string;
+  before: string;
+  after: string;
 }
 
 export interface Task {
@@ -914,6 +924,8 @@ export const api = {
       body: JSON.stringify({ accept }),
     }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
+  scanDiff: (from: string, to: string) => request<ScanChange[]>(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`),
+  downloadScanDiff: (from: string, to: string, format: "json" | "csv") => download(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`, `scan-diff.${format}`),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>

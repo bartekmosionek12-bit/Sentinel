@@ -21,3 +21,6 @@ rate_limits:
   # Łączny budżet rozdzielany między workery; nmap zawsze używa najwyżej -T3.
   packets_per_second: 100
   parallel_workers: 2
+
+# Host jest nieaktywny po tej liczbie kolejnych przebiegów bez odpowiedzi.
+missing_after_runs: 3

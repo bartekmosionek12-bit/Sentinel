@@ -17,6 +17,7 @@ from app.pipeline import Rulebook
 from app.scanners.http_probe import HttpProbe
 from app.scanners.models import ServiceInfo
 from app.scanners.nmap import NmapAdapter
+from app.scans.diff import compare_runs
 from app.scans.service import ScanActionError, ScanService
 from tests.conftest import FakeResolver, MemoryAudit
 from tests.pipeline_helpers import ASSETS_CSV, RULES, SERVICES, asset_by_ip, seed_feeds
@@ -123,6 +124,21 @@ def test_second_run_changes_nothing_and_does_not_repeat_notifications(
     assert seeded.scalar(select(func.count()).select_from(Finding)) == 3
     awaiting = [a for a in _actions(seeded) if a[2] == "awaiting_approval"]
     assert len(awaiting) == 1
+
+
+def test_two_runs_show_disappeared_host_and_three_misses_make_it_inactive(
+    seeded: Session, audit_sink: MemoryAudit, lab: FakeLab
+) -> None:
+    service = _service(seeded, _guard(audit_sink), lab)
+    first = service.run(trigger="manual", actor="test")
+    lab.services.pop("172.30.99.12")
+    second = service.run(trigger="manual", actor="test")
+    changes = compare_runs(first.summary["snapshot"], second.summary["snapshot"])
+    assert any(c["kind"] == "host_disappeared" and c["host"] == "172.30.99.12" for c in changes)
+    assert asset_by_ip(seeded, "172.30.99.12").attributes["reachability"] == "unconfirmed"
+    service.run(trigger="manual", actor="test")
+    service.run(trigger="manual", actor="test")
+    assert asset_by_ip(seeded, "172.30.99.12").attributes["reachability"] == "inactive"
 
 
 def test_empty_scope_scans_nothing(seeded: Session, audit_sink: MemoryAudit, lab: FakeLab) -> None:

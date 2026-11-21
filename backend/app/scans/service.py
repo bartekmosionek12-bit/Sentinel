@@ -29,7 +29,7 @@ from app.core.scope_guard import (
 from app.feeds.base import as_utc
 from app.inventory.service import record_discovery, record_host_scan
 from app.matching.engine import ACTIVE_STATUSES
-from app.models import Asset, AssetHistory, Finding, ScanAction, ScanRun, Vulnerability
+from app.models import Asset, AssetHistory, Finding, ScanAction, ScanRun, Software, Vulnerability
 from app.models.base import utcnow
 from app.notifications.channels import Sender
 from app.pipeline import AnalysisReport, Rulebook, analyze
@@ -119,6 +119,7 @@ class ScanService:
             **report.summary(),
             "actions": dict(statuses),
             "note": "" if cidrs else "Zakres jest pusty, więc nic nie zostało zeskanowane",
+            "snapshot": self._snapshot(run.id),
         }
         run.status = "done"
         run.finished_at = utcnow()
@@ -130,6 +131,32 @@ class ScanService:
         self._audit(actor, "scan_finished", "Skan zakończony", run.summary, run)
         session.commit()
         return run
+
+    def _snapshot(self, run_id: uuid.UUID) -> dict[str, Any]:
+        """Obraz obserwacji z tego przebiegu do porównywania dowolnych dwóch skanów."""
+        snapshot: dict[str, Any] = {}
+        for asset in self._session.scalars(select(Asset).where(Asset.type == "host")):
+            attrs = asset.attributes or {}
+            if attrs.get("last_seen_run") != str(run_id):
+                continue
+            address = str(attrs.get("address", ""))
+            software = self._session.scalars(
+                select(Software).where(Software.asset_id == asset.id)
+            ).all()
+            web = attrs.get("web") or {}
+            snapshot[address] = {
+                "name": asset.name,
+                "state": attrs.get("reachability", "active"),
+                "services": sorted(
+                    f"{s.protocol}:{s.port}:{s.product}:{s.version}" for s in software
+                ),
+                "technologies": sorted(
+                    {tech for probe in web.values() for tech in (probe.get("technologies") or [])}
+                ),
+                "headers": {key: probe.get("headers") or {} for key, probe in web.items()},
+                "flags": [flag for probe in web.values() for flag in (probe.get("flags") or [])],
+            }
+        return snapshot
 
     # --- decyzje człowieka ----------------------------------------------
 
@@ -301,7 +328,13 @@ class ScanService:
                     except Exception as error:
                         self._finish(action, "failed", str(error))
                     else:
-                        result = record_discovery(session, network, hosts, run.id)
+                        result = record_discovery(
+                            session,
+                            network,
+                            hosts,
+                            run.id,
+                            missing_after_runs=self._guard.config.missing_after_runs,
+                        )
                         totals["hosts_up"] += len(result.seen)
                         totals["hosts_new"] += len(result.new)
                         totals["hosts_reappeared"] += len(result.reappeared)

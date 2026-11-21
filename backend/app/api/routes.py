@@ -186,6 +186,7 @@ def get_scope(guard: ScopeGuardDep, settings: SettingsDep) -> ScopeOut:
         default_rate_per_minute=config.default_rate_per_minute,
         scan_packets_per_second=config.scan_packets_per_second,
         scan_workers=config.scan_workers,
+        missing_after_runs=config.missing_after_runs,
         demo_mode=settings.demo_mode,
         demo_lab_cidr=settings.demo_lab_cidr,
         demo_approval_expires_at=settings.demo_approval_expires_at,

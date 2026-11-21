@@ -5,7 +5,7 @@ import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
-import { Input } from "@shared/components/ui/input";
+import { Input, Select } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
 import { RequestStatus } from "@shared/components/freshness";
 import { api, type ScanAction, type ScanRequest } from "@shared/lib/api";
@@ -228,10 +228,19 @@ function ScanRequests({ requests }: { requests: ScanRequest[] }) {
 
 export function Scans() {
   const queryClient = useQueryClient();
+  const [fromRun, setFromRun] = useState("");
+  const [toRun, setToRun] = useState("");
   const runs = useQuery({
     queryKey: ["scans"],
     queryFn: api.scans,
     refetchInterval: 10_000,
+  });
+  const from = fromRun || runs.data?.[1]?.id || "";
+  const to = toRun || runs.data?.[0]?.id || "";
+  const differences = useQuery({
+    queryKey: ["scan-diff", from, to],
+    queryFn: () => api.scanDiff(from, to),
+    enabled: Boolean(from && to && from !== to),
   });
   const awaiting = useQuery({
     queryKey: ["scan-actions", "awaiting_approval"],
@@ -257,6 +266,20 @@ export function Scans() {
         description="Co zostało zeskanowane, która reguła o tym zdecydowała i jaką decyzję podjęła kontrola zakresu. Plan układa deterministyczny silnik reguł (rules/scan_rules.yaml)."
       />
       <ScanRequests requests={requests.data ?? []} />
+      {(runs.data?.length ?? 0) >= 2 && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle>Porównaj dwa przebiegi</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Select aria-label="Starszy przebieg" value={from} onChange={(event) => setFromRun(event.target.value)}>{runs.data?.map((run) => <option key={run.id} value={run.id}>{formatDateTime(run.started_at)}</option>)}</Select>
+              <Select aria-label="Nowszy przebieg" value={to} onChange={(event) => setToRun(event.target.value)}>{runs.data?.map((run) => <option key={run.id} value={run.id}>{formatDateTime(run.started_at)}</option>)}</Select>
+              <Button onClick={() => void api.downloadScanDiff(from, to, "json")}>JSON</Button>
+              <Button onClick={() => void api.downloadScanDiff(from, to, "csv")}>CSV</Button>
+            </div>
+            {differences.data && <Table><thead><tr><Th>Zmiana</Th><Th>Host</Th><Th>Element</Th><Th>Przed</Th><Th>Po</Th></tr></thead><tbody>{differences.data.map((change, index) => <tr key={index}><Td>{change.kind}</Td><Td>{change.host}</Td><Td>{change.item}</Td><Td>{change.before}</Td><Td>{change.after}</Td></tr>)}</tbody></Table>}
+          </CardContent>
+        </Card>
+      )}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Button disabled={trigger.isPending} onClick={() => trigger.mutate()}>
           Uruchom skan zakresu
