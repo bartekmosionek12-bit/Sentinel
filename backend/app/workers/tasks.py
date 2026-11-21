@@ -176,6 +176,17 @@ def coverage_snapshot_task() -> dict[str, Any]:
         return as_view(row)
 
 
+@celery_app.task(name="app.workers.tasks.personal_data_retention")
+def personal_data_retention_task() -> dict[str, Any]:
+    """Retencja danych osobowych (§15): nazwiska osób, które odeszły, zastępuje pseudonim."""
+    from app.org.privacy import apply_retention
+
+    with get_sessionmaker()() as session:
+        erased = apply_retention(session, days=get_settings().personal_data_retention_days)
+        session.commit()
+        return {"erased": erased}
+
+
 @celery_app.task(name="app.workers.tasks.email_report")
 def email_report_task(report_id: str, actor: str = "system") -> dict[str, Any]:
     from app.reports.delivery import email_report

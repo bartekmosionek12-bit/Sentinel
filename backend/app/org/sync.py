@@ -147,7 +147,9 @@ def _upsert_people(
             people[record.external_id] = person
             created += 1
         unit = units.get(record.org_unit) if record.org_unit else None
-        person.full_name, person.job_title = record.full_name, record.job_title
+        # Osoby, które już odeszły, nie dostają z powrotem nazwiska (retencja §15 je usuwa).
+        if record.active or person.active:
+            person.full_name, person.job_title = record.full_name, record.job_title
         person.org_unit_id = unit.id if unit else None
         if record.active:
             person.active, person.left_at = True, None

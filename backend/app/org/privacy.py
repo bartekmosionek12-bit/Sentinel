@@ -12,12 +12,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import audit
+from app.feeds.base import as_utc
 from app.models import Person
+from app.models.base import utcnow
 
 DEMO_LABEL = "dane demonstracyjne"
 
@@ -60,3 +64,36 @@ def record_personal_view(
             object_type="person",
         ),
     )
+
+
+def apply_retention(
+    session: Session, *, days: int, actor: str = "system:retention", now: datetime | None = None
+) -> int:
+    """Usuwa nazwisko i stanowisko osób nieaktywnych dłużej niż `days` dni (§15).
+
+    Wiersz osoby zostaje z pseudonimem, żeby historia urządzeń i audyt nadal się zgadzały.
+    """
+    now = now or utcnow()
+    cutoff = now - timedelta(days=days)
+    erased = 0
+    for person in session.scalars(select(Person).where(Person.active.is_(False))).all():
+        if person.left_at is None or as_utc(person.left_at) > cutoff:
+            continue
+        if person.full_name == pseudonym(person):
+            continue
+        person.full_name = pseudonym(person)
+        person.job_title = None
+        erased += 1
+    if erased:
+        audit.record(
+            session,
+            audit.AuditEvent(
+                actor=actor,
+                action="personal_data_erased",
+                reason=f"Retencja: dane osobowe usunięte po {days} dniach od odejścia",
+                inputs={"people": erased, "retention_days": days},
+                object_type="person",
+            ),
+        )
+    session.flush()
+    return erased

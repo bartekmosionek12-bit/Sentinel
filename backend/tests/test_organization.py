@@ -235,3 +235,21 @@ def test_sync_org_cli_in_demo_mode(session: Session) -> None:
     result = cmd_sync_org(session, settings)
     assert result["sync"]["people_created"] == 25
     assert result["coverage"]["unknown_devices"] == 2
+
+
+def test_retention_erases_names_of_people_who_left_long_ago(session: Session) -> None:
+    from app.org.privacy import apply_retention
+
+    sync_organization(session, _demo_snapshot(), actor="test")
+    leaver = session.scalar(select(Person).where(Person.external_id == "S-1-5-21-DEMO-1125"))
+    assert leaver is not None
+    assert leaver.left_at is not None
+    assert apply_retention(session, days=90) == 0  # odszedł dziś
+    assert apply_retention(session, days=90, now=utcnow() + timedelta(days=91)) == 1
+    assert leaver.full_name == pseudonym(leaver)
+    assert leaver.job_title is None
+    # Kolejna synchronizacja z AD (konto nadal wyłączone) nie przywraca nazwiska.
+    sync_organization(session, _demo_snapshot(), actor="test")
+    assert leaver.full_name == pseudonym(leaver)
+    entry = session.scalar(select(AuditLog).where(AuditLog.action == "personal_data_erased"))
+    assert entry is not None

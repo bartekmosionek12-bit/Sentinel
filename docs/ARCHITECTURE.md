@@ -581,6 +581,18 @@ erDiagram
 - `ASSET_SOURCE` zastępuje pole „źródła wykrycia”: z niego wynika `in_cmdb` i reguła shadow IT
   („widziany w sieci, nie ma w CMDB, AD ani MDM”).
 - `SOFTWARE` bez zmian (ma już `source` i `match_confidence`).
+- **Stan Etapu 6 (#18), migracja 0011.** Źródła to atrapy czytające fikcyjną organizację z
+  `demo-lab/org/` (`app/org/sources.py`: AD, MDM, CMDB, DHCP; Entra i chmura mają ten sam
+  kształt i są w ROADMAP). `python -m app.cli sync-org` (tylko `DEMO_MODE`, wołane też przez
+  `seed-demo`) scala urządzenia po MAC, numerze seryjnym, adresie i nazwie; CMDB wygrywa przy
+  dziale, lokalizacji, właścicielu i krytyczności; urządzenie bez działu dziedziczy dział
+  użytkownika. Reguła shadow IT (`app/org/shadow.py`) działa w ścieżce analizy po każdym
+  skanie i synchronizacji: urządzenie widziane tylko przez skan, DHCP albo DNS, niepotwierdzone,
+  dostaje status `shadow` i finding `exposure` (powiadomienie `nieznane_urzadzenie`);
+  potwierdzenie (`POST /api/org/devices/{id}/confirm`, `inventory:write`) albo wpis w CMDB
+  zamyka finding. Tekst `owner` z CSV wskazuje dział o tej samej nazwie.
+  Uczciwie: widzimy tylko urządzenia, które odpowiadają w skanowanych sieciach albo dostały
+  adres z DHCP.
 
 ### 7.2 Zagrożenia, findingi, aktualizacje
 
@@ -867,6 +879,13 @@ Nowe nieznane urządzenie (widziane przez skan albo DHCP/DNS, nieobecne w CMDB, 
 finding `exposure` i powiadomienie. Zasoby bez właściciela i znikające zasoby zasilają rejestr
 ryzyk governance.
 
+**Stan Etapu 6 (#18):** `app/org/coverage.py`, tabela `coverage_snapshot` (jeden wiersz na
+dzień, ponowny pomiar nadpisuje), beat `coverage-snapshot` raz na dobę i
+`python -m app.cli coverage`. Liczymy urządzenia (bez domen, IP, usług i aplikacji) w stanie
+active, shadow i missing. „Skan” to wpis `ASSET_SOURCE.source = scan` z ostatnich 7 dni, więc
+stacje robocze znane tylko z AD i MDM obniżają ten odsetek: to prawda o pokryciu skanami, nie
+błąd. `GET /api/org/overview` podaje wartość liczoną na żywo i trend z 30 dni.
+
 ---
 
 ## 9. Matching Engine
@@ -1138,6 +1157,10 @@ Dwie osobne aplikacje Vite w workspace npm, ze wspólną biblioteką `frontend/s
 - Retencja: dane osobowe usuwane po odłączeniu urządzenia od osoby lub odejściu pracownika,
   po okresie z konfiguracji (zadanie beat). Wpis w audycie zostaje, ale bez danych osobowych.
 - `docs/PRIVACY.md` (Etap 6): zakres, cel, podstawa prawna do weryfikacji przez IOD.
+- **Stan Etapu 6 (#18):** `app/org/privacy.py` (pseudonim, audyt `personal_data_viewed`,
+  retencja `personal_data_erased`, beat raz na dobę, `PERSONAL_DATA_RETENTION_DAYS`), API
+  `/api/org/*` z przełącznikiem `?pseudonyms=true`, warstwa redakcji podstawia pseudonim pod
+  `display_name`. Opis dla IOD: [`docs/PRIVACY.md`](PRIVACY.md).
 
 ---
 

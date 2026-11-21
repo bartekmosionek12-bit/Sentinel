@@ -54,6 +54,11 @@ celery_app.conf.update(
             "task": "app.workers.tasks.coverage_snapshot",
             "schedule": 24 * 3600.0,
         },
+        # Retencja danych osobowych raz na dobę (§15).
+        "personal-data-retention": {
+            "task": "app.workers.tasks.personal_data_retention",
+            "schedule": 24 * 3600.0,
+        },
         # Moduł 19: nocny pełny test bezpieczeństwa agenta na aktywnej konfiguracji.
         "agent-test-nightly": {
             "task": "app.workers.tasks.agent_tests.run_agent_test",
