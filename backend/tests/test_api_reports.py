@@ -154,8 +154,7 @@ def test_pdf_html_for_manager_has_no_technical_details(
 ) -> None:
     from datetime import UTC, datetime
 
-    from app.api.reports import report_view
-    from app.reports.pdf import render_html
+    from app.reports.pdf import render_html, report_view
 
     now = datetime(2026, 11, 21, tzinfo=UTC)
     with session_factory() as session:

@@ -8,6 +8,7 @@ przejdą walidację; światło, fakty i warstwa techniczna nigdy się przy tym n
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -49,6 +50,28 @@ def facts_prompt_text(report: Report) -> str:
     return "\n".join(lines)
 
 
+def deliver(session: Session, config: ReportsConfig, report: Report) -> None:
+    """Doręczenie do skrzynek ról z `rules/reports.yaml` i powiadomienie w aplikacji."""
+    for role in config.recipients:
+        session.add(ReportDelivery(report_id=report.id, recipient_role=role, channel="inbox"))
+    session.add(
+        Notification(
+            report_id=report.id,
+            rule_name=f"raport_{report.kind}",
+            channel="in_app",
+            group_key=f"report:{report.id}",
+            status="sent",
+            payload={
+                "title": report.title,
+                "light": report.light,
+                "lines": [report.light_reason],
+                "recipients": list(config.recipients),
+            },
+        )
+    )
+    session.flush()
+
+
 def create_report(
     session: Session,
     config: ReportsConfig,
@@ -57,11 +80,19 @@ def create_report(
     actor: str,
     today: date | None = None,
     cve_ids: Sequence[str] | None = None,
+    finding_ids: Sequence[uuid.UUID] | None = None,
+    since: str | None = None,
     extra_scope: Mapping[str, Any] | None = None,
 ) -> Report:
     """Liczy fakty i światło, zapisuje raport z szablonem i doręcza go do skrzynek."""
     data: ReportData = build(
-        session, config, kind=kind, today=today or utcnow().date(), cve_ids=cve_ids
+        session,
+        config,
+        kind=kind,
+        today=today or utcnow().date(),
+        cve_ids=cve_ids,
+        finding_ids=finding_ids,
+        since=since,
     )
     template = data.template
     report = Report(
@@ -80,24 +111,7 @@ def create_report(
     )
     session.add(report)
     session.flush()
-    for role in config.recipients:
-        session.add(ReportDelivery(report_id=report.id, recipient_role=role, channel="inbox"))
-    session.add(
-        Notification(
-            report_id=report.id,
-            rule_name=f"raport_{kind}",
-            channel="in_app",
-            group_key=f"report:{report.id}",
-            status="sent",
-            payload={
-                "title": report.title,
-                "light": report.light,
-                "lines": [report.light_reason],
-                "recipients": list(config.recipients),
-            },
-        )
-    )
-    session.flush()
+    deliver(session, config, report)
     audit.record(
         session,
         audit.AuditEvent(

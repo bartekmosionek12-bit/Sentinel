@@ -268,8 +268,9 @@ Nie uruchamiaj ich w żadnej innej konfiguracji.
   (pipeline, dopóki nie przejdzie na MCP). Worker agenta i pozostałe usługi nie mają tam drogi.
 - OpenBao w demo trzyma klucz rozpieczętowania w wolumenie `openbao-init`, dostępnym tylko
   dla usługi inicjalizującej. Produkcja: auto-unseal przez KMS/HSM.
-- Powiadomienia zbiorcze (digest) są zapisywane, ale ich wysyłka, e-mail i PDF raportów
-  powstają w Etapie 6; Slack, Teams i baner przez SSE są w [ROADMAP](docs/ROADMAP.md).
+- E-mail z raportami i digestami idzie zawsze w wersji menedżera z PDF (bez danych
+  technicznych) na jeden adres `NOTIFY_EMAIL_TO`; Slack, Teams dla raportów i baner przez SSE
+  są w [ROADMAP](docs/ROADMAP.md).
 - Reguły przeciw pośredniemu prompt injection (sprzeczności, prośby o hasła) są słownikowe i
   nie złapią każdej parafrazy. Twarda gwarancja: ocenę ryzyka, światło i terminy liczy kod,
   a model nie może ich zmienić (sprawdza to [`ai-tests/`](ai-tests/README.md)).

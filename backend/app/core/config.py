@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    # Mailpit w demo nie ma TLS; w produkcji zostaje STARTTLS.
+    smtp_starttls: bool = True
     notify_email_to: str = ""
     slack_webhook_url: str = ""
     teams_webhook_url: str = ""

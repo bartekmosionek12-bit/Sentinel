@@ -828,7 +828,29 @@ walidacją i szablonem awaryjnym), `REPORT_DELIVERY` trafia do skrzynek użytkow
 - Baner zero-day w konsoli menedżera odpytuje `/api/inbox` co 5 s zamiast SSE: prościej, a
   cel „poniżej 5 s” dotyczy powstania raportu (mierzone w CI: około 50 ms bez modelu).
 - Powiadomienie o raporcie to `NOTIFICATION` kanału `in_app` z `report_id`; e-mail, Slack i
-  Teams obsłużą ten sam rekord. Digesty, PDF i e-mail: Etap 6; Slack i Teams: ROADMAP.
+  Teams obsłużą ten sam rekord. Slack i Teams dla raportów: ROADMAP.
+
+**Stan po Etapie 6 (PDF, digest, e-mail, `ai_test`):**
+
+- `REPORT.kind`: `assessment`, `zero_day`, `digest`, `ai_test` (migracja 0010). Projektowe
+  `digest_daily` i `digest_weekly` scalone w jeden `digest` z polem `scope.since`; tygodniowy
+  digest to inna częstotliwość beat, nie inny rodzaj.
+- **Digest** (`app/reports/delivery.py`): powiadomienia z regułą `delivery: digest` czekają
+  jako `digest_pending`; beat raz na dobę (`create_digest`) albo `python -m app.cli digest`
+  zbiera je w jeden raport z tymi samymi faktami, światłem i „W skrócie” co ocena stanu, ale
+  tylko dla findingów z tych powiadomień. Powiadomienia przechodzą w `digested` z `report_id`.
+- **E-mail**: zawsze wersja menedżera (redakcja danych technicznych jak w konsoli menedżera,
+  dane osobowe jak dla menedżera) i PDF w załączniku. Wysyła się z digestem, po raporcie
+  zero-day (po zapisaniu raportu, więc nie wlicza się do pomiaru „poniżej 5 s”) i na żądanie
+  (`python -m app.cli email-report <id>`). Wynik to `NOTIFICATION` kanału `email` (`sent` albo
+  `failed` z opisem błędu) i wpis `report_emailed` / `report_email_failed` w audycie. STARTTLS
+  domyślnie włączony (`SMTP_STARTTLS`); w demo Mailpit w profilu `demo` (bez TLS, port 1025,
+  podgląd na `localhost:8025`), sprawdzany w CI (`scripts/check_mail.py`).
+- **`ai_test`** (§23.4): po każdym przebiegu harnessu zadanie kolejki domyślnej tworzy raport
+  „Czy nasz agent AI jest bezpieczny?” (harness nie pisze do tabel raportów). Światło liczy
+  kod: czerwone, gdy kod przepuścił choć jedną szkodliwą próbę; żółte, gdy kod zatrzymał
+  wszystko, ale model dał się nakłonić albo działa konfiguracja wymuszona bez testu; zielone,
+  gdy model i kod odparły wszystko. Szczegóły to lista przypadków z dwiema ocenami.
 - Warstwa „W skrócie” jest zapisana w samym raporcie (`summary`, `summary_source`,
   `summary_validation`, `summary_model`), nie w `LLM_CACHE`: zależy od stanu bazy w chwili
   raportu, więc nie ma czego współdzielić.
@@ -998,7 +1020,11 @@ mechanizm co anonimizator dla zewnętrznego LLM, więc jest jedna ścieżka zami
   Każdy termin ze słownika dostaje w UI podpowiedź.
 - **„Szczegóły techniczne”**: tabela z bazy, zwinięta; dla menedżera z redakcją.
 - Szablon awaryjny dla każdej odpowiedzi, więc raport powstaje także bez modelu.
-- PDF: ta sama struktura w Jinja2 + WeasyPrint (**nie powstał w Etapie 4b**, Etap 6).
+- PDF (Etap 6): ta sama struktura w Jinja2 + WeasyPrint, `GET /api/reports/{id}/pdf`
+  z uprawnieniem `reports:export`. Do szablonu trafia widok raportu po tej samej redakcji co
+  odpowiedź JSON dla tej osoby (`app.reports.pdf.report_view`), więc PDF menedżera nie ma
+  adresów IP. WeasyPrint nie pobiera nic z sieci (`url_fetcher` odmawia każdemu adresowi,
+  style i czcionki lokalne). Każde pobranie: `report_pdf_downloaded` w audycie.
 - Opis CVE z rejestru trafia do faktów modelu jako „tylko informacja”, ale walidator sprawdza
   pochodzenie CVE, wersji, dat i identyfikatorów względem faktów **bez** tego opisu
   (`app/explainer/guards.py`, sekcja 13.1).
@@ -1415,7 +1441,8 @@ Wyniki są rozdzielone na dwie oceny:
 - Konsola operacyjna: każdy przypadek z transkrypcją, planem, próbami wywołań narzędzi i
   decyzją polityki, z podziałem na dwie oceny z 23.2.
 - Konsola menedżera (Etap 6): raport „W skrócie” typu `ai_test` („Czy nasz agent AI jest
-  bezpieczny?”), historia testów, lista wymuszonych zmian. Wynik jest dowodem do compliance
+  bezpieczny?”, powstaje po każdym przebiegu, §8.5), z liczbą wymuszonych zmian w faktach.
+  Historia testów w konsoli menedżera: Etap 9. Wynik jest dowodem do compliance
   (ISO/IEC 42001, EU AI Act, OWASP Top 10 dla aplikacji LLM i agentowych).
 
 ### 23.5 Demo-lab i scenariusz demo 6

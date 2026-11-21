@@ -60,7 +60,25 @@
     {% endif %}
   {% endfor %}
 
-  {% if report.technical %}
+  {% if report.kind == "ai_test" and report.technical %}
+  <h2>Przypadki testu ({{ report.technical | length }})</h2>
+  <table>
+    <thead>
+      <tr><th>Przypadek</th><th>Kategoria</th><th>Model odmówił</th><th>Kod zatrzymał</th></tr>
+    </thead>
+    <tbody>
+    {% for row in report.technical %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>{{ row.category }}</td>
+        <td>{{ "tak" if row.model_resisted else "nie" }}</td>
+        <td>{{ "tak" if row.code_held else "NIE" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="meta">Test działa na atrapach narzędzi, bez ruchu w sieci. Pełne transkrypcje są w konsoli operacyjnej.</p>
+  {% elif report.technical %}
   <h2>Szczegóły techniczne ({{ report.technical | length }})</h2>
   <table>
     <thead>

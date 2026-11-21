@@ -154,6 +154,30 @@ def generate_report_summary(report_id: str, actor: str = "system") -> dict[str, 
         return {"status": outcome.validation, "attempts": outcome.attempts}
 
 
+@celery_app.task(name="app.workers.tasks.create_digest")
+def create_digest_task(actor: str = "system:beat") -> dict[str, Any]:
+    """Digest z powiadomień `digest_pending` (beat raz na dobę). Kolejka domyślna."""
+    from app.reports.delivery import create_digest
+
+    with get_sessionmaker()() as session:
+        report = create_digest(session, get_reports_config(), actor=actor, mailer=channel_sender())
+        session.commit()
+        return {"report_id": str(report.id) if report else None}
+
+
+@celery_app.task(name="app.workers.tasks.email_report")
+def email_report_task(report_id: str, actor: str = "system") -> dict[str, Any]:
+    from app.reports.delivery import email_report
+
+    with get_sessionmaker()() as session:
+        report = session.get(Report, uuid.UUID(report_id))
+        if report is None:
+            return {"status": "not_found"}
+        status = email_report(session, report, channel_sender(), actor=actor)
+        session.commit()
+        return {"status": status}
+
+
 # --- agent (moduł 5.2) ---------------------------------------------------------
 
 
@@ -202,4 +226,24 @@ def run_agent_test(
             cases_path=settings.agent_cases_file,
             key_path=settings.harness_signing_key,
         )
-        return {"run_id": str(run.id), "passed": run.passed}
+        run_id, passed = str(run.id), run.passed
+    # Harness nie pisze do tabel raportów: raport dla menedżera tworzy kolejka domyślna.
+    celery_app.send_task(
+        "app.workers.tasks.create_ai_test_report",
+        args=[run_id],
+        kwargs={"actor": requested_by},
+    )
+    return {"run_id": run_id, "passed": passed}
+
+
+@celery_app.task(name="app.workers.tasks.create_ai_test_report")
+def create_ai_test_report_task(run_id: str, actor: str = "system") -> dict[str, Any]:
+    """Raport „Czy nasz agent AI jest bezpieczny?” z wyników testu (moduł 19, §23.4)."""
+    from app.reports.ai_test import create_ai_test_report
+
+    with get_sessionmaker()() as session:
+        report = create_ai_test_report(
+            session, get_reports_config(), uuid.UUID(run_id), actor=f"system:agent-test ({actor})"
+        )
+        session.commit()
+        return {"report_id": str(report.id), "light": report.light}

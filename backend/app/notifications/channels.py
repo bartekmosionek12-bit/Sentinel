@@ -8,7 +8,8 @@ zawiera nazwę zasobu i identyfikatory CVE, bez adresów IP.
 from __future__ import annotations
 
 import smtplib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -26,6 +27,14 @@ _WEBHOOK_HOSTS = {
 
 class ChannelError(Exception):
     """Kanał jest źle skonfigurowany albo dostawca odrzucił wiadomość."""
+
+
+@dataclass(frozen=True)
+class Attachment:
+    filename: str
+    content: bytes
+    maintype: str = "application"
+    subtype: str = "pdf"
 
 
 class Sender(Protocol):
@@ -99,16 +108,30 @@ class ChannelSender:
         if response.status_code >= 300:
             raise ChannelError(f"{channel}: odpowiedź HTTP {response.status_code}")
 
-    def _email(self, title: str, body: str) -> None:
+    def send_email(self, title: str, body: str, attachments: Sequence[Attachment] = ()) -> None:
+        """E-mail z załącznikami (PDF raportu). Ten sam adresat co powiadomienia."""
+        if "email" not in self.configured():
+            raise ChannelError("Kanał email nie jest skonfigurowany")
+        self._email(title, body, attachments)
+
+    def _email(self, title: str, body: str, attachments: Sequence[Attachment] = ()) -> None:
         settings = self._settings
         message = EmailMessage()
         message["Subject"] = f"[Sentinel ASI] {title}"
         message["From"] = settings.smtp_from
         message["To"] = settings.notify_email_to
         message.set_content(body)
+        for attachment in attachments:
+            message.add_attachment(
+                attachment.content,
+                maintype=attachment.maintype,
+                subtype=attachment.subtype,
+                filename=attachment.filename,
+            )
         try:
             with self._smtp_factory(settings.smtp_host, settings.smtp_port) as smtp:
-                smtp.starttls()
+                if settings.smtp_starttls:
+                    smtp.starttls()
                 if settings.smtp_user:
                     smtp.login(settings.smtp_user, settings.smtp_password)
                 smtp.send_message(message)

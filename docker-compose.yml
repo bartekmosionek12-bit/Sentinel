@@ -439,6 +439,26 @@ services:
       - core
     mem_limit: 128m
 
+  # --- skrzynka pocztowa demo (Mailpit): łapie e-maile z raportami i digestami, nic nie wysyła
+  # dalej. Interfejs tylko na localhost:8025. W .env: SMTP_HOST=mailpit, SMTP_PORT=1025,
+  # SMTP_STARTTLS=false (patrz .env.example).
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    profiles: ["demo"]
+    environment:
+      MP_MAX_MESSAGES: "200"
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - core
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+
   # --- demo-lab: CELOWO PODATNE usługi, tylko z profilem `demo` (demo-lab/README.md).
   # Bez portów na hoście i tylko w sieci `internal`, do której ma dostęp wyłącznie skaner.
   lab-web:

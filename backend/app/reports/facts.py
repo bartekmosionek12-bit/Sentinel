@@ -75,7 +75,11 @@ class Tokens:
         return self._token("person", name, {"name": name})
 
 
-def open_items(session: Session, cve_ids: Sequence[str] | None = None) -> list[Item]:
+def open_items(
+    session: Session,
+    cve_ids: Sequence[str] | None = None,
+    finding_ids: Sequence[uuid.UUID] | None = None,
+) -> list[Item]:
     query = (
         select(Finding, Asset, Vulnerability)
         .join(Asset, Asset.id == Finding.asset_id)
@@ -85,6 +89,8 @@ def open_items(session: Session, cve_ids: Sequence[str] | None = None) -> list[I
     )
     if cve_ids is not None:
         query = query.where(Vulnerability.cve_id.in_(list(cve_ids)))
+    if finding_ids is not None:
+        query = query.where(Finding.id.in_(list(finding_ids)))
     return [Item(f, a, v) for f, a, v in session.execute(query).all()]
 
 
@@ -149,8 +155,10 @@ def build(
     kind: str,
     today: date,
     cve_ids: Sequence[str] | None = None,
+    finding_ids: Sequence[uuid.UUID] | None = None,
+    since: str | None = None,
 ) -> ReportData:
-    items = open_items(session, cve_ids)
+    items = open_items(session, cve_ids, finding_ids)
     rule = light_for(items, config.light)
     tokens = Tokens()
     top = items[: config.max_findings_in_summary]
@@ -173,6 +181,23 @@ def build(
                 f"Ocena powagi CVSS: {vuln.cvss_score if vuln.cvss_score is not None else 'brak'} "
                 f"({severity_label(vuln.cvss_score)})."
             )
+    elif kind == "digest":
+        facts["what"].append(
+            f"Podsumowanie zbiorcze zmian od {since or 'poprzedniego podsumowania'}: reguły "
+            f"powiadomień zebrały {len(finding_ids or [])} "
+            f"{_plural(len(finding_ids or []), 'zmianę', 'zmiany', 'zmian')} (nowe, ponownie "
+            "otwarte albo z wyższym ryzykiem)."
+        )
+        facts["what"].append(
+            f"Z nich wciąż otwartych jest {len(items)} "
+            f"{_plural(len(items), 'zagrożenie', 'zagrożenia', 'zagrożeń')} na {len(assets)} "
+            f"{_plural(len(assets), 'zasobie', 'zasobach', 'zasobach')}."
+        )
+        facts["what"].append(
+            "Według poziomu ryzyka: "
+            + ", ".join(f"{level} {count}" for level, count in by_level.items())
+            + "."
+        )
     else:
         facts["what"].append(
             f"Przegląd objął wszystkie otwarte zagrożenia: {len(items)} "
@@ -276,6 +301,8 @@ def build(
     template = _template(kind, rule, items, top, tokens, config, today, cve_ids)
     if kind == "zero_day" and cve_ids:
         title = f"Zero-day: {cve_ids[0]}"
+    elif kind == "digest":
+        title = f"Podsumowanie zmian ({today.isoformat()})"
     else:
         title = f"Ocena stanu bezpieczeństwa ({today.isoformat()})"
     return ReportData(
@@ -286,7 +313,13 @@ def build(
         entities=tokens.entities,
         technical=technical,
         template=template,
-        scope={"cve_ids": list(cve_ids)} if cve_ids is not None else {"all_open_findings": True},
+        scope=(
+            {"cve_ids": list(cve_ids)}
+            if cve_ids is not None
+            else {"finding_ids": [str(i) for i in finding_ids], "since": since}
+            if finding_ids is not None
+            else {"all_open_findings": True}
+        ),
     )
 
 
@@ -329,8 +362,9 @@ def _template(
     else:
         critical = sum(1 for i in items if i.finding.risk_level == "krytyczny")
         high = sum(1 for i in items if i.finding.risk_level == "wysoki")
+        lead = "Zmiany od poprzedniego podsumowania:" if kind == "digest" else "Przegląd objął"
         answers["what"] = (
-            f"Przegląd objął {len(items)} "
+            f"{lead} {len(items)} "
             + _plural(len(items), "otwarte zagrożenie", "otwarte zagrożenia", "otwartych zagrożeń")
             + " "
             f"na {count} {_plural(count, 'zasobie', 'zasobach', 'zasobach')}. "

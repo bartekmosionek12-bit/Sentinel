@@ -187,6 +187,7 @@ jobs:
           sed -i 's/^DEMO_MODE=false/DEMO_MODE=true/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only/; s/^KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=ci-only-kc/; s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/; s/^KEYCLOAK_DB_PASSWORD=.*/KEYCLOAK_DB_PASSWORD=ci-only-kcdb/' .env
           sed -i "s/^AGENT_CLIENT_SECRET=.*/AGENT_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
           sed -i "s/^KILLSWITCH_CLIENT_SECRET=.*/KILLSWITCH_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
+          sed -i 's/^SMTP_HOST=.*/SMTP_HOST=mailpit/; s/^SMTP_PORT=.*/SMTP_PORT=1025/; s/^SMTP_STARTTLS=.*/SMTP_STARTTLS=false/; s/^SMTP_FROM=.*/SMTP_FROM=sentinel@demo.lab/; s/^NOTIFY_EMAIL_TO=.*/NOTIFY_EMAIL_TO=zarzad@demo.lab/' .env
       - name: seed_demo (import, feedy offline, skan, dopasowanie, ocena ryzyka)
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API
@@ -202,6 +203,8 @@ jobs:
           sys.exit(total >= 5000)
           PY
           python3 scripts/check_demo.py http://localhost:8080 --zero-day
+      - name: E-mail z raportem zero-day w Mailpit (PDF, bez danych technicznych)
+        run: python3 scripts/check_mail.py http://localhost:8025
       - name: Izolacja sieci na żywo (do demo-lab tylko skanery, worker agenta bez drogi)
         run: ./scripts/check_isolation.sh
       - name: Kill switch na żywo (Keycloak, OpenBao, zatrzymanie mcp-scanner)

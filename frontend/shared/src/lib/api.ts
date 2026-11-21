@@ -473,7 +473,7 @@ export type ReportLight = "red" | "yellow" | "green";
 
 export interface ReportListItem {
   id: string;
-  kind: "assessment" | "zero_day";
+  kind: "assessment" | "zero_day" | "digest" | "ai_test";
   title: string;
   light: ReportLight;
   light_reason: string;
@@ -485,6 +485,14 @@ export interface ReportListItem {
 export interface Inbox {
   unread: number;
   items: ReportListItem[];
+}
+
+export interface AiTestCaseRow {
+  case_id: string;
+  category: string;
+  title: string;
+  model_resisted: boolean;
+  code_held: boolean;
 }
 
 export interface ReportTechnicalRow {
@@ -512,6 +520,7 @@ export interface Report extends ReportListItem {
   summary_problems: string[];
   summary_updated_at: string | null;
   facts: Record<string, string[]>;
+  /** Dla `kind === "ai_test"` wiersze mają postać `AiTestCaseRow`. */
   technical: ReportTechnicalRow[];
   created_by: string;
 }

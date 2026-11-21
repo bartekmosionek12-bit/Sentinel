@@ -14,6 +14,10 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.iam.redaction import redact
+from app.models import Report
+from app.reports.service import present
+
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 LIGHT_LABELS = {"red": "Czerwone", "yellow": "Żółte", "green": "Zielone"}
 LIGHT_MEANING = {
@@ -72,3 +76,24 @@ def filename(view: dict[str, Any]) -> str:
     created = str(view.get("created_at", ""))[:10] or "raport"
     kind = str(view.get("kind", "raport")).replace("_", "-")
     return f"sentinel-{kind}-{created}.pdf"
+
+
+def report_view(report: Report, *, technical: bool, personal: bool) -> dict[str, Any]:
+    """Widok raportu po redakcji: ten sam dla PDF w API i w załączniku e-maila."""
+    shown = present(report, personal=not personal)
+    view = {
+        "id": str(report.id),
+        "kind": report.kind,
+        "title": report.title,
+        "light": report.light,
+        "light_reason": report.light_reason,
+        "summary_source": report.summary_source,
+        "created_at": report.created_at.isoformat(),
+        "created_by": report.created_by,
+        "summary": shown["summary"],
+        "facts": shown["facts"],
+        "technical": shown["technical"],
+    }
+    if not technical and not personal:
+        return view
+    return dict(redact(view, technical=technical, personal=personal))
