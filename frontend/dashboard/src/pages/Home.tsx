@@ -1,12 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import { HelpCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Camera, HelpCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { CoverageTrend } from "@shared/components/CoverageTrend";
+import { FreshnessNote } from "@shared/components/freshness";
 import { PageHeader, QueryState } from "@shared/components/page";
 import { LightBadge } from "@shared/components/reports";
 import { KevBadge, RiskBadge } from "@shared/components/risk";
 import { Badge } from "@shared/components/ui/badge";
+import { Button } from "@shared/components/ui/button";
 import {
   Card,
   CardContent,
@@ -16,6 +18,7 @@ import {
 } from "@shared/components/ui/card";
 import { Table, Td, Th } from "@shared/components/ui/table";
 import { api, type OrgUnitSummary, type ReportListItem } from "@shared/lib/api";
+import { useAuth } from "@shared/lib/auth-context";
 import { formatDateTime } from "@shared/lib/utils";
 
 /** Jedno zdanie o stanie: z ostatniego raportu (światło i powód liczy kod, nie model). */
@@ -32,6 +35,34 @@ function Headline({ report }: { report: ReportListItem | undefined }) {
         Otwórz raport z {formatDateTime(report.created_at)}
       </Link>
     </div>
+  );
+}
+
+/** „Aktualny obraz”: raport z bieżącego stanu w kilka sekund, bez skanowania (§25.1). */
+function CurrentPicture() {
+  const { can } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const create = useMutation({
+    mutationFn: api.currentReport,
+    onSuccess: (report) => {
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      navigate(`/raporty/${report.id}`);
+    },
+  });
+  if (!can("reports:snapshot")) return null;
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button onClick={() => create.mutate()} disabled={create.isPending} data-demo="current-picture">
+        <Camera className="size-4" aria-hidden />
+        {create.isPending ? "Przygotowuję raport…" : "Aktualny obraz"}
+      </Button>
+      {create.error && (
+        <span role="alert" className="text-sm text-red-700">
+          {create.error.message}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -85,9 +116,14 @@ function rollup(units: OrgUnitSummary[]): (OrgUnitSummary & { children: string[]
 }
 
 export function Home() {
-  const overview = useQuery({ queryKey: ["org-overview"], queryFn: api.orgOverview });
-  const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats });
-  const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox });
+  // Odświeżanie jak skrzynka (co 5 s), żeby zero-day i nowe skany pojawiały się same.
+  const overview = useQuery({
+    queryKey: ["org-overview"],
+    queryFn: api.orgOverview,
+    refetchInterval: 5_000,
+  });
+  const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, refetchInterval: 5_000 });
+  const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox, refetchInterval: 5_000 });
   const findings = useQuery({
     queryKey: ["findings", "active"],
     queryFn: () => api.findings("active"),
@@ -110,7 +146,11 @@ export function Home() {
       />
       {org && coverage && (
         <div className="space-y-6">
-          <Headline report={latest} />
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <Headline report={latest} />
+            <CurrentPicture />
+          </div>
+          <FreshnessNote />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Tile
               label="Zagrożenia krytyczne"
@@ -271,12 +311,11 @@ export function Home() {
               </tbody>
             </Table>
           </Card>
-          <p className="text-sm text-muted-foreground">
-            {stats.data?.last_scan
-              ? `Ostatni skan: ${formatDateTime(stats.data.last_scan.started_at)}.`
-              : "Nie było jeszcze skanu."}
-            {org.demo_label && ` Osoby i organizacja są fikcyjne (${org.demo_label}).`}
-          </p>
+          {org.demo_label && (
+            <p className="text-xs text-muted-foreground">
+              Osoby i organizacja są fikcyjne ({org.demo_label}).
+            </p>
+          )}
         </div>
       )}
     </>

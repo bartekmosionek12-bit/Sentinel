@@ -51,9 +51,16 @@ def ping_llm() -> str:
 
 
 @celery_app.task(name="app.workers.tasks.scans.run_scan")
-def run_scan(trigger: str = "scheduled", actor: str = "system") -> dict[str, Any]:
+def run_scan(
+    trigger: str = "scheduled", actor: str = "system", request_id: str | None = None
+) -> dict[str, Any]:
     with get_sessionmaker()() as session:
         run = scan_service(session).run(trigger=trigger, actor=actor)
+        if request_id:
+            from app.reports.current import finish_scan_request
+
+            finish_scan_request(session, uuid.UUID(request_id), run)
+            session.commit()
         return {"scan_run_id": str(run.id), "status": run.status, "summary": run.summary}
 
 

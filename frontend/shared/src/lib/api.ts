@@ -790,6 +790,34 @@ function query(params: Record<string, string | boolean | undefined>): string {
   return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
 }
 
+// --- moduł 21: świeżość danych, „Aktualny obraz”, prośby o skanowanie ---
+
+export interface Freshness {
+  last_scan_at: string | null;
+  last_feeds_at: string | null;
+  age_hours: number | null;
+  threshold_hours: number;
+  stale: boolean;
+  label: string;
+}
+
+export type ScanRequestScope = "organization" | "unit" | "device";
+
+export interface ScanRequest {
+  id: string;
+  requested_by: string;
+  scope_kind: ScanRequestScope;
+  scope_label: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "done" | "failed";
+  decided_by: string | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+  scan_run_id: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 export const api = {
   health: () => request<Health>("/health"),
   me: () => request<Me>("/me"),
@@ -872,6 +900,20 @@ export const api = {
   downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
   orgOverview: () => request<OrgOverview>("/org/overview"),
+  freshness: () => request<Freshness>("/freshness"),
+  currentReport: () => request<Report>("/reports/current", { method: "POST" }),
+  scanRequests: (status?: string) =>
+    request<ScanRequest[]>(`/scan-requests${status ? `?status=${status}` : ""}`),
+  requestScan: (scope_kind: ScanRequestScope, scope_ref: string | null, reason: string) =>
+    request<ScanRequest>("/scan-requests", {
+      method: "POST",
+      body: JSON.stringify({ scope_kind, scope_ref, reason }),
+    }),
+  decideScanRequest: (id: string, approve: boolean, reason: string) =>
+    request<ScanRequest>(`/scan-requests/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ approve, reason }),
+    }),
   devices: (filter: DeviceFilter = {}) =>
     request<DeviceList>(`/org/devices${query({ ...filter })}`),
   device: (id: string, pseudonyms = false) =>

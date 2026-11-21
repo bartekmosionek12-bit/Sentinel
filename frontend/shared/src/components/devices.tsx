@@ -119,6 +119,7 @@ export function DeviceTable({
   const devices = useQuery({
     queryKey: ["devices", filter, pseudonyms],
     queryFn: () => api.devices({ ...filter, pseudonyms }),
+    refetchInterval: 5_000,
   });
   const units = useMemo(
     () => [...new Set((devices.data?.items ?? []).map((d) => d.unit).filter(Boolean))].sort(),

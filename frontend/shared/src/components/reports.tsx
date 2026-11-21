@@ -246,6 +246,19 @@ export function ReportView({
               <p className="text-sm text-muted-foreground">
                 {data.light_reason}
               </p>
+              {typeof (data.scope.freshness as { label?: unknown } | undefined)?.label ===
+                "string" && (
+                <p
+                  className={
+                    (data.scope.freshness as { stale?: boolean }).stale
+                      ? "text-xs text-amber-800"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  „Aktualny obraz” z bazy, bez nowego skanowania.{" "}
+                  {(data.scope.freshness as { label: string }).label}
+                </p>
+              )}
             </div>
             {actions}
           </div>

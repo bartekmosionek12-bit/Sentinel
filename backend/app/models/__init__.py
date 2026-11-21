@@ -34,6 +34,7 @@ from app.models.ops import (
     LLMCache,
     Notification,
     ScanAction,
+    ScanRequest,
     ScanRun,
 )
 from app.models.organization import (
@@ -85,6 +86,7 @@ __all__ = [
     "Role",
     "RolePermission",
     "ScanAction",
+    "ScanRequest",
     "ScanRun",
     "SignalMatch",
     "Software",

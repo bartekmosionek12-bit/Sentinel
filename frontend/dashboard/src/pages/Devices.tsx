@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { DeviceTable } from "@shared/components/devices";
+import { FreshnessNote } from "@shared/components/freshness";
 import { PageHeader } from "@shared/components/page";
 import { Card } from "@shared/components/ui/card";
 import { api } from "@shared/lib/api";
@@ -24,6 +25,9 @@ export function Devices() {
           </Link>
         </p>
       )}
+      <div className="mb-4">
+        <FreshnessNote scope={unitId ? "unit" : "organization"} scopeRef={unitId ?? null} />
+      </div>
       <Card>
         <DeviceTable
           key={unitId ?? "all"}

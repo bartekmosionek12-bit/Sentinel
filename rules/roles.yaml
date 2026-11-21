@@ -16,6 +16,7 @@ permissions:
   compliance:read: {description: "Odczyt wyników zgodności"}
   reports:read: {description: "Odczyt raportów"}
   reports:export: {description: "Eksport raportów (PDF, CSV, JSON)"}
+  reports:snapshot: {description: "Raport „Aktualny obraz” na żądanie z bieżącego stanu, bez skanowania"}
   reports:generate: {description: "Tworzenie raportów i zlecanie warstwy „W skrócie” modelowi", mfa: true}
   notifications:read: {description: "Odczyt powiadomień"}
   personal_data:view: {description: "Podgląd danych osobowych (każdy podgląd w audycie)"}
@@ -25,6 +26,8 @@ permissions:
   scope:read: {description: "Odczyt zakresu skanowania"}
   scope:manage: {description: "Zmiana zakresu skanowania", mfa: true}
   scan:read: {description: "Odczyt skanów i akcji skanujących"}
+  # Moduł 21: menedżer prosi o skan, ale go nie uruchamia; zatwierdza admin (scan:run).
+  scan:request: {description: "Prośba o nowe skanowanie do kolejki admina (bez uruchamiania skanu)"}
   scan:run: {description: "Uruchamianie skanów L1", mfa: true}
   scan:approve:l2: {description: "Zatwierdzanie akcji L2", mfa: true}
   scan:approve:l3: {description: "Zatwierdzanie akcji L3", mfa: true}
@@ -64,6 +67,8 @@ roles:
       - reports:export
       - notifications:read
       - personal_data:view
+      - reports:snapshot
+      - scan:request
   auditor:
     description: "Audytor: odczyt i eksport dowodów oraz pełnego dziennika audytu (opcjonalna)"
     kind: human

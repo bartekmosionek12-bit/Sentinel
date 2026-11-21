@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { DeviceStatus, PseudonymToggle } from "@shared/components/devices";
+import { FreshnessNote } from "@shared/components/freshness";
 import { PageHeader, QueryState } from "@shared/components/page";
 import { KevBadge, RiskBadge } from "@shared/components/risk";
 import { Card, CardContent, CardHeader, CardTitle } from "@shared/components/ui/card";
@@ -54,6 +55,9 @@ export function DeviceCard() {
             title={d.name}
             description={`${DEVICE_TYPE_LABELS[d.type] ?? d.type}, ${EXPOSURE[d.exposure]}, ważność ${d.criticality} z 5.`}
           />
+          <div className="mb-6">
+            <FreshnessNote scope="device" scopeRef={d.id} />
+          </div>
           {d.status === "shadow" && (
             <p
               role="note"

@@ -144,8 +144,10 @@ class RecordingDispatcher:
         self.calls.append((name, args))
         return f"task-{name}"
 
-    def run_scan(self, actor: str) -> str:
-        return self._record("run_scan", actor)
+    def run_scan(self, actor: str, request_id: uuid.UUID | None = None) -> str:
+        if request_id is None:
+            return self._record("run_scan", actor)
+        return self._record("run_scan", actor, request_id)
 
     def approve_action(self, action_id: uuid.UUID, approved_by: str, reason: str) -> str:
         return self._record("approve_action", action_id, approved_by, reason)
