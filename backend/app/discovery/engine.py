@@ -53,7 +53,7 @@ class DiscoverySettings:
     timing: int = 3
     batch_initial: int = 256
     batch_min: int = 16
-    batch_max: int = 4096
+    batch_max: int = 1024
     batch_target_seconds: float = 20.0
     discovery_ports: str = "22,80,443,8080"
     service_ports: str = "22,80,443,8080"
@@ -98,7 +98,7 @@ class DiscoveryConfig:
             max_rate=rate,
             timing=timing,
             batch_min=max(1, int(values["batch_min"])),
-            batch_max=min(4096, int(values["batch_max"])),
+            batch_max=min(1024, int(values["batch_max"])),
         )
 
 
@@ -303,7 +303,7 @@ class DiscoveryEngine:
                             tool="nmap",
                             intrusiveness=Intrusiveness.LIGHT,
                             rule_name="discovery_sweep",
-                            max_addresses=4096,
+                            max_addresses=1024,
                         )
                     except ScopeError as error:
                         totals["batches_denied"] += 1
