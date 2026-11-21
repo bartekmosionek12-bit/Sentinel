@@ -453,6 +453,9 @@ services:
       - core
     restart: unless-stopped
     read_only: true
+    # Mailpit trzyma skrzynkę w bazie w /tmp (pamięć, znika z kontenerem).
+    tmpfs:
+      - /tmp
     cap_drop:
       - ALL
     security_opt:
