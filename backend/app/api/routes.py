@@ -14,10 +14,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import __version__
 from app.api.deps import ScopeGuardDep, SessionDep, SettingsDep
 from app.api.schemas import (
+    AnyAssetType,
     AssetIn,
     AssetOut,
     AssetStatus,
-    AssetType,
     AuditChainOut,
     AuditLogOut,
     HealthOut,
@@ -74,7 +74,7 @@ def health(session: SessionDep, settings: SettingsDep) -> HealthOut:
 )
 def list_assets(
     session: SessionDep,
-    type: AssetType | None = None,
+    type: AnyAssetType | None = None,
     status_filter: Annotated[AssetStatus | None, Query(alias="status")] = None,
     limit: Limit = 100,
     offset: Offset = 0,

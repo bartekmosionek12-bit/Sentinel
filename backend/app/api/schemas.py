@@ -8,7 +8,24 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Typy, które można dodać ręcznie albo z CSV.
 AssetType = Literal["host", "domain", "ip", "service", "application"]
+# Typy w odpowiedziach: także urządzenia z AD, MDM i CMDB (Etap 6, models.inventory.ASSET_TYPES).
+AnyAssetType = Literal[
+    "host",
+    "domain",
+    "ip",
+    "service",
+    "application",
+    "workstation",
+    "laptop",
+    "server",
+    "network",
+    "printer",
+    "iot",
+    "cloud",
+    "ai_system",
+]
 Exposure = Literal["internet", "internal"]
 AssetStatus = Literal["active", "missing", "retired", "shadow"]
 
@@ -36,7 +53,7 @@ class AssetIn(BaseModel):
 
 class AssetOut(OrmModel):
     id: uuid.UUID
-    type: AssetType
+    type: AnyAssetType
     name: str
     exposure: Exposure
     criticality: int
@@ -115,7 +132,7 @@ FindingStatus = Literal[
 class AssetRef(OrmModel):
     id: uuid.UUID
     name: str
-    type: AssetType
+    type: AnyAssetType
     exposure: Exposure
     criticality: int
     status: AssetStatus

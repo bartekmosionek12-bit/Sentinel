@@ -1,6 +1,17 @@
 /** Klient REST API. Typy odpowiadają schematom z backend/app/api/schemas.py. */
 
 export type AssetType = "host" | "domain" | "ip" | "service" | "application";
+/** Typy w odpowiedziach: także urządzenia z AD, MDM i CMDB (Etap 6). */
+export type AnyAssetType =
+  | AssetType
+  | "workstation"
+  | "laptop"
+  | "server"
+  | "network"
+  | "printer"
+  | "iot"
+  | "cloud"
+  | "ai_system";
 export type Exposure = "internet" | "internal";
 
 export interface Health {
@@ -13,7 +24,7 @@ export interface Health {
 
 export interface Asset {
   id: string;
-  type: AssetType;
+  type: AnyAssetType;
   name: string;
   exposure: Exposure;
   criticality: number;
@@ -91,7 +102,7 @@ export type FindingStatus =
 export interface AssetRef {
   id: string;
   name: string;
-  type: AssetType;
+  type: AnyAssetType;
   exposure: Exposure;
   criticality: number;
   status: Asset["status"];

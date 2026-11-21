@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@shared/components/ui/
 import { Input, Select } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
 import { api, type Asset, type AssetInput, type AssetType, type Exposure } from "@shared/lib/api";
+import { DEVICE_TYPE_LABELS } from "@shared/lib/labels";
 import { formatDateTime } from "@shared/lib/utils";
 
 const TYPE_LABELS: Record<AssetType, string> = {
@@ -219,7 +220,11 @@ export function Assets() {
               {data.items.map((asset) => (
                 <tr key={asset.id}>
                   <Td className="font-medium break-all">{asset.name}</Td>
-                  <Td>{TYPE_LABELS[asset.type]}</Td>
+                  <Td>
+                    {TYPE_LABELS[asset.type as AssetType] ??
+                      DEVICE_TYPE_LABELS[asset.type] ??
+                      asset.type}
+                  </Td>
                   <Td>
                     <Badge variant={asset.exposure === "internet" ? "warn" : "neutral"}>
                       {asset.exposure === "internet" ? "Internet" : "Wewnętrzna"}
