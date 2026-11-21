@@ -839,8 +839,8 @@ walidacją i szablonem awaryjnym), `REPORT_DELIVERY` trafia do skrzynek użytkow
   jako `digest_pending`; beat raz na dobę (`create_digest`) albo `python -m app.cli digest`
   zbiera je w jeden raport z tymi samymi faktami, światłem i „W skrócie” co ocena stanu, ale
   tylko dla findingów z tych powiadomień. Powiadomienia przechodzą w `digested` z `report_id`.
-- **E-mail**: zawsze wersja menedżera (redakcja danych technicznych jak w konsoli menedżera,
-  dane osobowe jak dla menedżera) i PDF w załączniku. Wysyła się z digestem, po raporcie
+- **E-mail**: zawsze wersja menedżera (redakcja danych technicznych jak w konsoli menedżera)
+  i PDF w załączniku; dane osobowe ukryte jak w każdym eksporcie (§15). Wysyła się z digestem, po raporcie
   zero-day (po zapisaniu raportu, więc nie wlicza się do pomiaru „poniżej 5 s”) i na żądanie
   (`python -m app.cli email-report <id>`). Wynik to `NOTIFICATION` kanału `email` (`sent` albo
   `failed` z opisem błędu) i wpis `report_emailed` / `report_email_failed` w audycie. STARTTLS
@@ -1021,9 +1021,11 @@ mechanizm co anonimizator dla zewnętrznego LLM, więc jest jedna ścieżka zami
 - **„Szczegóły techniczne”**: tabela z bazy, zwinięta; dla menedżera z redakcją.
 - Szablon awaryjny dla każdej odpowiedzi, więc raport powstaje także bez modelu.
 - PDF (Etap 6): ta sama struktura w Jinja2 + WeasyPrint, `GET /api/reports/{id}/pdf`
-  z uprawnieniem `reports:export`. Do szablonu trafia widok raportu po tej samej redakcji co
-  odpowiedź JSON dla tej osoby (`app.reports.pdf.report_view`), więc PDF menedżera nie ma
-  adresów IP. WeasyPrint nie pobiera nic z sieci (`url_fetcher` odmawia każdemu adresowi,
+  z uprawnieniem `reports:export`. Do szablonu trafia widok raportu po tej samej redakcji
+  danych technicznych co odpowiedź JSON dla tej osoby (`app.reports.pdf.report_view`), więc PDF
+  menedżera nie ma adresów IP; dane osobowe są w PDF zawsze ukryte, bo to eksport (§15).
+  Pseudonimy („Pracownik #142”) zastąpią znacznik `[dane osobowe ukryte]` razem z modelem
+  `PERSON` (#18). WeasyPrint nie pobiera nic z sieci (`url_fetcher` odmawia każdemu adresowi,
   style i czcionki lokalne). Każde pobranie: `report_pdf_downloaded` w audycie.
 - Opis CVE z rejestru trafia do faktów modelu jako „tylko informacja”, ale walidator sprawdza
   pochodzenie CVE, wersji, dat i identyfikatorów względem faktów **bez** tego opisu

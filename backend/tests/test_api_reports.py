@@ -146,7 +146,7 @@ def test_pdf_export_uses_the_same_redaction_and_is_audited(
             select(AuditLog).where(AuditLog.action == "report_pdf_downloaded")
         ).one()
         assert entry.object_id == str(report_id)
-        assert entry.inputs == {"redacted": True, "personal_hidden": False}
+        assert entry.inputs == {"redacted": True, "personal_hidden": True}
 
 
 def test_pdf_html_for_manager_has_no_technical_details(

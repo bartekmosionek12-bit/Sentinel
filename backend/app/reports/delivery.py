@@ -6,9 +6,10 @@ dobę (beat) albo na żądanie (`python -m app.cli digest`) kod zbiera je w jede
 findingów z tych powiadomień. Raport trafia do skrzynek, a powiadomienia przechodzą w stan
 `digested` ze wskazaniem raportu.
 
-E-mail: zawsze wersja menedżera (bez danych technicznych, ta sama redakcja co w konsoli
-menedżera), PDF w załączniku. E-mail opuszcza system, więc nigdy nie zawiera adresów IP,
-banerów ani dowodów, niezależnie od tego, kto zlecił wysyłkę.
+E-mail: zawsze wersja menedżera (bez danych technicznych), PDF w załączniku. E-mail opuszcza
+system, więc nigdy nie zawiera adresów IP, banerów ani dowodów, a dane osobowe (nazwiska
+właścicieli) są ukryte jak w każdym eksporcie (ARCHITECTURE §15), niezależnie od tego, kto
+zlecił wysyłkę.
 """
 
 from __future__ import annotations
@@ -63,7 +64,8 @@ def email_report(
     """Wysyła raport e-mailem (wersja menedżera + PDF). Zwraca `sent`, `failed` albo `skipped`."""
     if "email" not in mailer.configured():
         return "skipped"
-    view = report_view(report, technical=True, personal=False)
+    # Eksport poza system: dane osobowe zawsze ukryte (ARCHITECTURE §15).
+    view = report_view(report, technical=True, personal=True)
     status, error = "sent", ""
     try:
         pdf = render_pdf(view, generated_at=now or utcnow(), audience=EMAIL_AUDIENCE)
@@ -87,7 +89,12 @@ def email_report(
             action="report_emailed" if status == "sent" else "report_email_failed",
             reason=f"E-mail z raportem „{report.title}” ({EMAIL_AUDIENCE})"
             + (f": {error}" if error else ""),
-            inputs={"kind": report.kind, "attachment": "pdf", "redacted": True},
+            inputs={
+                "kind": report.kind,
+                "attachment": "pdf",
+                "redacted": True,
+                "personal_hidden": True,
+            },
             object_type="report",
             object_id=str(report.id),
         ),

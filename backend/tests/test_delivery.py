@@ -104,6 +104,9 @@ def test_digest_email_is_manager_version_with_pdf(
         assert title == report.title
         assert "W skrócie" in body
         assert "172.30.99" not in body
+        # Eksport poza system: nazwiska i zespoły właścicieli ukryte (ARCHITECTURE §15).
+        assert "Zespół WWW" not in body
+        assert "[dane osobowe ukryte]" in body
         assert (
             attachments[0].filename
             == "sentinel-digest-" + report.created_at.date().isoformat() + ".pdf"

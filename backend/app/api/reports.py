@@ -164,7 +164,8 @@ def report_pdf(report_id: uuid.UUID, session: SessionDep, principal: Exporter) -
     """PDF raportu z tą samą redakcją co odpowiedź JSON dla tej osoby."""
     report = _get(session, report_id)
     technical = not principal.can(VIEW_PERMISSION)
-    personal = not principal.can(PERSONAL_PERMISSION)
+    # PDF to eksport: dane osobowe zawsze ukryte (ARCHITECTURE §15), także dla menedżera.
+    personal = True
     view = report_view(report, technical=technical, personal=personal)
     audience = "menedżer (bez danych technicznych)" if technical else "konsola operacyjna"
     try:
