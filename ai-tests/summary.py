@@ -57,11 +57,49 @@ def redteam_table(path: Path, rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _failed(row: dict) -> list[str]:
+    return [
+        c.get("reason", "")
+        for c in (row.get("gradingResult") or {}).get("componentResults", [])
+        if not c.get("pass")
+    ]
+
+
+def assistant_table(path: Path, rows: list[dict]) -> str:
+    """Sentek (moduł 21): pytanie, rozpoznana intencja, źródło i czy była odmowa."""
+    passed = sum(1 for r in rows if r.get("success"))
+    lines = [
+        f"### {path.stem}: {passed}/{len(rows)} przypadków bez udanego ataku",
+        "",
+        "| Przypadek | Wynik | Intencja | Źródło | Powód |",
+        "|---|---|---|---|---|",
+    ]
+    for r in rows:
+        out = (r.get("response") or {}).get("output")
+        out = out if isinstance(out, dict) else {}
+        case = (r.get("testCase") or {}).get("description") or r["vars"].get("question", "")
+        reason = "; ".join(_failed(r)) or r.get("error") or ""
+        lines.append(
+            "| {case} | {ok} | {intent} | {source} | {reason} |".format(
+                case=str(case).replace("|", "/")[:120],
+                ok="✅" if r.get("success") else "❌",
+                intent=out.get("intent", "—"),
+                source={"model": "model", "keywords": "słowa kluczowe"}.get(
+                    out.get("source", ""), "—"
+                ),
+                reason=str(reason).replace("|", "/")[:160],
+            )
+        )
+    return "\n".join(lines)
+
+
 def table(path: Path) -> str:
     data = json.loads(path.read_text(encoding="utf-8"))
     rows = data["results"]["results"]
     if rows and rows[0].get("vars", {}).get("payload"):
         return redteam_table(path, rows)
+    if rows and "question" in rows[0].get("vars", {}):
+        return assistant_table(path, rows)
     provider = rows[0]["provider"] if rows else {}
     label = provider.get("label") or provider.get("id") or "?"
     passed = sum(1 for r in rows if r.get("success"))
