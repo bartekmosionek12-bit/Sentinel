@@ -6,9 +6,13 @@ bez zgody czekają w stanie `awaiting_approval` i nie uruchamiają żadnego narz
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 from datetime import datetime
+from ipaddress import ip_network
 from typing import Any
 
 from sqlalchemy import select
@@ -25,11 +29,21 @@ from app.core.scope_guard import (
 from app.feeds.base import as_utc
 from app.inventory.service import record_discovery, record_host_scan
 from app.matching.engine import ACTIVE_STATUSES
-from app.models import Asset, Finding, ScanAction, ScanRun, Vulnerability
+from app.models import (
+    Asset,
+    AssetHistory,
+    Finding,
+    ScanAction,
+    ScanRun,
+    ScanTarget,
+    Software,
+    Vulnerability,
+)
 from app.models.base import utcnow
 from app.notifications.channels import Sender
 from app.pipeline import AnalysisReport, Rulebook, analyze
 from app.planner.engine import FindingFact, HostFact, PlannedAction
+from app.scanners.http_probe import HttpProber
 from app.scanners.nmap import NmapAdapter
 from app.scanners.runner import ToolError
 
@@ -58,12 +72,14 @@ class ScanService:
         rulebook: Rulebook,
         *,
         nmap: NmapAdapter | None = None,
+        http_prober: HttpProber | None = None,
         sender: Sender | None = None,
     ) -> None:
         self._session = session
         self._guard = guard
         self._rulebook = rulebook
         self._nmap = nmap or NmapAdapter()
+        self._http_prober = http_prober or HttpProber()
         self._sender = sender
 
     @property
@@ -74,6 +90,7 @@ class ScanService:
 
     def run(self, *, trigger: str, actor: str) -> ScanRun:
         session = self._session
+        started = time.monotonic()
         run = ScanRun(trigger=trigger, status="running")
         session.add(run)
         session.flush()
@@ -81,9 +98,45 @@ class ScanService:
         totals: Counter[str] = Counter()
 
         host_facts: list[HostFact] = []
-        cidrs = [str(n) for n in self._guard.config.allowed_cidrs]
+        configured = session.scalars(select(ScanTarget)).all()
+        cidrs: list[str] = []
+        domain_names: dict[str, str] = {}
+        target_errors: list[str] = []
+        for item in configured:
+            if item.kind == "domain":
+                try:
+                    scoped = self._guard.authorize(
+                        item.target,
+                        tool="nmap",
+                        intrusiveness=Intrusiveness.LIGHT,
+                        rule_name="target_resolution",
+                    )
+                    domain_names[scoped.address] = item.target
+                    cidrs.append(f"{scoped.address}/{scoped.ip.max_prefixlen}")
+                except ScopeError as error:
+                    target_errors.append(str(error))
+            else:
+                cidrs.append(
+                    item.target
+                    if item.kind == "cidr"
+                    else f"{item.target}/{128 if ':' in item.target else 32}"
+                )
+        if not configured:
+            cidrs = [str(n) for n in self._guard.config.allowed_cidrs]
+        cidrs = list(dict.fromkeys(cidrs))
+        run.summary = {
+            "total_addresses": sum(ip_network(n).num_addresses for n in cidrs),
+            "addresses_done": 0,
+            "eta_seconds": None,
+        }
+        session.commit()
         for planned in self._rulebook.planner.sweep_actions(cidrs):
             host_facts += self._discover(run, planned, totals)
+
+        for ip, name in domain_names.items():
+            asset = session.scalar(select(Asset).where(Asset.fingerprint == f"host:{ip}"))
+            if asset is not None and asset.status == "shadow":
+                asset.name = name
 
         for planned in self._rulebook.planner.host_actions(host_facts):
             self._scan_services(self._new_action(run, planned), totals)
@@ -100,16 +153,50 @@ class ScanService:
             session.scalars(select(ScanAction.status).where(ScanAction.scan_run_id == run.id))
         )
         run.summary = {
+            **run.summary,
             **totals,
             **report.summary(),
             "actions": dict(statuses),
             "note": "" if cidrs else "Zakres jest pusty, więc nic nie zostało zeskanowane",
+            "target_errors": target_errors,
+            "snapshot": self._snapshot(run.id),
         }
         run.status = "done"
         run.finished_at = utcnow()
+        run.summary = {
+            **run.summary,
+            "duration_seconds": round(time.monotonic() - started, 2),
+            "eta_seconds": 0,
+        }
         self._audit(actor, "scan_finished", "Skan zakończony", run.summary, run)
         session.commit()
         return run
+
+    def _snapshot(self, run_id: uuid.UUID) -> dict[str, Any]:
+        """Obraz obserwacji z tego przebiegu do porównywania dowolnych dwóch skanów."""
+        snapshot: dict[str, Any] = {}
+        for asset in self._session.scalars(select(Asset).where(Asset.type == "host")):
+            attrs = asset.attributes or {}
+            if attrs.get("last_seen_run") != str(run_id):
+                continue
+            address = str(attrs.get("address", ""))
+            software = self._session.scalars(
+                select(Software).where(Software.asset_id == asset.id)
+            ).all()
+            web = attrs.get("web") or {}
+            snapshot[address] = {
+                "name": asset.name,
+                "state": attrs.get("reachability", "active"),
+                "services": sorted(
+                    f"{s.protocol}:{s.port}:{s.product}:{s.version}" for s in software
+                ),
+                "technologies": sorted(
+                    {tech for probe in web.values() for tech in (probe.get("technologies") or [])}
+                ),
+                "headers": {key: probe.get("headers") or {} for key, probe in web.items()},
+                "flags": [flag for probe in web.values() for flag in (probe.get("flags") or [])],
+            }
+        return snapshot
 
     # --- decyzje człowieka ----------------------------------------------
 
@@ -214,54 +301,129 @@ class ScanService:
     def _discover(
         self, run: ScanRun, planned: PlannedAction, totals: Counter[str]
     ) -> list[HostFact]:
+        """Autoryzuj każdą paczkę, skanuj równolegle i zapisuj wynik po każdej paczce."""
         session = self._session
-        action = self._new_action(run, planned)
-        # Brama zapisuje decyzję w osobnej transakcji, więc najpierw zamykamy własną.
-        session.commit()
-        try:
-            network = self._guard.authorize_network(
-                planned.target,
-                tool=planned.tool,
-                intrusiveness=planned.intrusiveness,
-                rule_name=planned.rule,
-            )
-        except ScopeError as error:
-            action.scope_decision = error.code
-            self._finish(action, "denied", error.reason)
-            return []
-        action.scope_decision = "scope_allowed"
-        action.status = "running"
-        session.commit()
-        try:
-            hosts = self._nmap.discover(network)
-        except ToolError as error:
-            self._finish(action, "failed", str(error))
-            return []
-        result = record_discovery(session, network, hosts, run.id)
-        totals["hosts_up"] += len(result.seen)
-        totals["hosts_new"] += len(result.new)
-        totals["hosts_reappeared"] += len(result.reappeared)
-        totals["hosts_missing"] += len(result.missing)
-        self._finish(
-            action,
-            "done",
-            f"Odpowiada hostów: {len(result.seen)}, nowych: {len(result.new)}, "
-            f"wróciło: {len(result.reappeared)}, nie odpowiada: {len(result.missing)}",
-        )
-        now = utcnow()
-        new = {a.id for a in result.new}
-        back = {a.id for a in result.reappeared}
-        return [
-            HostFact(
-                asset_id=asset.id,
-                address=str(asset.attributes["address"]),
-                state="new" if asset.id in new else "reappeared" if asset.id in back else "known",
-                hours_since_service_scan=_hours_since(
-                    asset.attributes.get("last_service_scan"), now
-                ),
-            )
-            for asset in result.seen
-        ]
+        base = ip_network(planned.target)
+        workers = self._guard.config.scan_workers
+        rate = max(1, self._guard.config.scan_packets_per_second // workers)
+        batch_size = base.num_addresses if base.num_addresses <= 1024 else 64
+        offset = 0
+        facts: list[HostFact] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            while offset < base.num_addresses:
+                jobs = {}
+                for _ in range(workers):
+                    if offset >= base.num_addresses:
+                        break
+                    size = min(batch_size, base.num_addresses - offset)
+                    # Paczki są potęgami dwójki, wyrównanymi w obrębie CIDR.
+                    while size > 1 and offset % size:
+                        size //= 2
+                    chunk = ip_network(
+                        (
+                            int(base.network_address) + offset,
+                            base.max_prefixlen - (size.bit_length() - 1),
+                        )
+                    )
+                    offset += size
+                    chunk_plan = PlannedAction(
+                        target=str(chunk),
+                        tool=planned.tool,
+                        mode=planned.mode,
+                        ports=planned.ports,
+                        intrusiveness=planned.intrusiveness,
+                        rule=planned.rule,
+                        reason=planned.reason,
+                        asset_id=planned.asset_id,
+                    )
+                    action = self._new_action(run, chunk_plan)
+                    session.commit()
+                    try:
+                        network = self._guard.authorize_network(
+                            str(chunk),
+                            tool=planned.tool,
+                            intrusiveness=planned.intrusiveness,
+                            rule_name=planned.rule,
+                        )
+                    except ScopeError as error:
+                        action.scope_decision = error.code
+                        self._finish(action, "denied", error.reason)
+                        session.commit()
+                        continue
+                    action.scope_decision = "scope_allowed"
+                    action.status = "running"
+                    session.commit()
+                    jobs[pool.submit(self._nmap.discover, network, packets_per_second=rate)] = (
+                        action,
+                        network,
+                        time.monotonic(),
+                    )
+                durations = []
+                for future in as_completed(jobs):
+                    action, network, began = jobs[future]
+                    duration = round(time.monotonic() - began, 2)
+                    durations.append(duration)
+                    try:
+                        hosts = future.result()
+                    except Exception as error:
+                        self._finish(action, "failed", str(error))
+                    else:
+                        result = record_discovery(
+                            session,
+                            network,
+                            hosts,
+                            run.id,
+                            missing_after_runs=self._guard.config.missing_after_runs,
+                        )
+                        totals["hosts_up"] += len(result.seen)
+                        totals["hosts_new"] += len(result.new)
+                        totals["hosts_reappeared"] += len(result.reappeared)
+                        totals["hosts_missing"] += len(result.missing)
+                        self._finish(
+                            action,
+                            "done",
+                            f"{duration}s; aktywne: {len(result.seen)}, nowe: {len(result.new)}, "
+                            f"brak: {len(result.missing)}",
+                        )
+                        now = utcnow()
+                        new = {a.id for a in result.new}
+                        back = {a.id for a in result.reappeared}
+                        facts.extend(
+                            HostFact(
+                                asset_id=asset.id,
+                                address=str(asset.attributes["address"]),
+                                state="new"
+                                if asset.id in new
+                                else "reappeared"
+                                if asset.id in back
+                                else "known",
+                                hours_since_service_scan=_hours_since(
+                                    asset.attributes.get("last_service_scan"), now
+                                ),
+                            )
+                            for asset in result.seen
+                        )
+                    done = int(run.summary.get("addresses_done", 0)) + network.network.num_addresses
+                    total = int(run.summary["total_addresses"])
+                    elapsed = (utcnow() - run.started_at).total_seconds()
+                    run.summary = {
+                        **run.summary,
+                        **totals,
+                        "addresses_done": done,
+                        "eta_seconds": round(elapsed * (total - done) / done) if done else None,
+                        "last_batch_seconds": duration,
+                    }
+                    session.commit()
+                if (
+                    durations
+                    and max(durations) < 20
+                    and batch_size < 256
+                    and offset % (batch_size * 2) == 0
+                ):
+                    batch_size *= 2
+                elif durations and max(durations) > 90 and batch_size > 32:
+                    batch_size //= 2
+        return facts
 
     def _scan_services(
         self,
@@ -296,8 +458,14 @@ class ScanService:
         session.commit()
         ports = str(action.params.get("ports") or "top-1000")
         full = ports == FULL_PORTS
+        began = time.monotonic()
         try:
-            scan = self._nmap.scan_services(target, ports=ports, timeout=1200 if full else 300)
+            scan = self._nmap.scan_services(
+                target,
+                ports=ports,
+                timeout=1200 if full else 300,
+                packets_per_second=self._guard.config.scan_packets_per_second,
+            )
         except ToolError as error:
             self._finish(action, "failed", str(error))
             return 0
@@ -306,12 +474,54 @@ class ScanService:
             self._finish(action, "failed", "Zasób został usunięty przed zapisaniem wyniku")
             return 0
         diff = record_host_scan(session, asset, scan, action.scan_run_id, full=full)
+        web = dict((asset.attributes or {}).get("web", {}))
+        for service in scan.services:
+            if service.name not in {
+                "http",
+                "https",
+                "http-proxy",
+                "ssl/http",
+            } and service.port not in {80, 443, 8080, 8443}:
+                continue
+            scheme = (
+                "https"
+                if service.name in {"https", "ssl/http"} or service.port in {443, 8443}
+                else "http"
+            )
+            key = f"{scheme}:{service.port}"
+            try:
+                http_target = self._guard.authorize(
+                    action.target,
+                    tool="httpx",
+                    intrusiveness=Intrusiveness.LIGHT,
+                    rule_name="web_fingerprint",
+                )
+                probe = self._http_prober.probe(http_target, port=service.port, scheme=scheme)
+            except (ScopeError, ToolError):
+                continue
+            current = asdict(probe)
+            previous = web.get(key)
+            web[key] = current
+            # Pierwszy odcisk usługi to nie zmiana; historia notuje dopiero różnicę.
+            if previous is not None and previous != current:
+                session.add(
+                    AssetHistory(
+                        asset_id=asset.id,
+                        scan_run_id=action.scan_run_id,
+                        change="web_changed",
+                        diff={"service": key, "before": previous, "after": current},
+                    )
+                )
+                totals["web_changed"] += 1
+        if web:
+            asset.attributes = {**asset.attributes, "web": web}
         totals["services_added"] += len(diff.added)
         totals["services_removed"] += len(diff.removed)
         self._finish(
             action,
             "done",
-            f"Otwartych portów: {len(scan.services)}, nowych usług: {len(diff.added)}, "
+            f"{time.monotonic() - began:.2f}s; otwartych portów: {len(scan.services)}, "
+            f"nowych usług: {len(diff.added)}, "
             f"zniknęło: {len(diff.removed)}",
         )
         return 1

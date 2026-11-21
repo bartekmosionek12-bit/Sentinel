@@ -127,12 +127,24 @@ class NmapAdapter:
     def __init__(self, runner: ToolRunner | None = None) -> None:
         self._runner = runner or SubprocessRunner()
 
-    def discover(self, network: ScopedNetwork, *, timeout: float = 120) -> list[DiscoveredHost]:
+    def discover(
+        self, network: ScopedNetwork, *, timeout: float = 120, packets_per_second: int = 100
+    ) -> list[DiscoveredHost]:
         if not isinstance(network, ScopedNetwork):
             raise TypeError("nmap.discover przyjmuje wyłącznie ScopedNetwork")
         if network.intrusiveness > Intrusiveness.LIGHT:
             raise ToolError("nmap: odkrywanie hostów działa tylko na poziomie L1")
-        args = ["-sn", "-n", f"-PS{DISCOVERY_PORTS}", "-T3", "-oX", "-"]
+        args = [
+            "-sn",
+            "-n",
+            "-PE",
+            f"-PS{DISCOVERY_PORTS}",
+            "-T3",
+            "--max-rate",
+            str(packets_per_second),
+            "-oX",
+            "-",
+        ]
         if network.excluded:
             args += ["--exclude", ",".join(str(n) for n in network.excluded)]
         output = self._runner.run(self.binary, args, network, timeout=timeout)
@@ -147,20 +159,13 @@ class NmapAdapter:
         max_rate: int | None = None,
         timeout: float = 900,
     ) -> list[DiscoveredHost]:
-        """Odkrywanie hostów w paczce: ICMP echo + TCP SYN/connect na typowych portach."""
         if not isinstance(network, ScopedNetwork):
             raise TypeError("nmap.discover_batch przyjmuje wyłącznie ScopedNetwork")
         if network.intrusiveness > Intrusiveness.LIGHT:
             raise ToolError("nmap: odkrywanie hostów działa tylko na poziomie L1")
         args = [
-            "-sn",
-            "-n",
-            "-PE",
-            f"-PS{expand_ports(ports)}",
-            f"-T{_timing(timing)}",
-            *_rate(max_rate),
-            "-oX",
-            "-",
+            "-sn", "-n", "-PE", f"-PS{expand_ports(ports)}", f"-T{_timing(timing)}",
+            *_rate(max_rate), "-oX", "-",
         ]
         if network.excluded:
             args += ["--exclude", ",".join(str(n) for n in network.excluded)]
@@ -173,6 +178,7 @@ class NmapAdapter:
         *,
         ports: str = DEFAULT_PORTS,
         timeout: float = 300,
+        packets_per_second: int = 100,
         timing: int = 3,
         max_rate: int | None = None,
     ) -> HostScan:
@@ -183,7 +189,8 @@ class NmapAdapter:
             "-Pn",
             "-n",
             f"-T{_timing(timing)}",
-            *_rate(max_rate),
+            "--max-rate",
+            str(max_rate if max_rate is not None else packets_per_second),
             *_port_args(ports),
             "--open",
             "-oX",

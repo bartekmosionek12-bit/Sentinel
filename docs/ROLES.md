@@ -141,6 +141,8 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/audit-log/verify` | `audit:read` | ✓ | · | · | · |
 | POST | `/api/auth/logout` | zalogowany | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/console/admin` | `console:admin` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/defectdojo/export` | `integrations:manage` | ✓ | · | · | · |
+| GET | `/api/defectdojo/status` | `integrations:manage` | ✓ | · | · | · |
 | GET | `/api/discovery/compare` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/compare/export` | `reports:export` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/defectdojo/export` | `defectdojo:export` | ✓ | ✓ | · | · |
@@ -189,12 +191,22 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/scan-actions` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/scan-actions/{action_id}/approve` | `scan:approve:l2` | ✓ | ✓ | · | · |
 | POST | `/api/scan-actions/{action_id}/reject` | `scan:approve:l2` | ✓ | ✓ | · | · |
+| GET | `/api/scan-diff` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/scan-results/import` | `scan:run` | ✓ | ✓ | · | · |
+| POST | `/api/scan-results/override` | `inventory:write` | ✓ | ✓ | · | · |
+| GET | `/api/scan-results/{run_id}` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/scan-results/{run_id}/export` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/scan-results/{run_id}/nmap.xml` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/scan-targets` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/scan-targets` | `scan:run` | ✓ | ✓ | · | · |
+| POST | `/api/scan-targets/preview` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/scans` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/scans` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/scope` | `scope:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/scope/check` | `scope:manage` | ✓ | · | · | · |
 | GET | `/api/signal-queue` | `review:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/signal-queue/{signal_id}/decision` | `review:decide` | ✓ | ✓ | ✓ | · |
+| GET | `/api/sprint/dashboard` | `inventory:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/stats` | `inventory:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/threat-feed` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
 

@@ -374,6 +374,8 @@ services:
     user: "0:0"
     environment:
       BAO_ADDR: http://openbao:8200
+      NO_PROXY: openbao,localhost,127.0.0.1
+      no_proxy: openbao,localhost,127.0.0.1
     volumes:
       - ./infra/openbao:/policies:ro
       - openbao-init:/bao-state

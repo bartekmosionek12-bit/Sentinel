@@ -204,6 +204,8 @@ def record_discovery(
     network: ScopedNetwork,
     hosts: Sequence[DiscoveredHost],
     scan_run_id: uuid.UUID | None = None,
+    *,
+    missing_after_runs: int = 1,
 ) -> DiscoveryResult:
     """Scala wynik odkrywania z inwentarzem: nowe (shadow IT), widziane, znikające."""
     now = utcnow()
@@ -247,9 +249,42 @@ def record_discovery(
                     scan_run_id,
                 )
                 result.reappeared.append(asset)
+        history = [*list((asset.attributes or {}).get("responses", []))[-5:], True]
+        unstable = len(history) >= 3 and any(history) and not all(history)
+        asset.attributes = {
+            **(asset.attributes or {}),
+            "responses": history,
+            "reachability": (
+                "unstable" if unstable else "unconfirmed" if asset.status == "shadow" else "active"
+            ),
+            "last_seen_run": str(scan_run_id) if scan_run_id else None,
+        }
         result.seen.append(asset)
     for ip, asset in sorted(known.items()):
         if ip in up or asset.status not in ("active", "shadow"):
+            continue
+        history = [*list((asset.attributes or {}).get("responses", []))[-5:], False]
+        streak = 0
+        for answered in reversed(history):
+            if answered:
+                break
+            streak += 1
+        unstable = (
+            len(history) >= 3
+            and any(history)
+            and not all(history)
+            and history[-3:] in ([True, False, True], [False, True, False])
+        )
+        asset.attributes = {
+            **(asset.attributes or {}),
+            "responses": history,
+            "reachability": "inactive"
+            if streak >= missing_after_runs
+            else "unstable"
+            if unstable
+            else "unconfirmed",
+        }
+        if streak < missing_after_runs:
             continue
         before = asset.status
         asset.status = "missing"

@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.inventory.service import asset_fingerprint
 from app.models import Asset
+from app.scanners.nmap import parse_nmap_xml
 
 
 def test_openapi_is_served(client: TestClient) -> None:
     response = client.get("/api/openapi.json")
     assert response.status_code == 200
     assert "/api/assets" in response.json()["paths"]
+    assert client.get("/api/sprint/dashboard").json()["recent_runs"] == []
 
 
 def test_create_and_list_assets(client: TestClient) -> None:
@@ -40,6 +42,42 @@ def test_invalid_asset_is_rejected(client: TestClient) -> None:
     assert client.post("/api/assets", json={"type": "printer", "name": "x"}).status_code == 422
     bad = {"type": "host", "name": "x", "criticality": 9}
     assert client.post("/api/assets", json=bad).status_code == 422
+
+
+def test_scan_targets_and_result_import_export_override(client: TestClient) -> None:
+    targets = client.post(
+        "/api/scan-targets/preview", json={"format": "manual", "text": "10.10.0.5\n8.8.8.8"}
+    )
+    assert targets.status_code == 200
+    assert len(targets.json()["targets"]) == 1
+    assert len(targets.json()["errors"]) == 1
+    saved = client.post("/api/scan-targets", json={"format": "csv", "text": "target\n10.10.0.5\n"})
+    assert saved.json()["added"] == 1
+    assert client.get("/api/scan-targets").json()[0]["target"] == "10.10.0.5"
+
+    result_json = (
+        '{"hosts":[{"ip":"10.10.0.5","services":'
+        '[{"port":80,"product":"nginx","version":"1.0"}]}]}'
+    )
+    imported = client.post(
+        "/api/scan-results/import",
+        json={"format": "json", "text": result_json},
+    )
+    assert imported.status_code == 200
+    run_id = imported.json()["run_id"]
+    assert client.get(f"/api/scan-results/{run_id}").json()["hosts"]["10.10.0.5"]["services"]
+    changed = client.post(
+        "/api/scan-results/override",
+        json={"host": "10.10.0.5", "field": "note", "value": "Sprawdzone ręcznie"},
+    )
+    assert changed.status_code == 200
+    data = client.get(f"/api/scan-results/{run_id}").json()["hosts"]["10.10.0.5"]
+    assert data["manually_changed"]
+    assert data["note"] == "Sprawdzone ręcznie"
+    assert client.get(f"/api/scan-results/{run_id}/export?format=csv").status_code == 200
+    xml = client.get(f"/api/scan-results/{run_id}/nmap.xml")
+    assert xml.status_code == 200
+    assert parse_nmap_xml(xml.text)[0].ip == "10.10.0.5"
 
 
 def test_asset_creation_is_audited(client: TestClient) -> None:

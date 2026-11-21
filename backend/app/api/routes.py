@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Annotated
 
@@ -32,13 +33,60 @@ from app.iam.deps import public_endpoint, require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
 from app.inventory.service import asset_fingerprint
-from app.models import Asset, AuditLog
+from app.models import Asset, AuditLog, ScanRun
+from app.scans.diff import compare_runs
 
 logger = logging.getLogger("sentinel.api")
 router = APIRouter(prefix="/api", route_class=RedactingRoute)
 
 Limit = Annotated[int, Query(ge=1, le=500)]
 Offset = Annotated[int, Query(ge=0)]
+
+
+@router.get("/sprint/dashboard", dependencies=[Depends(require("inventory:read"))])
+def sprint_dashboard(session: SessionDep) -> dict[str, object]:
+    runs = session.scalars(select(ScanRun).order_by(ScanRun.started_at.desc()).limit(5)).all()
+    changes = []
+    if len(runs) >= 2:
+        changes = compare_runs(
+            (runs[1].summary or {}).get("snapshot", {}),
+            (runs[0].summary or {}).get("snapshot", {}),
+        )
+    flags = []
+    if runs:
+        for host, info in ((runs[0].summary or {}).get("snapshot") or {}).items():
+            for flag in info.get("flags", []):
+                flags.append(
+                    {
+                        "host": host,
+                        "kind": flag.get("kind"),
+                        "confidence": flag.get("confidence", 0),
+                    }
+                )
+    unstable = sum(
+        1
+        for asset in session.scalars(select(Asset).where(Asset.type == "host"))
+        if (asset.attributes or {}).get("reachability") == "unstable"
+    )
+    return {
+        "changes": changes[:20],
+        "change_count": len(changes),
+        "flags": flags[:20],
+        "new_admin_panels": sum(1 for flag in flags if flag["kind"] == "admin_panel"),
+        "staging": sum(1 for flag in flags if flag["kind"] == "staging"),
+        "unstable_hosts": unstable,
+        "recent_runs": [
+            {
+                "id": str(run.id),
+                "started_at": run.started_at.isoformat(),
+                "status": run.status,
+                "duration_seconds": (run.summary or {}).get("duration_seconds"),
+                "eta_seconds": (run.summary or {}).get("eta_seconds"),
+            }
+            for run in runs
+        ],
+        "defectdojo": "skonfigurowany" if os.getenv("DEFECTDOJO_API_TOKEN") else "niepołączony",
+    }
 
 
 @router.get(
@@ -184,6 +232,9 @@ def get_scope(guard: ScopeGuardDep, settings: SettingsDep) -> ScopeOut:
         denied_domains=list(config.denied_domains),
         denied_cidrs=[str(n) for n in config.denied_cidrs],
         default_rate_per_minute=config.default_rate_per_minute,
+        scan_packets_per_second=config.scan_packets_per_second,
+        scan_workers=config.scan_workers,
+        missing_after_runs=config.missing_after_runs,
         demo_mode=settings.demo_mode,
         demo_lab_cidr=settings.demo_lab_cidr,
         demo_approval_expires_at=settings.demo_approval_expires_at,

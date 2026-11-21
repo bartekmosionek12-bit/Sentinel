@@ -8,14 +8,15 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Zmiana kierunku (21.11.2026).** Projekt prowadzimy pod oficjalny brief CBI AGH
-> ([docs/BRIEF.md](docs/BRIEF.md)): skaner discovery dużej infrastruktury z fingerprintingiem
-> HTTP, sygnaturami, porównaniem przebiegów, czterema rolami, szyfrowaniem w spoczynku i
-> DefectDojo. Stan wymagań: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md); plan etapów P0–P12:
-> [docs/ROADMAP.md](docs/ROADMAP.md); co usuwamy i co zostaje:
-> [docs/ARCHITECTURE.md, sekcja 0](docs/ARCHITECTURE.md#0-zmiana-kierunku-brief-agh). Od P1
-> jest jedna konsola zespołu IT i cztery role z briefu ([docs/ROLES.md](docs/ROLES.md));
-> pozostałe sekcje poniżej przepisujemy w kolejnych etapach.
+> **Stan sprintu:** Discovery, fingerprint WWW, porównanie przebiegów, import/eksport,
+> nadpisania i lokalny DefectDojo są na gałęzi `sprint-final`. Luki i pomiar skali:
+> [REQUIREMENTS.md](REQUIREMENTS.md), [PERFORMANCE.md](docs/PERFORMANCE.md).
+> Ścieżka krytyczna działa od początku do końca, bez internetu: import
+> inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów, ocena ryzyka
+> z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia zagrożeń na trzech
+> poziomach z lokalnego modelu, sprawdzane przez kod. Architektura i plan Etapów 4–9:
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); co poza linią cięcia:
+> [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Uruchomienie (jedna komenda, bez ustawień)
 
@@ -32,11 +33,23 @@ sekrety (tylko w `.env`, poza Gitem), buduje obrazy i stawia demo razem z labem,
 wypisuje konta demo i sekret TOTP (zapisane też w `data/demo-credentials.env`).
 Pierwszy start pobiera obrazy i trwa kilka minut.
 
-Konsola zespołu IT: <http://localhost:8080/admin/> (`/` przekierowuje tutaj). Dokumentacja
-API: <http://localhost:8080/api/docs>.
+Konsola zespołu IT: <http://localhost:8080/admin/> (`/` przekierowuje tutaj). Dashboard
+menedżera: <http://localhost:8080/dashboard/>. Dokumentacja API: <http://localhost:8080/api/docs>.
 
 Bez trybu demo (pusty zakres, brak kont): `cp .env.example .env`, ustaw hasła i
 `docker compose up --build`.
+
+Lokalny DefectDojo (oddzielny profil Compose, bez połączenia z obcą instancją):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml --profile defectdojo up -d
+./scripts/defectdojo_token.sh        # token do eksportu z discovery
+./scripts/bootstrap_defectdojo.sh    # product, engagement i test do eksportu z /admin/skany
+```
+
+DefectDojo jest pod `http://localhost:8081`. Identyfikatory i token trafiają tylko do
+ignorowanego `.env`. Konsola wysyła zaznaczone obserwacje jako findingi `Info`, a powtórny
+eksport pomija identyczny identyfikator. Eksport nmap XML jest drogą awaryjną do importu.
 
 ## Demo w 3 minuty (bez internetu)
 
@@ -282,8 +295,8 @@ npm run e2e                   # Playwright z podstawionym API (fikcyjne dane z e
 # PUBLIC_URL w .env musi wtedy wskazywać adres serwera deweloperskiego
 ```
 
-Zmiany trafiają do `main` wyłącznie przez pull requesty z gałęzi etapowych
-(`pN-nazwa`), w konwencji Conventional Commits.
+Na czas sprintu zmiany są commitowane na jednej gałęzi `sprint-final`; merge do `main`
+zostaje po stronie właściciela repozytorium.
 
 ## demo-lab
 

@@ -102,6 +102,8 @@ export function Scope() {
               Domyślny limit: <strong>{scope.default_rate_per_minute}</strong> akcji na minutę na
               jeden cel.
             </p>
+            <p>Tempo skanu: do <strong>{scope.scan_packets_per_second}</strong> pakietów/s, <strong>{scope.scan_workers}</strong> równoległe workery, profil nmap T3.</p>
+            <p>Host nieaktywny po <strong>{scope.missing_after_runs}</strong> kolejnych przebiegach bez odpowiedzi.</p>
             <p>
               Tryb demo:{" "}
               <Badge variant={scope.demo_mode ? "warn" : "neutral"}>

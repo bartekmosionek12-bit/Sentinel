@@ -15,7 +15,7 @@ APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
 # moduł → pliki (względem backend/app), które mogą go importować
 ALLOWED: dict[str, set[str]] = {
-    "socket": {"core/scope_guard.py"},
+    "socket": {"core/scope_guard.py", "discovery/fingerprint.py"},
     "subprocess": {"scanners/runner.py"},
     "asyncio.subprocess": {"scanners/runner.py"},
     "httpx": {
@@ -26,6 +26,9 @@ ALLOWED: dict[str, set[str]] = {
         # Etap 5: adapter WWW przyjmuje ScopedTarget; OpenBao i token agenta to stałe adresy
         # usług wewnętrznych; brama agenta łączy się wyłącznie z serwerem MCP.
         "scanners/http_probe.py",
+        "integrations/defectdojo.py",  # tylko lokalny host Compose, sprawdzany przez klienta
+        "discovery/defectdojo.py",  # równoległa integracja również ograniczona do lokalnego Compose
+        "discovery/fingerprint.py",  # wyłącznie ScopedTarget po kontroli zakresu
         "credentials/openbao.py",
         "agent/gateway.py",
         # Kill switch: admin API Keycloaka i OpenBao, tylko adresy usług wewnętrznych

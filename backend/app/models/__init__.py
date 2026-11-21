@@ -36,7 +36,10 @@ from app.models.ops import (
     LLMCache,
     Notification,
     ScanAction,
+    ScanRequest,
+    ScanResultOverride,
     ScanRun,
+    ScanTarget,
 )
 from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
@@ -78,7 +81,10 @@ __all__ = [
     "RoleGrant",
     "RolePermission",
     "ScanAction",
+    "ScanRequest",
+    "ScanResultOverride",
     "ScanRun",
+    "ScanTarget",
     "SignalMatch",
     "Software",
     "UpdateRecommendation",

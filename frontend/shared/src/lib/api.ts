@@ -31,6 +31,7 @@ export interface Asset {
   owner: string | null;
   tags: string[];
   status: "active" | "missing" | "retired" | "shadow";
+  reachability: string;
   first_seen: string;
   last_seen: string;
 }
@@ -76,6 +77,9 @@ export interface Scope {
   denied_domains: string[];
   denied_cidrs: string[];
   default_rate_per_minute: number;
+  scan_packets_per_second: number;
+  scan_workers: number;
+  missing_after_runs: number;
   demo_mode: boolean;
   demo_lab_cidr: string;
   demo_approval_expires_at: string | null;
@@ -285,6 +289,25 @@ export interface ScanRun {
   started_at: string;
   finished_at: string | null;
   actions: ScanAction[];
+}
+
+export interface ScanChange {
+  kind: string;
+  host: string;
+  item: string;
+  before: string;
+  after: string;
+}
+
+export interface SprintDashboard {
+  changes: ScanChange[];
+  change_count: number;
+  flags: {host: string; kind: string; confidence: number}[];
+  new_admin_panels: number;
+  staging: number;
+  unstable_hosts: number;
+  recent_runs: {id: string; started_at: string; status: string; duration_seconds: number | null; eta_seconds: number | null}[];
+  defectdojo: string;
 }
 
 export interface Task {
@@ -1041,6 +1064,19 @@ export const api = {
       body: JSON.stringify({ accept }),
     }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
+  sprintDashboard: () => request<SprintDashboard>("/sprint/dashboard"),
+  scanDiff: (from: string, to: string) => request<ScanChange[]>(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`),
+  downloadScanDiff: (from: string, to: string, format: "json" | "csv") => download(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`, `scan-diff.${format}`),
+  previewScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]}>("/scan-targets/preview", {method: "POST", body: JSON.stringify({text, format})}),
+  saveScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]; added: number}>("/scan-targets", {method: "POST", body: JSON.stringify({text, format})}),
+  scanTargets: () => request<{target: string; kind: string}[]>("/scan-targets"),
+  importScanResults: (text: string, format: "json" | "csv" | "xml") => request<{run_id: string; hosts: number}>("/scan-results/import", {method: "POST", body: JSON.stringify({text, format})}),
+  scanResults: (id: string) => request<{run_id: string; hosts: Record<string, {name: string; note?: string; state: string; manually_changed?: boolean; flags?: {kind: string; evidence: string[]; confidence: number}[]}>}>(`/scan-results/${id}`),
+  overrideScanResult: (host: string, field: "name" | "note" | "state", value: string) => request<{host: string; field: string; manually_changed: boolean}>("/scan-results/override", {method: "POST", body: JSON.stringify({host, field, value})}),
+  downloadScanResults: (id: string, format: "json" | "csv") => download(`/scan-results/${id}/export?format=${format}`, `scan-results.${format}`),
+  downloadNmapXml: (id: string) => download(`/scan-results/${id}/nmap.xml`, "sentinel-nmap.xml"),
+  defectdojoStatus: () => request<{connected: boolean; detail: string}>("/defectdojo/status"),
+  exportDefectdojo: (run_id: string, selected: {host: string; kind: string}[]) => request<{created: number; duplicates: number}>("/defectdojo/export", {method: "POST", body: JSON.stringify({run_id, selected})}),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>

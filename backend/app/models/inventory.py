@@ -68,6 +68,10 @@ class Asset(Base):
         back_populates="asset", cascade="all, delete-orphan"
     )
 
+    @property
+    def reachability(self) -> str:
+        return str((self.attributes or {}).get("reachability", "unconfirmed"))
+
 
 class AssetRelation(Base):
     __tablename__ = "asset_relation"

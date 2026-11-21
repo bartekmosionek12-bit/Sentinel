@@ -79,6 +79,9 @@ def test_probe_http_reads_title_and_server_as_clipped_text(guard: ScopeGuard) ->
     prober = HttpProber(httpx.Client(transport=httpx.MockTransport(handler)))
     result = prober.probe(_target(guard, Intrusiveness.LIGHT), port=8080)
     assert (result.status, result.server, result.title, result.port) == (200, "lab", "Lab", 8080)
+    assert result.admin_paths == ["/admin", "/login"]
+    assert result.flags
+    assert result.flags[0]["confidence"] == 1
     with pytest.raises(TypeError):
         prober.probe("172.30.99.10")  # type: ignore[arg-type]
 
