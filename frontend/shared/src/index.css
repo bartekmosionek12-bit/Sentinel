@@ -26,3 +26,17 @@
 body {
   @apply bg-background text-foreground antialiased;
 }
+
+/* Samouczek (driver.js): czcionka i kolory konsoli, czytelny kontrast. */
+.driver-popover.sentinel-tour {
+  font-family: inherit;
+  max-width: 340px;
+}
+.driver-popover.sentinel-tour .driver-popover-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.driver-popover.sentinel-tour .driver-popover-description {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}

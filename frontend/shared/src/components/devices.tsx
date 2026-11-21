@@ -166,7 +166,7 @@ export function DeviceTable({
   };
 
   return (
-    <div>
+    <div data-demo="device-table">
       <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
         <Input
           value={search}

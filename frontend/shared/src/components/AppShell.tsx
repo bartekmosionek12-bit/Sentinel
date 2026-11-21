@@ -70,6 +70,7 @@ export function AppShell({
   subtitle,
   footer,
   banner,
+  headerExtra,
   children,
 }: {
   navGroups: NavGroup[];
@@ -77,6 +78,8 @@ export function AppShell({
   footer: string;
   /** Pilny komunikat nad treścią (np. raport zero-day w skrzynce). */
   banner?: ReactNode;
+  /** Dodatkowe elementy w nagłówku (np. przycisk samouczka w konsoli menedżera). */
+  headerExtra?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -139,6 +142,7 @@ export function AppShell({
           </nav>
           <span className="hidden text-sm text-muted-foreground md:block">{subtitle}</span>
           <div className="flex items-center gap-3">
+            {headerExtra}
             <SystemStatus />
             <UserMenu />
           </div>

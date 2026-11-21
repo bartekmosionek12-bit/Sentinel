@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { NAV_GROUPS } from "@/navigation";
+import { TourButton } from "@/tour";
 import { DeviceCard } from "@/pages/DeviceCard";
 import { Devices, UnknownDevices } from "@/pages/Devices";
 import { Home } from "@/pages/Home";
@@ -30,6 +31,7 @@ export function App() {
       subtitle="Dashboard menedżera"
       footer="Widok tylko do odczytu. Dane techniczne są ukryte."
       banner={can("reports:read") ? <ZeroDayBanner basePath="/raporty" /> : null}
+      headerExtra={<TourButton />}
     >
       <Routes>
         <Route path="/" element={<Home />} />

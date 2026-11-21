@@ -62,7 +62,7 @@ export function InboxPage({ basePath }: { basePath: string }) {
             : "Raporty wysłane do Ciebie przez system. Wszystkie przeczytane."
         }
       />
-      <Card>
+      <Card data-demo="inbox">
         <QueryState
           isPending={inbox.isPending}
           error={inbox.error}
