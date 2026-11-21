@@ -64,8 +64,7 @@ def _form_action(page: str) -> str:
 def login(base: str, client_id: str, username: str, password: str, totp_secret: str = "") -> str:
     """Zwraca token dostępu. `base` to adres interfejsu (nginx z /auth i /api)."""
     base = base.rstrip("/")
-    app_path = "admin" if client_id == "sentinel-admin" else "dashboard"
-    redirect_uri = f"{base}/{app_path}/"
+    redirect_uri = f"{base}/admin/"
     verifier = secrets.token_urlsafe(48)
     challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
