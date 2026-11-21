@@ -107,6 +107,9 @@ Sentek (asystent) ma w P1 tylko backend: odpowiada z danych w granicach uprawnie
 a prośbę o skan zamienia w propozycję zadania dla agenta, którego plan zatwierdza człowiek.
 Interfejs Sentka wraca w konsoli w P10.
 
+![Role i użytkownicy](docs/screenshots/p1-role.png)
+![Karta hosta](docs/screenshots/p1-karta-hosta.png)
+
 ### Feedy: snapshoty i tryb online
 
 Domyślnie (`FEEDS_MODE=offline`) system czyta feedy z plików w `data/feeds/`, które nie
