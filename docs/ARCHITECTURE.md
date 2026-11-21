@@ -248,8 +248,9 @@ datą wygaśnięcia. Testy obejmują wszystkie warunki, w tym wygaśnięcie i L3
 **Warstwa 2: sieć Dockera.** Do sieci z celami (`scan`, w demo: `demo-lab`, `internal: true`)
 podłączone są wyłącznie dwa skanery: `mcp-scanner` (agent) i **nadal** `worker-scans`
 (pipeline skanów). Plan zakładał, że `worker-scans` straci ten dostęp z przejściem pipeline na
-MCP; to przejście jest w ROADMAP, więc do tego czasu pipeline skanuje bezpośrednio, zawsze
-przez `scope_guard`. API, baza, Ollama, Keycloak i pozostałe workery, **łącznie z workerem
+MCP; ten stan jest zaakceptowany 2026-11-21, a migracja (worker jako klient MCP z własną
+tożsamością, polityka zatwierdza automatycznie tylko L1) jest zadaniem na Etap 9, jeśli zostanie
+czas, inaczej ROADMAP (#27). Do tego czasu pipeline skanuje bezpośrednio, zawsze przez `scope_guard`. API, baza, Ollama, Keycloak i pozostałe workery, **łącznie z workerem
 agenta** (`worker-agent`), nie mają fizycznej drogi do skanowanych hostów. OpenBao jest w
 osobnej sieci `vault`: widzą ją `mcp-scanner` (podpis certyfikatów) i od Etapu 6 `api`
 (wyłącznie kill switch, AppRole z polityką „tylko revoke-prefix”).
@@ -1207,7 +1208,7 @@ R1–R15 z wersji 1 obowiązują. Nowe:
 | **5** | serwer MCP + agent (plan → zatwierdzenie → wykonanie) + OpenBao i SSH 15 min + skan uwierzytelniony w demo-lab + kill switch + nuclei w L2; **moduł 19** (test bezpieczeństwa agenta: dry-run, atrapy narzędzi, kanarki, przycisk w konsoli, bramka zmian, zatruty host w demo-lab); dopasowanie sygnałów bez CPE; przypadki raportów i planów w `eval/` | #16, #17, #11, #4, #15, moduł 19 |
 | **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?” | #6, #18, #15, moduł 19 |
 | **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5 |
-| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab | #19 |
+| **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab; **moduł 20** (widok z zewnątrz: Artemis, moje.cert.pl, korelacja outside-in / inside-out, §24) | #19, #26 |
 | **9** | 5 scenariuszy demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline | #7 |
 
 **Linia cięcia** (odpada od dołu listy ze specyfikacji, więc najpierw sandbox): KRI, DORA, CRA
@@ -1448,3 +1449,74 @@ Zbudowane zgodnie z 23.1–23.5, z tymi uściśleniami:
 audycie), `AGENT_TEST_CASE_RESULT` (przypadek, kategoria, transkrypcja, próby wywołań, decyzje
 polityki, werdykty sędziów z rozróżnieniem deterministyczny i LLM).
 
+
+---
+
+## 24. Moduł 20: widok z zewnątrz (Artemis, CERT Polska) i korelacja outside-in / inside-out
+
+Plan na **Etap 8** (razem z AI Security infrastruktury), a jeśli zabraknie czasu, na Etap 9.
+Issue: #26. Cel: zestawić to, co widać od środka (inwentarz, agent, skany
+uwierzytelnione), z tym, co widzi atakujący z internetu.
+
+### 24.1 Źródła widoku zewnętrznego
+
+Adaptery z jednym interfejsem `ExternalView` (mockowalne, jak źródła inwentarza z Etapu 6):
+
+| Adapter | Co to jest | Oznaczenie wyników | Na hackathon |
+|---|---|---|---|
+| `artemis_local` | Artemis (open source, CERT Polska) w opcjonalnym profilu Compose `artemis` | „widok z sieci organizacji” (`external_org`), **nie** „widok z internetu” | tak, jeśli zmieści się w budżecie RAM |
+| `artemis_probe` | Artemis na serwerze poza siecią organizacji, sterowany przez Sentinel kanałem mTLS | „widok z internetu” (`external_internet`) | projekt i ROADMAP; w demo symulowany osobną siecią demo-lab udającą internet |
+| `moje_cert_import` | wyniki z moje.cert.pl: eksport lub API, jeśli dostępne, inaczej import pliku | „widok z internetu” (`external_internet`) | import pliku (fikcyjny eksport w fixture'ach) |
+
+**Licencja i autorstwo:** przed integracją sprawdzamy plik LICENSE w repozytorium
+CERT-Polska/Artemis (według mojej wiedzy BSD-3-Clause, do potwierdzenia) i dodajemy
+przypisanie „Artemis, CERT Polska” w UI (karta wyników zewnętrznych), README i stopce raportów
+z danymi zewnętrznymi.
+
+### 24.2 Integracja
+
+- Artemis jako narzędzie serwera MCP `external_scan`, **poziom L2**: `scope_guard` dla każdego
+  celu, zatwierdzenie admina z MFA, audit log, limity per cel. Ta sama ścieżka co nuclei w L2:
+  nie ma drugiej drogi do sieci z pominięciem MCP.
+- Dostęp z konsoli operacyjnej (przycisk „Pełny obraz: od środka i z zewnątrz”) i dla agenta
+  (plan → walidacja kodem → zatwierdzenie → wykonanie, jak każdy krok L2).
+- Wyniki mapowane do `Asset`, `Software`, `Finding` z polem `perspective`:
+  `internal | external_org | external_internet`. Wynik zewnętrzny nigdy nie nadpisuje danych
+  z inwentarza; trafia obok, a rozbieżność jest osobnym findingiem.
+- Import `moje_cert_import` nie wykonuje żadnego ruchu sieciowego, więc nie przechodzi przez
+  `scope_guard`, ale zapisuje źródło, skrót pliku i osobę importującą w audycie.
+
+### 24.3 Korelacja (deterministyczna, kod i reguły, bez LLM)
+
+| Reguła | Warunek | Wynik |
+|---|---|---|
+| `external_unknown` | widoczne z zewnątrz, nieznane w inwentarzu | finding `exposure`, wysoki priorytet, kandydat na shadow IT (do potwierdzenia przez człowieka w „Nieznane i niepotwierdzone”) |
+| `internal_reachable` | wewnętrzne według inwentarza, a osiągalne z zewnątrz (np. panel administracyjny) | finding `exposure` |
+| `version_mismatch` | inne informacje z zewnątrz niż w inwentarzu (np. wersja) | finding „do weryfikacji” |
+
+Metryka: liczba i lista zasobów widocznych dla atakującego, a nieznanych organizacji. Nazwa
+metryki nie obiecuje „zero shadow IT”: mówi o tym, co dało się zobaczyć ze sprawdzonych miejsc.
+
+### 24.4 Konsola menedżera
+
+- Na stronie głównej zdanie w prostym języku, np. „Atakujący z internetu widzi 3 rzeczy, o
+  których nie wiemy” (liczba z korelacji, zdanie z szablonu).
+- Na mapie i w karcie urządzenia oznaczenie „widoczne z internetu” oraz widok porównawczy
+  „od środka / z zewnątrz”.
+- Raport „W skrócie” po każdym skanie zewnętrznym (nowy rodzaj raportu `external_view`,
+  te same zasady co raporty z Etapu 4b: fakty liczy kod, model tylko je opisuje).
+
+### 24.5 Demo-lab i scenariusz demo 7
+
+- Osobna sieć `internet` z kontenerem Artemisa (profil `artemis`, opcjonalny ze względu na RAM).
+- Jedna zapomniana „subdomena” widoczna tylko z zewnątrz i jeden panel administracyjny błędnie
+  wystawiony.
+- Scenariusz demo 7 „Pełny obraz” pokazuje oba przypadki: `external_unknown` i
+  `internal_reachable`.
+
+### 24.6 Linia cięcia
+
+Jeśli zabraknie czasu: import z pliku (mock moje.cert.pl) i korelacja zamiast pełnej
+integracji Artemisa; `artemis_local`, `artemis_probe` z kanałem mTLS i narzędzie MCP
+`external_scan` trafiają do ROADMAP. Korelacji i oznaczenia perspektywy nie tniemy, bo to
+najważniejsza część modułu.
