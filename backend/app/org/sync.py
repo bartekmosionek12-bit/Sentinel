@@ -206,8 +206,9 @@ def sync_organization(
     )
 
     index = _Index(session)
-    # CMDB na końcu, żeby jego dział i właściciel wygrywały z wartościami z innych źródeł.
-    ordered = sorted(snapshot.devices, key=lambda d: d.source == AUTHORITATIVE)
+    # CMDB najpierw: tworzy zasób z właściwym typem, a jego dział, lokalizacja i właściciel
+    # wygrywają; pozostałe źródła tylko uzupełniają puste pola.
+    ordered = sorted(snapshot.devices, key=lambda d: d.source != AUTHORITATIVE)
     for record in ordered:
         asset = index.find(record)
         name = record.hostname or record.address or record.serial or "urządzenie bez nazwy"

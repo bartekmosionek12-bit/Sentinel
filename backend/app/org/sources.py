@@ -130,6 +130,7 @@ class MockDirectory:
                     c.get("type", "workstation"),
                     address=c.get("address"),
                     org_unit=c.get("org_unit"),
+                    user=c.get("user"),
                 )
                 for c in data.get("computers", [])
             ],

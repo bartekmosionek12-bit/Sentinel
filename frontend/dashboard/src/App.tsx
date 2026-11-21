@@ -1,7 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { NAV_GROUPS } from "@/navigation";
+import { DeviceCard } from "@/pages/DeviceCard";
+import { Devices, UnknownDevices } from "@/pages/Devices";
 import { Home } from "@/pages/Home";
+import { People } from "@/pages/People";
 import { TopFindings } from "@/pages/TopFindings";
 import { AppShell } from "@shared/components/AppShell";
 import { InboxPage, ReportPage, ReportsPage } from "@shared/components/ReportPages";
@@ -31,6 +34,10 @@ export function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/zagrozenia" element={<TopFindings />} />
+        <Route path="/urzadzenia" element={<Devices />} />
+        <Route path="/urzadzenia/:id" element={<DeviceCard />} />
+        <Route path="/nieznane" element={<UnknownDevices />} />
+        <Route path="/ludzie" element={<People />} />
         <Route path="/skrzynka" element={<InboxPage basePath="/raporty" />} />
         <Route path="/raporty" element={<ReportsPage basePath="/raporty" />} />
         <Route path="/raporty/:id" element={<ReportPage backTo="/skrzynka" />} />

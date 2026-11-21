@@ -699,6 +699,97 @@ export interface CredentialLease {
   revoked_by: string | null;
 }
 
+
+// --- organizacja (Etap 6, #18) ---
+
+export interface Coverage {
+  day: string;
+  assets_total: number;
+  unknown_devices: number;
+  open_findings: number;
+  critical_findings: number;
+  with_owner_pct: number;
+  scanned_recently_pct: number;
+  known_version_pct: number;
+}
+
+export interface OrgUnitSummary {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  devices: number;
+  unknown: number;
+  open_findings: number;
+  critical: number;
+  worst_level: RiskLevel | null;
+}
+
+export interface OrgOverview {
+  demo: boolean;
+  demo_label: string | null;
+  units: OrgUnitSummary[];
+  locations: { id: string; name: string; devices: number }[];
+  coverage: Coverage;
+  trend: Coverage[];
+  unassigned_devices: number;
+}
+
+export interface OrgPerson {
+  id: string;
+  pseudonym: string;
+  display_name: string;
+  job_title: string | null;
+  active: boolean;
+  left_at: string | null;
+}
+
+export interface OrgPeopleRow extends OrgPerson {
+  unit: string | null;
+  devices: number;
+}
+
+export interface Device {
+  id: string;
+  name: string;
+  type: string;
+  status: "active" | "missing" | "retired" | "shadow";
+  exposure: Exposure;
+  criticality: number;
+  unit: string | null;
+  unit_id: string | null;
+  location: string | null;
+  segment: string | null;
+  owners: OrgPerson[];
+  users: OrgPerson[];
+  sources: string[];
+  in_cmdb: boolean;
+  confirmed: boolean;
+  open_findings: number;
+  worst_level: RiskLevel | null;
+  max_score: number;
+  first_seen: string;
+  last_seen: string;
+  last_scan: string | null;
+}
+
+export interface DeviceList {
+  items: Device[];
+  total: number;
+  demo_label: string | null;
+}
+
+export interface DeviceFilter {
+  unit?: string;
+  unknown?: boolean;
+  pseudonyms?: boolean;
+}
+
+function query(params: Record<string, string | boolean | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== false);
+  if (!entries.length) return "";
+  return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
+}
+
 export const api = {
   health: () => request<Health>("/health"),
   me: () => request<Me>("/me"),
@@ -717,6 +808,8 @@ export const api = {
     }),
   stats: () => request<Stats>("/stats"),
   findings: (status: string) => request<Page<Finding>>(`/findings?status=${status}&limit=500`),
+  deviceFindings: (assetId: string) =>
+    request<Page<Finding>>(`/findings?status=active&asset_id=${assetId}&limit=100`),
   finding: (id: string) => request<FindingDetail>(`/findings/${id}`),
   updateFinding: (id: string, patch: FindingPatch) =>
     request<FindingDetail>(`/findings/${id}`, {
@@ -778,6 +871,13 @@ export const api = {
   inbox: () => request<Inbox>("/inbox"),
   downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
+  orgOverview: () => request<OrgOverview>("/org/overview"),
+  devices: (filter: DeviceFilter = {}) =>
+    request<DeviceList>(`/org/devices${query({ ...filter })}`),
+  device: (id: string, pseudonyms = false) =>
+    request<Device>(`/org/devices/${id}${query({ pseudonyms })}`),
+  people: (pseudonyms = false) => request<OrgPeopleRow[]>(`/org/people${query({ pseudonyms })}`),
+  confirmDevice: (id: string) => request<Device>(`/org/devices/${id}/confirm`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>
     request<{ task_id: string }>(`/reports/${id}/summary`, { method: "POST" }),

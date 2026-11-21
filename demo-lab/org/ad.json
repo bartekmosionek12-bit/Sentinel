@@ -245,175 +245,200 @@
    "hostname": "LT-1001",
    "type": "laptop",
    "address": "10.20.0.21",
-   "org_unit": "ou-it"
+   "org_unit": "ou-it",
+   "user": "S-1-5-21-DEMO-1101"
   },
   {
    "id": "CN=LT-1002",
    "hostname": "LT-1002",
    "type": "laptop",
    "address": "10.20.0.22",
-   "org_unit": "ou-www"
+   "org_unit": "ou-www",
+   "user": "S-1-5-21-DEMO-1102"
   },
   {
    "id": "CN=WS-1003",
    "hostname": "WS-1003",
    "type": "workstation",
    "address": "10.20.0.23",
-   "org_unit": "ou-www"
+   "org_unit": "ou-www",
+   "user": "S-1-5-21-DEMO-1103"
   },
   {
    "id": "CN=LT-1004",
    "hostname": "LT-1004",
    "type": "laptop",
    "address": "10.20.0.24",
-   "org_unit": "ou-app"
+   "org_unit": "ou-app",
+   "user": "S-1-5-21-DEMO-1104"
   },
   {
    "id": "CN=LT-1005",
    "hostname": "LT-1005",
    "type": "laptop",
    "address": "10.20.0.25",
-   "org_unit": "ou-app"
+   "org_unit": "ou-app",
+   "user": "S-1-5-21-DEMO-1105"
   },
   {
    "id": "CN=WS-1006",
    "hostname": "WS-1006",
    "type": "workstation",
    "address": "10.20.0.26",
-   "org_unit": "ou-app"
+   "org_unit": "ou-app",
+   "user": "S-1-5-21-DEMO-1106"
   },
   {
    "id": "CN=LT-1007",
    "hostname": "LT-1007",
    "type": "laptop",
    "address": "10.20.0.27",
-   "org_unit": "ou-ecom"
+   "org_unit": "ou-ecom",
+   "user": "S-1-5-21-DEMO-1107"
   },
   {
    "id": "CN=LT-1008",
    "hostname": "LT-1008",
    "type": "laptop",
    "address": "10.20.0.28",
-   "org_unit": "ou-ecom"
+   "org_unit": "ou-ecom",
+   "user": "S-1-5-21-DEMO-1108"
   },
   {
    "id": "CN=WS-1009",
    "hostname": "WS-1009",
    "type": "workstation",
    "address": "10.20.0.29",
-   "org_unit": "ou-db"
+   "org_unit": "ou-db",
+   "user": "S-1-5-21-DEMO-1109"
   },
   {
    "id": "CN=LT-1010",
    "hostname": "LT-1010",
    "type": "laptop",
    "address": "10.20.0.30",
-   "org_unit": "ou-db"
+   "org_unit": "ou-db",
+   "user": "S-1-5-21-DEMO-1110"
   },
   {
    "id": "CN=LT-1011",
    "hostname": "LT-1011",
    "type": "laptop",
    "address": "10.20.0.31",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1111"
   },
   {
    "id": "CN=WS-1012",
    "hostname": "WS-1012",
    "type": "workstation",
    "address": "10.20.0.32",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1112"
   },
   {
    "id": "CN=LT-1013",
    "hostname": "LT-1013",
    "type": "laptop",
    "address": "10.20.0.33",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1113"
   },
   {
    "id": "CN=LT-1014",
    "hostname": "LT-1014",
    "type": "laptop",
    "address": "10.20.0.34",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1114"
   },
   {
    "id": "CN=WS-1015",
    "hostname": "WS-1015",
    "type": "workstation",
    "address": "10.20.0.35",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1115"
   },
   {
    "id": "CN=LT-1016",
    "hostname": "LT-1016",
    "type": "laptop",
    "address": "10.30.0.36",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1116"
   },
   {
    "id": "CN=LT-1017",
    "hostname": "LT-1017",
    "type": "laptop",
    "address": "10.20.0.37",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1117"
   },
   {
    "id": "CN=WS-1018",
    "hostname": "WS-1018",
    "type": "workstation",
    "address": "10.30.0.38",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1118"
   },
   {
    "id": "CN=LT-1019",
    "hostname": "LT-1019",
    "type": "laptop",
    "address": "10.20.0.39",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1119"
   },
   {
    "id": "CN=LT-1020",
    "hostname": "LT-1020",
    "type": "laptop",
    "address": "10.30.0.40",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1120"
   },
   {
    "id": "CN=WS-1021",
    "hostname": "WS-1021",
    "type": "workstation",
    "address": "10.20.0.41",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1121"
   },
   {
    "id": "CN=LT-1022",
    "hostname": "LT-1022",
    "type": "laptop",
    "address": "10.30.0.42",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1122"
   },
   {
    "id": "CN=LT-1023",
    "hostname": "LT-1023",
    "type": "laptop",
    "address": "10.20.0.43",
-   "org_unit": "ou-bok"
+   "org_unit": "ou-bok",
+   "user": "S-1-5-21-DEMO-1123"
   },
   {
    "id": "CN=WS-1024",
    "hostname": "WS-1024",
    "type": "workstation",
    "address": "10.20.0.44",
-   "org_unit": "ou-it"
+   "org_unit": "ou-it",
+   "user": "S-1-5-21-DEMO-1124"
   },
   {
    "id": "CN=LT-1025",
    "hostname": "LT-1025",
    "type": "laptop",
    "address": "10.20.0.45",
-   "org_unit": "ou-fin"
+   "org_unit": "ou-fin",
+   "user": "S-1-5-21-DEMO-1125"
   }
  ]
 }

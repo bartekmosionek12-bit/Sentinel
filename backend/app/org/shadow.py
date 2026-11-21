@@ -106,6 +106,11 @@ def evaluate_shadow(
             ),
             "address": (asset.attributes or {}).get("address"),
         }
+        # Opis dla menedżera: dlaczego to ryzyko, a nie sama formuła.
+        breakdown = {
+            **risk.breakdown,
+            "summary": f"{risk.level.capitalize()}, bo: {evidence['summary']}",
+        }
         if finding is None:
             finding = Finding(
                 asset_id=asset.id,
@@ -113,7 +118,7 @@ def evaluate_shadow(
                 dedup_key=shadow_key(asset),
                 risk_score=risk.score,
                 risk_level=risk.level,
-                risk_breakdown=risk.breakdown,
+                risk_breakdown=breakdown,
                 evidence=evidence,
                 first_seen=now,
                 last_seen=now,
