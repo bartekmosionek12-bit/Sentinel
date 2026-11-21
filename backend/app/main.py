@@ -9,6 +9,7 @@ from app import __version__
 from app.api.agent import router as agent_router
 from app.api.assistant import router as assistant_router
 from app.api.auth import router as auth_router
+from app.api.discovery import router as discovery_router
 from app.api.explain import router as explain_router
 from app.api.iam import router as iam_router
 from app.api.reports import router as reports_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(threats_router)
     app.include_router(explain_router)
     app.include_router(scans_router)
+    app.include_router(discovery_router)
     app.include_router(reports_router)
     app.include_router(agent_router)
     app.include_router(assistant_router)

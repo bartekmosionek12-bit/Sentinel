@@ -11,6 +11,13 @@ from app.models.agent import (
     CredentialLease,
 )
 from app.models.base import Base
+from app.models.discovery import (
+    DefectDojoExport,
+    DiscoveryBatch,
+    DiscoveryRun,
+    Observation,
+    ObservationOverride,
+)
 from app.models.finding import Finding, FindingEvent, UpdateRecommendation
 from app.models.iam import CustomRole, Permission, Role, RoleGrant, RolePermission, User
 from app.models.inventory import (
@@ -51,6 +58,9 @@ __all__ = [
     "CpeProduct",
     "CredentialLease",
     "CustomRole",
+    "DefectDojoExport",
+    "DiscoveryBatch",
+    "DiscoveryRun",
     "FeedSync",
     "Finding",
     "FindingEvent",
@@ -58,6 +68,8 @@ __all__ = [
     "MatchCandidate",
     "NetworkSegment",
     "Notification",
+    "Observation",
+    "ObservationOverride",
     "Permission",
     "Report",
     "ReportDelivery",

@@ -170,6 +170,9 @@ class RecordingDispatcher:
     def execute_agent_task(self, task_id: uuid.UUID) -> str:
         return self._record("execute_agent_task", task_id)
 
+    def run_discovery(self, run_id: uuid.UUID) -> str:
+        return self._record("run_discovery", run_id)
+
     def run_agent_test(
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
     ) -> str:

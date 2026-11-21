@@ -57,6 +57,17 @@ def run_scan(trigger: str = "scheduled", actor: str = "system") -> dict[str, Any
         return {"scan_run_id": str(run.id), "status": run.status, "summary": run.summary}
 
 
+@celery_app.task(name="app.workers.tasks.scans.run_discovery")
+def run_discovery(run_id: str) -> dict[str, Any]:
+    from app.discovery.engine import DiscoveryConfig, DiscoveryEngine
+    from app.runtime import get_scope_guard
+
+    config = DiscoveryConfig.from_file(get_settings().rules_dir / "discovery.yaml")
+    with get_sessionmaker()() as session:
+        run = DiscoveryEngine(session, get_scope_guard(), config).run(uuid.UUID(run_id))
+        return {"run_id": run_id, "status": run.status, "hosts_up": run.hosts_up}
+
+
 @celery_app.task(name="app.workers.tasks.scans.approve_action")
 def approve_action(action_id: str, approved_by: str, reason: str) -> dict[str, Any]:
     with get_sessionmaker()() as session:

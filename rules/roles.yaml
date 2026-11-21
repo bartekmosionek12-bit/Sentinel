@@ -45,6 +45,7 @@ permissions:
   agent_test:read: {description: "Odczyt wyników testu bezpieczeństwa agenta"}
   agent_test:run: {description: "Uruchomienie testu bezpieczeństwa agenta", mfa: true}
   agent_test:override: {description: "Wymuszenie konfiguracji agenta mimo niezaliczonego testu (z uzasadnieniem)", mfa: true}
+  defectdojo:export: {description: "Eksport obserwacji do DefectDojo (findingi Info)", mfa: true}
   integrations:manage: {description: "Konfiguracja integracji (DefectDojo, kanały powiadomień)", mfa: true}
   iam:read: {description: "Odczyt użytkowników, ról i uprawnień"}
   iam:manage: {description: "Użytkownicy, role i uprawnienia (edytor ról)", mfa: true}
@@ -66,6 +67,7 @@ roles:
       - findings:update
       - reports:read
       - reports:export
+      - defectdojo:export
       - reports:generate
       - notifications:read
       - secrets:redacted:view

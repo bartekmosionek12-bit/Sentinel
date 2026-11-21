@@ -85,6 +85,7 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | `audit:export` |  | ✓ | · | · | · | Eksport dziennika audytu i dowodów |
 | `audit:read` |  | ✓ | · | · | · | Odczyt dziennika audytu |
 | `console:admin` | tak | ✓ | ✓ | ✓ | ✓ | Wejście do konsoli zespołu IT (/admin); odmowa trafia do audytu |
+| `defectdojo:export` | tak | ✓ | ✓ | · | · | Eksport obserwacji do DefectDojo (findingi Info) |
 | `explanations:generate` | tak | ✓ | ✓ | · | · | Zlecanie wyjaśnień modelowi lokalnemu |
 | `feeds:sync` | tak | ✓ | ✓ | · | · | Ręczna synchronizacja feedów |
 | `findings:read` |  | ✓ | ✓ | ✓ | ✓ | Odczyt zagrożeń, feedu i wyjaśnień |
@@ -140,6 +141,21 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/audit-log/verify` | `audit:read` | ✓ | · | · | · |
 | POST | `/api/auth/logout` | zalogowany | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/console/admin` | `console:admin` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/compare` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/compare/export` | `reports:export` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/defectdojo/export` | `defectdojo:export` | ✓ | ✓ | · | · |
+| GET | `/api/discovery/defectdojo/status` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/import` | `inventory:write` | ✓ | ✓ | · | · |
+| PUT | `/api/discovery/overrides/{ip}` | `findings:update` | ✓ | ✓ | ✓ | · |
+| GET | `/api/discovery/runs` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/runs` | `scan:run` | ✓ | ✓ | · | · |
+| GET | `/api/discovery/runs/{run_id}` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/runs/{run_id}/export` | `reports:export` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/runs/{run_id}/hosts` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/runs/{run_id}/stop` | `scan:run` | ✓ | ✓ | · | · |
+| GET | `/api/discovery/settings` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/discovery/states` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/targets/preview` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/explanations/jobs/{job_id}/events` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/feeds` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/feeds/sync` | `feeds:sync` | ✓ | ✓ | · | · |
