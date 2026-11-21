@@ -15,6 +15,10 @@ dashboard 15%, K5 fingerprinting i sygnatury 10%, K6 role i dane 10%.
 Każdy etap na osobnej gałęzi z PR do `main`, CI zielone przed scaleniem. Po etapie: co
 zrobione, jak przetestować, które wymagania z REQUIREMENTS.md zmieniły status.
 
+Każdy etap od P2 dostaje też narzędzie agenta dla swojego modułu (propozycja, zatwierdzenie
+przez `administrator` albo `editor`, wykonanie przez `mcp-scanner`), zgodnie z
+[ARCHITECTURE.md §0.10](ARCHITECTURE.md#010-współpraca-z-agentem).
+
 | Etap | Zakres | Wymagania | Kryt. | Issue |
 |---|---|---|---|---|
 | P0 | Analiza, macierz wymagań, plan (bez kodu) | wszystkie | – | – |

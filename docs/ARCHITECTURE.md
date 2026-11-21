@@ -76,7 +76,7 @@ zatwierdza. Każde aktywne działanie sieciowe przechodzi przez `scope_guard`.
 | `scope_guard`, poziomy L1–L3, limity, audit log z łańcuchem skrótów (§3) | brama dla każdego pakietu skanera, dowód ostrożności | K4 |
 | Keycloak, MFA, RBAC deny-by-default, test rola × endpoint (§4) | cztery role z briefu, edytor ról | K6 |
 | OpenBao (§6) | klucze do szyfrowania pól (Transit) i poświadczenia JIT agenta | K6 |
-| Serwer MCP, agent z planem i zatwierdzeniem, kill switch, test bezpieczeństwa agenta (§5, §23) | agent tylko skanuje i pisze raporty; test endpointu (D10) | K4 |
+| Serwer MCP, agent z planem i zatwierdzeniem, kill switch, test bezpieczeństwa agenta (§5, §23) | agent jako współpracownik zespołu: proponuje, wykonuje po zgodzie, raportuje (§0.10); test endpointu (D10) | K4 |
 | Adapter nmap, parser nmap XML, inwentarz z historią (§8) | rdzeń discovery do przebudowy na paczki i równoległość | K1 |
 | Import CSV, matching CVE, scoring, feedy offline (§9, §10) | wzbogacenie obserwacji (np. „stary komponent”), nie rdzeń | K5 |
 | Konsola operacyjna (`frontend/admin`) | **jedyna konsola**, dla zespołu IT/bezpieczeństwa | K4 |
@@ -183,6 +183,31 @@ banery i ciasteczka, hosty włączające się i wyłączające cyklicznie, usłu
 między przebiegami, oraz pustą przestrzeń adresową > 10 000 IP do testu skali. Po otrzymaniu
 zasobów: profil Compose organizatora, dostosowanie parserów, test precyzji i czułości względem
 wyników referencyjnych (`docs/VALIDATION.md`).
+
+### 0.10 Współpraca z agentem
+
+Zakres pracy wyznacza brief, a sposób pracy zostaje ten, który mieliśmy od początku: zespół
+bezpieczeństwa pracuje razem z agentem. Agent przygotowuje propozycje i wykonuje je dopiero po
+zatwierdzeniu, a człowiek decyduje. Zasada „plan, zatwierdzenie, wykonanie” z §5 obowiązuje w
+każdym module. Każde narzędzie agenta to narzędzie serwera MCP z polityką, `scope_guard` i wpisem
+w audycie.
+
+| Moduł | Co robi agent | Co robi człowiek (`administrator` albo `editor`) |
+|---|---|---|
+| D1 cele | z opisu („sieć serwerowa B, bez drukarek”) proponuje listę celów; kod waliduje i deduplikuje | zatwierdza listę, która trafia do zakresu |
+| D2 discovery | proponuje plan przebiegu: zakres, paczki, techniki, limity tempa (z mierzonej szybkości); wykonuje go przez `mcp-scanner` | zatwierdza plan; kill switch zatrzymuje wszystko |
+| D3 harmonogram | proponuje okno i częstotliwość na podstawie profilu dostępności | zatwierdza harmonogram |
+| D4 fingerprinting | wyjaśnia technologię i dowody, wskazuje panele i staging do weryfikacji (tylko GET/HEAD) | potwierdza albo poprawia (nadpisanie) |
+| D5 sygnatury | proponuje sygnaturę z obserwacji; walidator bezpieczeństwa ją sprawdza | testuje na hoście i zatwierdza |
+| D6 zmiany | streszcza różnice między przebiegami, wskazuje niestabilne hosty i proponuje powtórny pomiar | zatwierdza powtórzenie, ustala priorytet |
+| D7 DefectDojo | przygotowuje paczkę eksportu (findingi „Info” z dowodami) | zatwierdza eksport ręczny; automatyczny ustawia administrator |
+| D9 dashboard | pisze raport z przebiegu (fakty z bazy) | czyta, poprawia, publikuje |
+| D10 testy AI | test wskazanego endpointu na poziomie L3 | zgoda na L3 |
+
+Propozycje agenta do danych (tagi, priorytet, poprawiona technologia) trafiają do warstwy
+nadpisań dopiero po akceptacji człowieka, z autorem „agent, zatwierdził X”. Sentek w konsoli
+zespołu IT odpowiada z bazy i przekazuje prośby o skan lub zmianę jako zadania agenta do
+zatwierdzenia. Agent nigdy nie zatwierdza własnych propozycji i nie widzi poświadczeń.
 
 ---
 
