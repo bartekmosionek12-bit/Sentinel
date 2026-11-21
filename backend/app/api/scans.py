@@ -8,6 +8,7 @@ import io
 import json
 import uuid
 from typing import Annotated, Any, TypedDict
+from xml.etree import ElementTree
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
@@ -19,6 +20,7 @@ from app.core.scope_guard import Intrusiveness, ScopeError
 from app.iam.deps import AuditSinkDep, ensure, require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
+from app.integrations.defectdojo import DefectDojoClient, DefectDojoError
 from app.inventory.service import host_asset, record_host_scan
 from app.models import ScanAction, ScanResultOverride, ScanRun, ScanTarget
 from app.models.base import utcnow
@@ -29,6 +31,77 @@ from app.scans.service import ScanActionError, ScanService
 from app.scans.targets import parse_targets, validate_target
 
 router = APIRouter(prefix="/api", tags=["skany"], route_class=RedactingRoute)
+
+
+@router.get("/defectdojo/status", dependencies=[Depends(require("integrations:manage"))])
+def defectdojo_status() -> dict[str, object]:
+    try:
+        client = DefectDojoClient()
+        client.validate_profile()
+    except DefectDojoError as error:
+        return {"connected": False, "detail": str(error)}
+    return {"connected": True, "detail": "Lokalne API DefectDojo gotowe"}
+
+
+class DojoSelection(BaseModel):
+    run_id: uuid.UUID
+    selected: list[dict[str, str]] = Field(min_length=1, max_length=50)
+
+
+@router.post("/defectdojo/export", dependencies=[Depends(require("integrations:manage"))])
+def export_defectdojo(payload: DojoSelection, session: SessionDep) -> dict[str, object]:
+    run = session.get(ScanRun, payload.run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
+    try:
+        client = DefectDojoClient()
+        client.validate_profile()
+        snapshot = _merged_snapshot(session, run)
+        created = duplicates = 0
+        for selected in payload.selected:
+            host = selected.get("host", "")
+            kind = selected.get("kind", "")
+            flags = snapshot.get(host, {}).get("flags") or []
+            flag = next((item for item in flags if item.get("kind") == kind), None)
+            if flag is None:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, "Nie znaleziono obserwacji"
+                )
+            result = client.export_flag(host, flag)
+            created += result == "created"
+            duplicates += result == "duplicate"
+    except DefectDojoError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+    return {"created": created, "duplicates": duplicates}
+
+
+@router.get("/scan-results/{run_id}/nmap.xml", dependencies=[Depends(require("scan:read"))])
+def export_nmap_xml(
+    run_id: uuid.UUID,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require("scan:read"))],
+) -> Response:
+    if not principal.can("secrets:redacted:view"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Eksport XML wymaga pełnego wglądu")
+    run = session.get(ScanRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
+    root = ElementTree.Element("nmaprun", scanner="nmap", version="sentinel-export")
+    for ip, info in _merged_snapshot(session, run).items():
+        host = ElementTree.SubElement(root, "host")
+        ElementTree.SubElement(host, "status", state="up")
+        ElementTree.SubElement(host, "address", addr=ip, addrtype="ipv6" if ":" in ip else "ipv4")
+        ports = ElementTree.SubElement(host, "ports")
+        for raw in info.get("services", []):
+            protocol, port, product, version = (str(raw).split(":", 3) + [""] * 4)[:4]
+            item = ElementTree.SubElement(ports, "port", protocol=protocol, portid=port)
+            ElementTree.SubElement(item, "state", state="open")
+            ElementTree.SubElement(item, "service", name=product, product=product, version=version)
+    return Response(
+        ElementTree.tostring(root, encoding="unicode"),
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=sentinel-nmap.xml"},
+    )
 
 
 class TargetsIn(BaseModel):

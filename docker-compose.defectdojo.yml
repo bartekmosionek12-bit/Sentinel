@@ -1,0 +1,122 @@
+# Lokalny profil DefectDojo. Uruchom razem z docker-compose.yml i --profile defectdojo.
+# Układ usług i entrypointy według oficjalnego docker-compose.yml DefectDojo.
+x-dd-env: &dd-env
+  DD_DATABASE_URL: postgresql://defectdojo:${DD_DB_PASSWORD:?Ustaw DD_DB_PASSWORD}@defectdojo-db:5432/defectdojo
+  DD_CELERY_BROKER_URL: redis://defectdojo-valkey:6379/0
+  DD_CACHE_URL: redis://defectdojo-valkey:6379/1
+  DD_SECRET_KEY: ${DD_SECRET_KEY:?Ustaw DD_SECRET_KEY}
+  DD_CREDENTIAL_AES_256_KEY: ${DD_CREDENTIAL_AES_256_KEY:?Ustaw DD_CREDENTIAL_AES_256_KEY}
+  DD_DATABASE_READINESS_TIMEOUT: "60"
+
+services:
+  api:
+    environment:
+      DEFECTDOJO_URL: http://defectdojo-nginx:8080
+      DEFECTDOJO_API_TOKEN: ${DEFECTDOJO_API_TOKEN:-}
+      DEFECTDOJO_PRODUCT_ID: ${DEFECTDOJO_PRODUCT_ID:-}
+      DEFECTDOJO_ENGAGEMENT_ID: ${DEFECTDOJO_ENGAGEMENT_ID:-}
+      DEFECTDOJO_TEST_ID: ${DEFECTDOJO_TEST_ID:-}
+    networks:
+      - core
+      - llm
+      - vault
+      - defectdojo
+
+  defectdojo-db:
+    profiles: [defectdojo]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: defectdojo
+      POSTGRES_USER: defectdojo
+      POSTGRES_PASSWORD: ${DD_DB_PASSWORD:?Ustaw DD_DB_PASSWORD}
+    volumes:
+      - defectdojo-db-data:/var/lib/postgresql/data
+    networks: [defectdojo]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defectdojo"]
+      interval: 5s
+      retries: 30
+
+  defectdojo-valkey:
+    profiles: [defectdojo]
+    image: valkey/valkey:9.1.2-alpine
+    networks: [defectdojo]
+
+  defectdojo-init:
+    profiles: [defectdojo]
+    image: defectdojo/defectdojo-django:latest
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-initializer.sh"]
+    environment:
+      <<: *dd-env
+      DD_ADMIN_USER: admin
+      DD_ADMIN_MAIL: admin@defectdojo.local
+      DD_INITIALIZE: "true"
+    depends_on:
+      defectdojo-db:
+        condition: service_healthy
+    networks: [defectdojo]
+
+  defectdojo-uwsgi:
+    profiles: [defectdojo]
+    image: defectdojo/defectdojo-django:latest
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-uwsgi.sh"]
+    environment:
+      <<: *dd-env
+      DD_ALLOWED_HOSTS: defectdojo-nginx,localhost,127.0.0.1
+    volumes:
+      - defectdojo-media:/app/media
+    depends_on:
+      defectdojo-init:
+        condition: service_completed_successfully
+      defectdojo-valkey:
+        condition: service_started
+    networks: [defectdojo]
+
+  defectdojo-worker:
+    profiles: [defectdojo]
+    image: defectdojo/defectdojo-django:latest
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-celery-worker.sh"]
+    environment:
+      <<: *dd-env
+    depends_on:
+      defectdojo-init:
+        condition: service_completed_successfully
+      defectdojo-valkey:
+        condition: service_started
+    networks: [defectdojo]
+
+  defectdojo-beat:
+    profiles: [defectdojo]
+    image: defectdojo/defectdojo-django:latest
+    entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-celery-beat.sh"]
+    environment:
+      <<: *dd-env
+    depends_on:
+      defectdojo-init:
+        condition: service_completed_successfully
+      defectdojo-valkey:
+        condition: service_started
+    networks: [defectdojo]
+
+  defectdojo-nginx:
+    profiles: [defectdojo]
+    image: defectdojo/defectdojo-nginx:latest
+    environment:
+      DD_UWSGI_HOST: defectdojo-uwsgi
+      DD_UWSGI_PORT: "3031"
+    depends_on:
+      defectdojo-uwsgi:
+        condition: service_started
+    volumes:
+      - defectdojo-media:/usr/share/nginx/html/media
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks: [defectdojo]
+
+networks:
+  defectdojo:
+    internal: true
+
+volumes:
+  defectdojo-db-data:
+  defectdojo-media:

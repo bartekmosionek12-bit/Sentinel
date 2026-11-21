@@ -26,6 +26,7 @@ ALLOWED: dict[str, set[str]] = {
         # Etap 5: adapter WWW przyjmuje ScopedTarget; OpenBao i token agenta to stałe adresy
         # usług wewnętrznych; brama agenta łączy się wyłącznie z serwerem MCP.
         "scanners/http_probe.py",
+        "integrations/defectdojo.py",  # tylko lokalny host Compose, sprawdzany przez klienta
         "credentials/openbao.py",
         "agent/gateway.py",
         # Kill switch: admin API Keycloaka i OpenBao, tylko adresy usług wewnętrznych

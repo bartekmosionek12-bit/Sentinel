@@ -4,22 +4,27 @@ COPY package.json package-lock.json ./
 COPY admin/package.json admin/
 COPY dashboard/package.json dashboard/
 COPY shared/package.json shared/
-RUN npm ci
+RUN --mount=type=secret,id=proxy_ca,required=false \
+    if [ -f /run/secrets/proxy_ca ]; then \
+      cp /run/secrets/proxy_ca /tmp/proxy-ca.crt; \
+      NODE_EXTRA_CA_CERTS=/tmp/proxy-ca.crt npm ci; \
+      rm /tmp/proxy-ca.crt; \
+    else \
+      npm ci; \
+    fi
 COPY . .
 RUN npm run build
 
-# nginx z pakietów Alpine zamiast obrazu nginxinc: obraz nginxinc przypina wersję pakietu
-# nginx, więc `apk upgrade` nie dociąga poprawek bezpieczeństwa wydanych po jego zbudowaniu.
-# Minimalna wersja poniżej sprawia, że build się nie uda, zanim poprawka trafi do Alpine.
-FROM alpine:3.24
-RUN apk upgrade --no-cache \
-    && apk add --no-cache 'nginx>=1.30.7-r0' \
-    && rm -f /etc/nginx/http.d/default.conf
+# Aktualny obraz mainline nginx; brak zależności od repozytorium APK podczas buildu.
+FROM nginx:mainline-alpine
+RUN rm -f /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY site.conf /etc/nginx/sentinel/site.conf
 # Dwie aplikacje pod jednym nginx: konsola operacyjna i dashboard menedżera.
 COPY --from=build /src/admin/dist /usr/share/nginx/html/admin
 COPY --from=build /src/dashboard/dist /usr/share/nginx/html/dashboard
+RUN chmod a+r /etc/nginx/nginx.conf /etc/nginx/sentinel/site.conf \
+    && chmod -R a+rX /usr/share/nginx/html
 USER nginx
 EXPOSE 8080
 CMD ["nginx", "-e", "stderr", "-g", "daemon off;"]

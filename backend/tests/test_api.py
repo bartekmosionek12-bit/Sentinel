@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.inventory.service import asset_fingerprint
 from app.models import Asset
+from app.scanners.nmap import parse_nmap_xml
 
 
 def test_openapi_is_served(client: TestClient) -> None:
@@ -73,6 +74,9 @@ def test_scan_targets_and_result_import_export_override(client: TestClient) -> N
     assert data["manually_changed"]
     assert data["note"] == "Sprawdzone ręcznie"
     assert client.get(f"/api/scan-results/{run_id}/export?format=csv").status_code == 200
+    xml = client.get(f"/api/scan-results/{run_id}/nmap.xml")
+    assert xml.status_code == 200
+    assert parse_nmap_xml(xml.text)[0].ip == "10.10.0.5"
 
 
 def test_asset_creation_is_audited(client: TestClient) -> None:

@@ -234,6 +234,7 @@ export function Scans() {
   const [targetFormat, setTargetFormat] = useState<"manual" | "csv" | "json">("manual");
   const [overrideHost, setOverrideHost] = useState("");
   const [overrideNote, setOverrideNote] = useState("");
+  const [dojoSelected, setDojoSelected] = useState<string[]>([]);
   const runs = useQuery({
     queryKey: ["scans"],
     queryFn: api.scans,
@@ -253,6 +254,8 @@ export function Scans() {
   const latestId = runs.data?.[0]?.id || "";
   const latestResults = useQuery({queryKey: ["scan-results", latestId], queryFn: () => api.scanResults(latestId), enabled: Boolean(latestId)});
   const saveOverride = useMutation({mutationFn: () => api.overrideScanResult(overrideHost, "note", overrideNote), onSuccess: () => void queryClient.invalidateQueries({queryKey: ["scan-results"]})});
+  const dojoStatus = useQuery({queryKey: ["defectdojo-status"], queryFn: api.defectdojoStatus, refetchInterval: 30_000});
+  const dojoExport = useMutation({mutationFn: () => api.exportDefectdojo(latestId, dojoSelected.map((key) => {const [host = "", kind = ""] = key.split("|"); return {host, kind};}))});
   const awaiting = useQuery({
     queryKey: ["scan-actions", "awaiting_approval"],
     queryFn: () => api.scanActions("awaiting_approval"),
@@ -297,6 +300,13 @@ export function Scans() {
       {latestResults.data && <Card className="mb-6"><CardHeader><CardTitle>Edycja wyniku</CardTitle></CardHeader><CardContent className="space-y-2">
         <div className="flex flex-wrap gap-2"><Select aria-label="Host wyniku" value={overrideHost} onChange={(event) => setOverrideHost(event.target.value)}><option value="">Wybierz host</option>{Object.keys(latestResults.data.hosts).map((host) => <option key={host}>{host}</option>)}</Select><Input aria-label="Notatka ręczna" value={overrideNote} onChange={(event) => setOverrideNote(event.target.value)} placeholder="Notatka do wyniku" /><Button disabled={!overrideHost} onClick={() => saveOverride.mutate()}>Zapisz nadpisanie</Button></div>
         {Object.entries(latestResults.data.hosts).filter(([, host]) => host.manually_changed).map(([ip, host]) => <p key={ip}>{ip}: {host.note} (zmienione ręcznie)</p>)}
+      </CardContent></Card>}
+      {latestResults.data && <Card className="mb-6"><CardHeader><CardTitle>DefectDojo lokalnie</CardTitle></CardHeader><CardContent className="space-y-2">
+        <p>{dojoStatus.data?.connected ? "Połączony" : `Niedostępny: ${dojoStatus.data?.detail ?? "sprawdzanie"}`}</p>
+        {Object.entries(latestResults.data.hosts).flatMap(([host, info]) => (info.flags ?? []).map((flag) => {const key = `${host}|${flag.kind}`; return <label className="block" key={key}><input type="checkbox" checked={dojoSelected.includes(key)} onChange={(event) => setDojoSelected(event.target.checked ? [...dojoSelected, key] : dojoSelected.filter((item) => item !== key))} /> {host}: {flag.kind} (dowody: {flag.confidence})</label>;}))}
+        <div className="flex gap-2"><Button disabled={!dojoStatus.data?.connected || dojoSelected.length === 0} onClick={() => dojoExport.mutate()}>Eksportuj wybrane</Button><Button onClick={() => void api.downloadNmapXml(latestId)}>Pobierz nmap XML</Button></div>
+        {dojoExport.data && <p role="status">Dodano: {dojoExport.data.created}, pominięto duplikaty: {dojoExport.data.duplicates}.</p>}
+        {dojoExport.error && <p role="alert">{dojoExport.error.message}</p>}
       </CardContent></Card>}
       {(runs.data?.length ?? 0) >= 2 && (
         <Card className="mb-6">
