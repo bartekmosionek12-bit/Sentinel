@@ -29,7 +29,16 @@ from app.core.scope_guard import (
 from app.feeds.base import as_utc
 from app.inventory.service import record_discovery, record_host_scan
 from app.matching.engine import ACTIVE_STATUSES
-from app.models import Asset, AssetHistory, Finding, ScanAction, ScanRun, Software, Vulnerability
+from app.models import (
+    Asset,
+    AssetHistory,
+    Finding,
+    ScanAction,
+    ScanRun,
+    ScanTarget,
+    Software,
+    Vulnerability,
+)
 from app.models.base import utcnow
 from app.notifications.channels import Sender
 from app.pipeline import AnalysisReport, Rulebook, analyze
@@ -89,15 +98,45 @@ class ScanService:
         totals: Counter[str] = Counter()
 
         host_facts: list[HostFact] = []
-        cidrs = [str(n) for n in self._guard.config.allowed_cidrs]
+        configured = session.scalars(select(ScanTarget)).all()
+        cidrs: list[str] = []
+        domain_names: dict[str, str] = {}
+        target_errors: list[str] = []
+        for item in configured:
+            if item.kind == "domain":
+                try:
+                    scoped = self._guard.authorize(
+                        item.target,
+                        tool="nmap",
+                        intrusiveness=Intrusiveness.LIGHT,
+                        rule_name="target_resolution",
+                    )
+                    domain_names[scoped.address] = item.target
+                    cidrs.append(f"{scoped.address}/{scoped.ip.max_prefixlen}")
+                except ScopeError as error:
+                    target_errors.append(str(error))
+            else:
+                cidrs.append(
+                    item.target
+                    if item.kind == "cidr"
+                    else f"{item.target}/{128 if ':' in item.target else 32}"
+                )
+        if not configured:
+            cidrs = [str(n) for n in self._guard.config.allowed_cidrs]
+        cidrs = list(dict.fromkeys(cidrs))
         run.summary = {
-            "total_addresses": sum(n.num_addresses for n in self._guard.config.allowed_cidrs),
+            "total_addresses": sum(ip_network(n).num_addresses for n in cidrs),
             "addresses_done": 0,
             "eta_seconds": None,
         }
         session.commit()
         for planned in self._rulebook.planner.sweep_actions(cidrs):
             host_facts += self._discover(run, planned, totals)
+
+        for ip, name in domain_names.items():
+            asset = session.scalar(select(Asset).where(Asset.fingerprint == f"host:{ip}"))
+            if asset is not None and asset.status == "shadow":
+                asset.name = name
 
         for planned in self._rulebook.planner.host_actions(host_facts):
             self._scan_services(self._new_action(run, planned), totals)
@@ -119,6 +158,7 @@ class ScanService:
             **report.summary(),
             "actions": dict(statuses),
             "note": "" if cidrs else "Zakres jest pusty, więc nic nie zostało zeskanowane",
+            "target_errors": target_errors,
             "snapshot": self._snapshot(run.id),
         }
         run.status = "done"

@@ -35,7 +35,9 @@ from app.models.ops import (
     Notification,
     ScanAction,
     ScanRequest,
+    ScanResultOverride,
     ScanRun,
+    ScanTarget,
 )
 from app.models.organization import (
     AssetAssignment,
@@ -87,7 +89,9 @@ __all__ = [
     "RolePermission",
     "ScanAction",
     "ScanRequest",
+    "ScanResultOverride",
     "ScanRun",
+    "ScanTarget",
     "SignalMatch",
     "Software",
     "UpdateRecommendation",

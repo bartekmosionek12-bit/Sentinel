@@ -926,6 +926,13 @@ export const api = {
   scans: () => request<ScanRun[]>("/scans?limit=5"),
   scanDiff: (from: string, to: string) => request<ScanChange[]>(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`),
   downloadScanDiff: (from: string, to: string, format: "json" | "csv") => download(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`, `scan-diff.${format}`),
+  previewScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]}>("/scan-targets/preview", {method: "POST", body: JSON.stringify({text, format})}),
+  saveScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]; added: number}>("/scan-targets", {method: "POST", body: JSON.stringify({text, format})}),
+  scanTargets: () => request<{target: string; kind: string}[]>("/scan-targets"),
+  importScanResults: (text: string, format: "json" | "csv" | "xml") => request<{run_id: string; hosts: number}>("/scan-results/import", {method: "POST", body: JSON.stringify({text, format})}),
+  scanResults: (id: string) => request<{run_id: string; hosts: Record<string, {name: string; note?: string; state: string; manually_changed?: boolean}>}>(`/scan-results/${id}`),
+  overrideScanResult: (host: string, field: "name" | "note" | "state", value: string) => request<{host: string; field: string; manually_changed: boolean}>("/scan-results/override", {method: "POST", body: JSON.stringify({host, field, value})}),
+  downloadScanResults: (id: string, format: "json" | "csv") => download(`/scan-results/${id}/export?format=${format}`, `scan-results.${format}`),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>

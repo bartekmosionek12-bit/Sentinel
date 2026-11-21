@@ -230,6 +230,10 @@ export function Scans() {
   const queryClient = useQueryClient();
   const [fromRun, setFromRun] = useState("");
   const [toRun, setToRun] = useState("");
+  const [targetText, setTargetText] = useState("");
+  const [targetFormat, setTargetFormat] = useState<"manual" | "csv" | "json">("manual");
+  const [overrideHost, setOverrideHost] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
   const runs = useQuery({
     queryKey: ["scans"],
     queryFn: api.scans,
@@ -242,6 +246,13 @@ export function Scans() {
     queryFn: () => api.scanDiff(from, to),
     enabled: Boolean(from && to && from !== to),
   });
+  const targets = useQuery({queryKey: ["scan-targets"], queryFn: api.scanTargets});
+  const previewTargets = useMutation({mutationFn: () => api.previewScanTargets(targetText, targetFormat)});
+  const saveTargets = useMutation({mutationFn: () => api.saveScanTargets(targetText, targetFormat), onSuccess: () => void queryClient.invalidateQueries({queryKey: ["scan-targets"]})});
+  const importResults = useMutation({mutationFn: ({text, format}: {text: string; format: "json" | "csv" | "xml"}) => api.importScanResults(text, format), onSuccess: () => void queryClient.invalidateQueries({queryKey: ["scans"]})});
+  const latestId = runs.data?.[0]?.id || "";
+  const latestResults = useQuery({queryKey: ["scan-results", latestId], queryFn: () => api.scanResults(latestId), enabled: Boolean(latestId)});
+  const saveOverride = useMutation({mutationFn: () => api.overrideScanResult(overrideHost, "note", overrideNote), onSuccess: () => void queryClient.invalidateQueries({queryKey: ["scan-results"]})});
   const awaiting = useQuery({
     queryKey: ["scan-actions", "awaiting_approval"],
     queryFn: () => api.scanActions("awaiting_approval"),
@@ -266,6 +277,27 @@ export function Scans() {
         description="Co zostało zeskanowane, która reguła o tym zdecydowała i jaką decyzję podjęła kontrola zakresu. Plan układa deterministyczny silnik reguł (rules/scan_rules.yaml)."
       />
       <ScanRequests requests={requests.data ?? []} />
+      <Card className="mb-6">
+        <CardHeader><CardTitle>Cele skanowania</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm">Wpisz IP, CIDR lub domenę, po jednym celu w wierszu. Cele muszą mieścić się w dozwolonym zakresie.</p>
+          <textarea className="w-full rounded border p-2" rows={3} value={targetText} onChange={(event) => {setTargetText(event.target.value); setTargetFormat("manual");}} aria-label="Cele skanowania" />
+          <input type="file" accept=".csv,.json" aria-label="Plik celów CSV lub JSON" onChange={(event) => {const file = event.target.files?.[0]; if (file) void file.text().then((text) => {setTargetText(text); setTargetFormat(file.name.endsWith(".json") ? "json" : "csv");});}} />
+          <div className="flex gap-2"><Button onClick={() => previewTargets.mutate()} disabled={!targetText}>Podgląd</Button><Button onClick={() => saveTargets.mutate()} disabled={!targetText}>Dodaj cele</Button></div>
+          {previewTargets.data && <p className="text-sm">Poprawne: {previewTargets.data.targets.map((item) => item.target).join(", ") || "brak"}. Błędy: {previewTargets.data.errors.join("; ") || "brak"}.</p>}
+          {saveTargets.data && <p role="status">Dodano: {saveTargets.data.added}. Błędy: {saveTargets.data.errors.join("; ") || "brak"}.</p>}
+          <p className="text-sm">Zapisane cele: {targets.data?.map((item) => item.target).join(", ") || "brak — skan całego zakresu"}</p>
+        </CardContent>
+      </Card>
+      <Card className="mb-6"><CardHeader><CardTitle>Import wyników</CardTitle></CardHeader><CardContent className="space-y-2">
+        <input type="file" accept=".json,.csv,.xml" aria-label="Wyniki JSON CSV lub nmap XML" onChange={(event) => {const file = event.target.files?.[0]; if (file) void file.text().then((text) => importResults.mutate({text, format: file.name.endsWith(".xml") ? "xml" : file.name.endsWith(".csv") ? "csv" : "json"}));}} />
+        {importResults.data && <p role="status">Zaimportowano {importResults.data.hosts} hostów.</p>}
+        {importResults.error && <p role="alert">{importResults.error.message}</p>}
+      </CardContent></Card>
+      {latestResults.data && <Card className="mb-6"><CardHeader><CardTitle>Edycja wyniku</CardTitle></CardHeader><CardContent className="space-y-2">
+        <div className="flex flex-wrap gap-2"><Select aria-label="Host wyniku" value={overrideHost} onChange={(event) => setOverrideHost(event.target.value)}><option value="">Wybierz host</option>{Object.keys(latestResults.data.hosts).map((host) => <option key={host}>{host}</option>)}</Select><Input aria-label="Notatka ręczna" value={overrideNote} onChange={(event) => setOverrideNote(event.target.value)} placeholder="Notatka do wyniku" /><Button disabled={!overrideHost} onClick={() => saveOverride.mutate()}>Zapisz nadpisanie</Button></div>
+        {Object.entries(latestResults.data.hosts).filter(([, host]) => host.manually_changed).map(([ip, host]) => <p key={ip}>{ip}: {host.note} (zmienione ręcznie)</p>)}
+      </CardContent></Card>}
       {(runs.data?.length ?? 0) >= 2 && (
         <Card className="mb-6">
           <CardHeader><CardTitle>Porównaj dwa przebiegi</CardTitle></CardHeader>
@@ -327,6 +359,7 @@ export function Scans() {
                       run.summary.findings_created ?? 0,
                     )}, powiadomienia: ${String(run.summary.notifications ?? 0)}.`}
               </CardDescription>
+              <div className="flex gap-2"><Button onClick={() => void api.downloadScanResults(run.id, "json")}>Eksport JSON</Button><Button onClick={() => void api.downloadScanResults(run.id, "csv")}>Eksport CSV</Button></div>
             </CardHeader>
             {run.actions.length > 0 && (
               <Table>

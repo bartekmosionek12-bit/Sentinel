@@ -2,26 +2,209 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import io
 import json
 import uuid
-from typing import Annotated
+from typing import Annotated, Any, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DispatcherDep, RulebookDep, ScopeGuardDep, SessionDep
 from app.api.schemas import ApprovalIn, ScanActionOut, ScanRunOut, TaskOut
-from app.core.scope_guard import Intrusiveness
+from app.core.scope_guard import Intrusiveness, ScopeError
 from app.iam.deps import AuditSinkDep, ensure, require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
-from app.models import ScanAction, ScanRun
+from app.inventory.service import host_asset, record_host_scan
+from app.models import ScanAction, ScanResultOverride, ScanRun, ScanTarget
+from app.models.base import utcnow
+from app.scanners.runner import ToolError
 from app.scans.diff import compare_runs
+from app.scans.result_io import parse_results
 from app.scans.service import ScanActionError, ScanService
+from app.scans.targets import parse_targets, validate_target
 
 router = APIRouter(prefix="/api", tags=["skany"], route_class=RedactingRoute)
+
+
+class TargetsIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2_000_000)
+    format: str = Field(pattern="^(manual|csv|json)$")
+
+
+class TargetItem(TypedDict):
+    target: str
+    kind: str
+
+
+class TargetPreview(TypedDict):
+    targets: list[TargetItem]
+    errors: list[str]
+
+
+def _target_preview(payload: TargetsIn, guard: ScopeGuardDep) -> TargetPreview:
+    try:
+        raw = parse_targets(payload.text, payload.format)
+    except (ValueError, csv.Error) as error:
+        return {"targets": [], "errors": [str(error)]}
+    targets: list[TargetItem] = []
+    errors: list[str] = []
+    for index, value in enumerate(raw, start=1):
+        try:
+            normalized, kind = validate_target(value, guard)
+            targets.append({"target": normalized, "kind": kind})
+        except (ValueError, ScopeError) as error:
+            errors.append(f"Cel {index}: {error}")
+    return {"targets": targets, "errors": errors}
+
+
+@router.post("/scan-targets/preview", dependencies=[Depends(require("scan:run"))])
+def preview_scan_targets(payload: TargetsIn, guard: ScopeGuardDep) -> TargetPreview:
+    return _target_preview(payload, guard)
+
+
+@router.get("/scan-targets", dependencies=[Depends(require("scan:read"))])
+def list_scan_targets(session: SessionDep) -> list[dict[str, str]]:
+    return [
+        {"target": row.target, "kind": row.kind}
+        for row in session.scalars(select(ScanTarget).order_by(ScanTarget.target))
+    ]
+
+
+@router.post("/scan-targets", dependencies=[Depends(require("scan:run"))])
+def save_scan_targets(
+    payload: TargetsIn, guard: ScopeGuardDep, session: SessionDep
+) -> dict[str, object]:
+    preview = _target_preview(payload, guard)
+    added = 0
+    for item in preview["targets"]:
+        if session.scalar(select(ScanTarget.id).where(ScanTarget.target == item["target"])):
+            continue
+        session.add(ScanTarget(target=item["target"], kind=item["kind"]))
+        added += 1
+    session.commit()
+    return {**preview, "added": added}
+
+
+class ResultsIn(BaseModel):
+    text: str = Field(min_length=1, max_length=5_000_000)
+    format: str = Field(pattern="^(json|csv|xml)$")
+
+
+@router.post("/scan-results/import", dependencies=[Depends(require("scan:run"))])
+def import_scan_results(
+    payload: ResultsIn, session: SessionDep, guard: ScopeGuardDep, rulebook: RulebookDep
+) -> dict[str, object]:
+    try:
+        hosts = parse_results(payload.text, payload.format)
+    except (ValueError, TypeError, ToolError, csv.Error, json.JSONDecodeError) as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    run = ScanRun(trigger="import", status="done", finished_at=utcnow())
+    session.add(run)
+    session.flush()
+    for host in hosts:
+        asset = host_asset(session, host.ip, host.hostname)
+        record_host_scan(session, asset, host, run.id)
+        asset.attributes = {
+            **asset.attributes,
+            "last_seen_run": str(run.id),
+            "reachability": "unconfirmed",
+        }
+    run.summary = {
+        "hosts_up": len(hosts),
+        "source_format": payload.format,
+        "snapshot": ScanService(session, guard, rulebook)._snapshot(run.id),
+        "duration_seconds": 0,
+        "eta_seconds": 0,
+    }
+    session.commit()
+    return {"run_id": str(run.id), "hosts": len(hosts)}
+
+
+def _merged_snapshot(session: SessionDep, run: ScanRun) -> dict[str, dict[str, Any]]:
+    snapshot: dict[str, dict[str, Any]] = copy.deepcopy((run.summary or {}).get("snapshot") or {})
+    for row in session.scalars(select(ScanResultOverride)):
+        if row.host in snapshot:
+            snapshot[row.host][row.field] = row.value
+            snapshot[row.host]["manually_changed"] = True
+    return snapshot
+
+
+@router.get("/scan-results/{run_id}", dependencies=[Depends(require("scan:read"))])
+def read_scan_results(run_id: uuid.UUID, session: SessionDep) -> dict[str, object]:
+    run = session.get(ScanRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
+    return {"run_id": str(run.id), "hosts": _merged_snapshot(session, run)}
+
+
+class OverrideIn(BaseModel):
+    host: str = Field(min_length=1, max_length=255)
+    field: str = Field(pattern="^(name|note|state)$")
+    value: str = Field(max_length=2000)
+
+
+@router.post("/scan-results/override", dependencies=[Depends(require("inventory:write"))])
+def override_scan_result(payload: OverrideIn, session: SessionDep) -> dict[str, object]:
+    row = session.scalar(
+        select(ScanResultOverride).where(
+            ScanResultOverride.host == payload.host, ScanResultOverride.field == payload.field
+        )
+    )
+    if row is None:
+        row = ScanResultOverride(host=payload.host, field=payload.field, value=payload.value)
+        session.add(row)
+    else:
+        row.value = payload.value
+        row.updated_at = utcnow()
+    session.commit()
+    return {"host": payload.host, "field": payload.field, "manually_changed": True}
+
+
+@router.get("/scan-results/{run_id}/export", dependencies=[Depends(require("scan:read"))])
+def export_scan_results(
+    run_id: uuid.UUID,
+    session: SessionDep,
+    principal: Annotated[Principal, Depends(require("scan:read"))],
+    format: Annotated[str, Query(pattern="^(json|csv)$")] = "json",
+) -> Response:
+    run = session.get(ScanRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
+    snapshot = _merged_snapshot(session, run)
+    if format == "csv":
+        if not principal.can("secrets:redacted:view"):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Eksport CSV wymaga pełnego wglądu")
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output, fieldnames=("ip", "name", "state", "service", "manually_changed")
+        )
+        writer.writeheader()
+        for ip, host in snapshot.items():
+            for service in host.get("services", []) or [""]:
+                writer.writerow(
+                    {
+                        "ip": ip,
+                        "name": host.get("name", ""),
+                        "state": host.get("state", ""),
+                        "service": service,
+                        "manually_changed": host.get("manually_changed", False),
+                    }
+                )
+        return Response(
+            output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=scan-results.csv"},
+        )
+    return Response(
+        json.dumps({"hosts": snapshot}, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=scan-results.json"},
+    )
 
 
 @router.get("/scan-diff", dependencies=[Depends(require("scan:read"))])
@@ -36,9 +219,7 @@ def scan_diff(
     after = session.get(ScanRun, to_run)
     if before is None or after is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie znaleziono przebiegu")
-    changes = compare_runs(
-        (before.summary or {}).get("snapshot", {}), (after.summary or {}).get("snapshot", {})
-    )
+    changes = compare_runs(_merged_snapshot(session, before), _merged_snapshot(session, after))
     if format == "csv":
         if not principal.can("secrets:redacted:view"):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Eksport CSV wymaga pełnego wglądu")
