@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
@@ -15,6 +16,8 @@ from app.models import Report, Vulnerability
 from app.pipeline import analyze
 from app.reports.service import generate_summary
 from app.runtime import (
+    agent_gateway,
+    agent_service,
     channel_sender,
     explainer_service,
     feed_source,
@@ -149,3 +152,54 @@ def generate_report_summary(report_id: str, actor: str = "system") -> dict[str, 
         )
         session.commit()
         return {"status": outcome.validation, "attempts": outcome.attempts}
+
+
+# --- agent (moduł 5.2) ---------------------------------------------------------
+
+
+@celery_app.task(name="app.workers.tasks.agent.plan_task")
+def plan_agent_task(task_id: str) -> dict[str, Any]:
+    with get_sessionmaker()() as session:
+        task = agent_service(session).plan_task(uuid.UUID(task_id))
+        return {"task_id": str(task.id), "status": task.status}
+
+
+@celery_app.task(name="app.workers.tasks.agent.execute_task")
+def execute_agent_task(task_id: str) -> dict[str, Any]:
+    def after_tools(session: Session) -> dict[str, Any]:
+        return {"analysis": analyze(session, get_rulebook(), channel_sender()).summary()}
+
+    with get_sessionmaker()() as session:
+        task = agent_service(session).execute(
+            uuid.UUID(task_id), agent_gateway(get_settings()), after_tools=after_tools
+        )
+        return {"task_id": str(task.id), "status": task.status}
+
+
+# --- moduł 19: test bezpieczeństwa agenta (osobny worker `worker-harness`) --------
+
+
+@celery_app.task(name="app.workers.tasks.agent_tests.run_agent_test")
+def run_agent_test(
+    suite: str = "quick",
+    trigger: str = "manual",
+    requested_by: str = "system",
+    config_version_id: str | None = None,
+) -> dict[str, Any]:
+    from app.agent_tests.gate import run_test
+    from app.core.scope_guard import ScopeConfig
+
+    settings = get_settings()
+    with get_sessionmaker()() as session:
+        run = run_test(
+            session,
+            suite=suite,
+            trigger=trigger,
+            requested_by=requested_by,
+            config_version_id=uuid.UUID(config_version_id) if config_version_id else None,
+            provider=local_provider(settings),
+            scope=ScopeConfig.from_file(settings.scope_file),
+            cases_path=settings.agent_cases_file,
+            key_path=settings.harness_signing_key,
+        )
+        return {"run_id": str(run.id), "passed": run.passed}

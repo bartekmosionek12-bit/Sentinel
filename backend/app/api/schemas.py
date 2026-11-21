@@ -273,6 +273,28 @@ class ReviewItemOut(BaseModel):
     asset: AssetRef
 
 
+class SignalItemOut(BaseModel):
+    """Sygnał bez CPE w kolejce weryfikacji: produkt z KEV dopasowany po nazwie."""
+
+    id: uuid.UUID
+    cve_id: str
+    source: str
+    vendor: str
+    product: str
+    score: float
+    method: str
+    reason: str
+    kev_due_date: date | None
+    created_at: datetime
+    software: SoftwareOut
+    asset: AssetRef
+
+
+class SignalDecisionOut(BaseModel):
+    decision: str
+    findings_created: int
+
+
 class ReviewDecisionIn(BaseModel):
     accept: bool
 

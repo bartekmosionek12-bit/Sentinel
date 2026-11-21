@@ -7,9 +7,10 @@ Plik ma dwie sekcje: `## SYSTEM` i `## USER`; w drugiej `{{facts}}` zastępują 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 PROMPTS_DIR = Path(__file__).parent
 _FILE_RE = re.compile(r"^(?P<name>[a-z_]+)\.v(?P<version>\d+)\.md$")
@@ -21,6 +22,8 @@ class Prompt:
     system: str
     user: str
     version: str
+    # Schemat JSON odpowiedzi (structured output w Ollamie, pole `format`), np. plan agenta.
+    schema: dict[str, Any] | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)

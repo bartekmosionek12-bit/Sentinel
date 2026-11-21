@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, CreatedAt, UuidPk, utcnow
 from app.models.inventory import _in
 
-FINDING_TYPES = ("cve", "misconfig", "compliance", "eol", "exposure")
+FINDING_TYPES = ("cve", "misconfig", "compliance", "eol", "exposure", "signal")
 FINDING_STATUSES = (
     "open",
     "acknowledged",

@@ -21,11 +21,15 @@ def _settings(**values: Any) -> Settings:
     return Settings(_env_file=None, RULES_DIR=str(RULES), **values)
 
 
-def test_demo_scope_file_allows_only_the_lab_and_denies_gateway_and_scanner() -> None:
+def test_demo_scope_file_allows_only_the_lab_and_denies_gateway_and_scanners() -> None:
     lab = _settings().demo_lab_network
     assert [str(n) for n in LAB_SCOPE.allowed_cidrs] == [str(lab)]
     assert LAB_SCOPE.allowed_domains == ()
-    assert {str(n) for n in LAB_SCOPE.denied_cidrs} == {"172.30.99.1/32", "172.30.99.250/32"}
+    assert {str(n) for n in LAB_SCOPE.denied_cidrs} == {
+        "172.30.99.1/32",
+        "172.30.99.250/32",
+        "172.30.99.251/32",
+    }
     check_demo_preconditions(_settings(DEMO_MODE="true"), LAB_SCOPE)
 
 
@@ -118,3 +122,35 @@ def test_inject_kev_in_demo_mode_reports_timings(session: Session) -> None:
     assert result["model_summary_queued"] is False
     with pytest.raises(CliError, match="już jest"):
         cmd_inject_kev(session, _settings(DEMO_MODE="true"), "CVE-2021-23017")
+
+
+def test_agent_bootstrap_refuses_without_demo_mode(session: Session) -> None:
+    from app.cli import cmd_agent_bootstrap
+
+    with pytest.raises(CliError, match="DEMO_MODE=true"):
+        cmd_agent_bootstrap(session, _settings(), dispatcher=object())
+
+
+def test_agent_bootstrap_creates_pending_capability_and_queues_test(
+    session: Session,
+) -> None:
+    from sqlalchemy import select
+
+    from app.cli import cmd_agent_bootstrap
+    from app.models import AgentCapability
+
+    calls: list[tuple[Any, ...]] = []
+
+    class Dispatcher:
+        def run_agent_test(self, *args: Any) -> str:
+            calls.append(args)
+            return "t"
+
+    settings = _settings(DEMO_MODE="true", SCOPE_FILE=str(RULES / "scope.demo.yaml"))
+    result = cmd_agent_bootstrap(session, settings, dispatcher=Dispatcher())
+    assert result["state"] == "pending_test"
+    assert calls[0][:3] == ("quick", "config_change", "seed_demo")
+    capability = session.scalars(select(AgentCapability)).one()
+    assert capability.version == result["capability"]
+    assert capability.active is False
+    assert capability.targets == ["172.30.99.0/24"]

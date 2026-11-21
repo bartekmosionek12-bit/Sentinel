@@ -209,6 +209,52 @@ def cmd_seed_demo(session: Session, settings: Settings) -> dict[str, Any]:
     }
 
 
+DEMO_AGENT_NOTE = "Demo-lab: assessment agenta (seed_demo)"
+
+
+def cmd_agent_bootstrap(
+    session: Session, settings: Settings, dispatcher: Any | None = None
+) -> dict[str, Any]:
+    """Demo: zdolności agenta dla sieci demo-lab. Wchodzą w życie po zaliczonym teście agenta."""
+    from app.agent.catalog import CATALOG
+    from app.agent.service import create_capability
+    from app.agent_tests.gate import request_change
+    from app.models import AgentCapability
+    from app.runtime import agent_runtime_config
+
+    check_demo_preconditions(settings, ScopeConfig.from_file(settings.scope_file))
+    existing = session.scalar(select(AgentCapability).where(AgentCapability.active.is_(True)))
+    if existing is not None:
+        return {"capability": existing.version, "state": "active", "test_queued": False}
+    capability = create_capability(
+        session,
+        actor="seed_demo",
+        tools=sorted(CATALOG),
+        targets=[settings.demo_lab_cidr],
+        max_level=2,
+        note=DEMO_AGENT_NOTE,
+    )
+    config = request_change(
+        session,
+        agent_runtime_config(settings),
+        capability_version=capability.version,
+        reason=f"Nowe zdolności v{capability.version}: {DEMO_AGENT_NOTE}",
+        actor="seed_demo",
+    )
+    session.commit()
+    if dispatcher is None:
+        from app.api.deps import CeleryDispatcher
+
+        dispatcher = CeleryDispatcher()
+    dispatcher.run_agent_test("quick", "config_change", "seed_demo", config.id)
+    return {
+        "capability": capability.version,
+        "state": config.state,
+        "config": str(config.id),
+        "test_queued": True,
+    }
+
+
 def _queue_summary(settings: Settings, report_id: Any, actor: str) -> bool:
     """Zleca workerowi llm warstwę „W skrócie”, jeśli model jest skonfigurowany."""
     if local_provider(settings) is None:
@@ -270,6 +316,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "explain", help="wygenerowanie brakujących wyjaśnień modelem lokalnym"
     ).add_argument("--queue", action="store_true", help="zleć workerowi llm w tle")
     commands.add_parser("seed-demo", help="dane i skan demo-lab (tylko DEMO_MODE=true)")
+    commands.add_parser(
+        "agent-bootstrap", help="zdolności agenta dla demo-lab i test agenta (tylko DEMO_MODE)"
+    )
     commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
     commands.add_parser("report", help="raport o otwartych zagrożeniach do skrzynek menedżerów")
     commands.add_parser(
@@ -297,6 +346,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = cmd_report(session, settings)
             elif args.command == "inject-kev":
                 result = cmd_inject_kev(session, settings, args.cve_id)
+            elif args.command == "agent-bootstrap":
+                result = cmd_agent_bootstrap(session, settings)
             elif args.command == "sync-roles":
                 result = sync_catalog(
                     session, RoleCatalog.from_file(settings.rules_dir / "roles.yaml")

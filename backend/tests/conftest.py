@@ -161,6 +161,17 @@ class RecordingDispatcher:
     def generate_report_summary(self, report_id: uuid.UUID, actor: str) -> str:
         return self._record("generate_report_summary", report_id, actor)
 
+    def plan_agent_task(self, task_id: uuid.UUID) -> str:
+        return self._record("plan_agent_task", task_id)
+
+    def execute_agent_task(self, task_id: uuid.UUID) -> str:
+        return self._record("execute_agent_task", task_id)
+
+    def run_agent_test(
+        self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
+    ) -> str:
+        return self._record("run_agent_test", suite, trigger, requested_by, config_version_id)
+
 
 @pytest.fixture
 def dispatcher() -> RecordingDispatcher:

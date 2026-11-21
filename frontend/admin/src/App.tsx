@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { NAV_GROUPS } from "@/navigation";
+import { Agent } from "@/pages/Agent";
+import { AgentTestDetail, AgentTests } from "@/pages/AgentTests";
 import { Assets } from "@/pages/Assets";
 import { AuditLog } from "@/pages/AuditLog";
 import { Dashboard } from "@/pages/Dashboard";
@@ -78,6 +80,9 @@ export function App() {
         <Route path="/weryfikacja" element={<ReviewQueue />} />
         <Route path="/skany" element={<Scans />} />
         <Route path="/zakres" element={<Scope />} />
+        <Route path="/agent" element={<Agent />} />
+        <Route path="/agent/test" element={<AgentTests />} />
+        <Route path="/agent/test/:id" element={<AgentTestDetail />} />
         <Route path="/audyt" element={<AuditLog />} />
         {planned.map((item) => (
           <Route key={item.path} path={item.path} element={<Planned item={item} />} />

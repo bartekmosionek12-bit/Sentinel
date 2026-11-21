@@ -233,6 +233,21 @@ export interface ReviewItem {
   asset: AssetRef;
 }
 
+export interface SignalItem {
+  id: string;
+  cve_id: string;
+  source: string;
+  vendor: string;
+  product: string;
+  score: number;
+  method: string;
+  reason: string;
+  kev_due_date: string | null;
+  created_at: string;
+  software: Software;
+  asset: AssetRef;
+}
+
 export interface ScanAction {
   id: string;
   scan_run_id: string;
@@ -503,6 +518,152 @@ export interface Me {
   client_id: string;
 }
 
+// --- agent AI i test agenta (Etap 5, moduł 19) ---
+
+export interface AgentCapability {
+  id: string;
+  version: number;
+  tools: string[];
+  targets: string[];
+  max_level: number;
+  windows: unknown[];
+  max_calls_per_task: number;
+  max_calls_per_target: number;
+  active: boolean;
+  note: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface AgentCapabilityInput {
+  tools: string[];
+  targets: string[];
+  max_level: number;
+  note: string;
+}
+
+export interface AgentConfig {
+  id: string;
+  model: string;
+  prompt_version: string;
+  capability_version: number;
+  external_llm: boolean;
+  state: "pending_test" | "active" | "forced" | "failed" | "superseded" | string;
+  reason: string;
+  forced_by: string | null;
+  force_justification: string | null;
+  created_by: string;
+  created_at: string;
+  activated_at: string | null;
+}
+
+export interface AgentTestRun {
+  id: string;
+  config_version_id: string | null;
+  suite: "quick" | "full" | string;
+  trigger: string;
+  requested_by: string;
+  status: string;
+  model_passed: number;
+  model_failed: number;
+  code_passed: number;
+  code_failed: number;
+  passed: boolean | null;
+  result_sha256: string | null;
+  signature: string | null;
+  created_at: string;
+  finished_at: string | null;
+  signature_valid: boolean | null;
+}
+
+export interface AgentVerdict {
+  judge: string;
+  layer: string;
+  passed: boolean;
+  detail: string;
+  kind: string;
+}
+
+export interface AgentCaseResult {
+  id: string;
+  case_id: string;
+  category: string;
+  title: string;
+  model_resisted: boolean;
+  code_held: boolean;
+  verdicts: AgentVerdict[];
+  transcript: Record<string, unknown>;
+  attempts: Record<string, unknown>[];
+}
+
+export interface AgentTestRunDetail extends AgentTestRun {
+  public_key: string | null;
+  cases: AgentCaseResult[];
+}
+
+export interface AgentStatus {
+  killed: boolean;
+  killed_by: string | null;
+  killed_reason: string | null;
+  killed_at: string | null;
+  capability: AgentCapability | null;
+  config: AgentConfig | null;
+  pending: AgentConfig[];
+  last_test: AgentTestRun | null;
+}
+
+export interface AgentStep {
+  id: string;
+  position: number;
+  tool: string;
+  target: string;
+  level: number;
+  params: Record<string, unknown>;
+  reason: string;
+  source: string;
+  status: string;
+  decision: string | null;
+  decision_reason: string | null;
+  result: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface AgentTask {
+  id: string;
+  command: string;
+  status: string;
+  capability_version: number | null;
+  config_version_id: string | null;
+  plan_source: string | null;
+  plan_model: string | null;
+  plan_problems: string[];
+  created_by: string;
+  approved_by: string | null;
+  approval_reason: string | null;
+  approved_at: string | null;
+  summary: Record<string, unknown>;
+  created_at: string;
+  finished_at: string | null;
+  steps: AgentStep[];
+}
+
+export interface CredentialLease {
+  id: string;
+  task_id: string | null;
+  step_id: string | null;
+  kind: string;
+  target: string;
+  principal: string;
+  serial: string;
+  ttl_seconds: number;
+  issued_by: string;
+  issued_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+}
+
 export const api = {
   health: () => request<Health>("/health"),
   me: () => request<Me>("/me"),
@@ -557,6 +718,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ accept }),
     }),
+  signalQueue: () => request<SignalItem[]>("/signal-queue"),
+  decideSignal: (id: string, accept: boolean) =>
+    request<{ decision: string; findings_created: number }>(`/signal-queue/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ accept }),
+    }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
@@ -584,5 +751,38 @@ export const api = {
     request<ScopeCheck>("/scope/check", {
       method: "POST",
       body: JSON.stringify({ target, intrusiveness }),
+    }),
+  agentStatus: () => request<AgentStatus>("/agent/status"),
+  agentCapabilities: () => request<AgentCapability[]>("/agent/capabilities"),
+  createAgentCapability: (input: AgentCapabilityInput) =>
+    request<AgentConfig>("/agent/capabilities", { method: "POST", body: JSON.stringify(input) }),
+  killAgent: (reason: string) =>
+    request<Record<string, unknown>>("/agent/kill", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  agentLeases: () => request<CredentialLease[]>("/agent/leases?limit=50"),
+  agentTasks: () => request<AgentTask[]>("/agent/tasks?limit=20"),
+  createAgentTask: (command: string) =>
+    request<AgentTask>("/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
+  approveAgentTask: (id: string, reason: string, stepIds?: string[]) =>
+    request<Task>(`/agent/tasks/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reason, step_ids: stepIds }),
+    }),
+  rejectAgentTask: (id: string, reason: string) =>
+    request<AgentTask>(`/agent/tasks/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  agentConfigs: () => request<AgentConfig[]>("/agent/configs"),
+  agentTests: () => request<AgentTestRun[]>("/agent/tests?limit=20"),
+  agentTest: (id: string) => request<AgentTestRunDetail>(`/agent/tests/${id}`),
+  runAgentTest: (suite: "quick" | "full") =>
+    request<Task>("/agent/tests", { method: "POST", body: JSON.stringify({ suite }) }),
+  forceAgentConfig: (id: string, justification: string) =>
+    request<AgentConfig>(`/agent/configs/${id}/force`, {
+      method: "POST",
+      body: JSON.stringify({ justification }),
     }),
 };

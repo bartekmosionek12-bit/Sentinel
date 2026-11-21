@@ -1,0 +1,13 @@
+# Bielik 4.5B v3.0 Instruct w oficjalnej kwantyzacji Q8_0 (speakleash/Bielik-4.5B-v3.0-Instruct-GGUF).
+# Tylko CI: lokalny sędzia i generator red teamu, gdy nie ma REDTEAM_API_KEY
+# (.github/workflows/ai-tests.yml). Szablon rozmowy jak w Modelfile.bielik-4.5b.
+FROM /models/Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+
+TEMPLATE """{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"
+PARAMETER temperature 0.2

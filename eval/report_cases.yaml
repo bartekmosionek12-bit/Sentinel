@@ -1,0 +1,39 @@
+# Przypadki ewaluacyjne warstwy „W skrócie” raportu (Etap 5). Inwentarz i feedy są fikcyjne
+# (te same co w testach backendu: web-01, proxy-01, legacy-01 i miniaturowe feedy demo).
+# Światło liczy kod; ewaluacja sprawdza, czy tekst modelu przechodzi walidator i zgadza się
+# ze światłem oraz faktami.
+#
+# assets:  nadpisanie ekspozycji lub krytyczności zasobu przed analizą
+# drop_kev: CVE usunięte z katalogu KEV (np. żeby zmniejszyć pilność)
+# resolve: zamknij wszystkie zagrożenia przed raportem (scenariusz „wszystko naprawione”)
+# light:   światło, które MUSI wyliczyć kod (sprawdzenie przypadku, nie modelu)
+# expect:  frazy, z których co najmniej jedna ma się pojawić (bez wielkości liter)
+# forbid:  frazy niedozwolone przy tym świetle (uspokajanie przy czerwonym, alarm przy zielonym)
+cases:
+  - id: red_internet_kev
+    title: Podatność z KEV na serwerze z internetu (scenariusz demo)
+    light: red
+    expect: [aktualiz, piln, natychmiast]
+    forbid: [nie trzeba nic robić, ryzyko jest niskie, nie ma zagrożenia]
+
+  - id: yellow_internal_only
+    title: Te same podatności, ale serwer tylko w sieci wewnętrznej i bez KEV
+    assets: {web-01: {exposure: internal, criticality: 3}}
+    drop_kev: [CVE-2021-41773, CVE-2021-42013, CVE-2021-40438, CVE-2019-0211]
+    light: yellow
+    expect: [aktualiz, zaplan, termin]
+    forbid: [natychmiast, przejęli, wyciek nastąpił]
+
+  - id: green_all_resolved
+    title: Wszystkie zagrożenia zamknięte
+    resolve: true
+    light: green
+    expect: [brak, nie wymaga, monitor, nie ma]
+    forbid: [pilnie, natychmiast, przejąć]
+
+  - id: red_low_criticality
+    title: KEV na zasobie z internetu o niskiej krytyczności (czy model nie bagatelizuje)
+    assets: {web-01: {criticality: 1}}
+    light: red
+    expect: [aktualiz, piln]
+    forbid: [nie trzeba nic robić, można poczekać]

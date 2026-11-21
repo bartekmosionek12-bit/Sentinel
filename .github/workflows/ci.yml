@@ -42,6 +42,12 @@ jobs:
     with:
       suite: mock
 
+  ai-tests-redteam-mock:
+    name: AI tests, generowany red team (atrapa)
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: redteam-mock
+
   ai-tests-qwen:
     name: AI tests, Qwen3 4B
     needs: ai-tests-mock
@@ -88,6 +94,7 @@ jobs:
         run: |
           psql -q -v app_user=sentinel_app -v app_password=ci-only-app \
             -v keycloak_user=keycloak -v keycloak_password=ci-only-kcdb \
+            -v harness_user=sentinel_harness -v harness_password=ci-only-harness \
             -v db_name=sentinel -f ../infra/postgres/init_roles.sql
       - name: Migracja w górę, w dół i ponownie w górę
         run: |
@@ -96,10 +103,20 @@ jobs:
           uv run alembic upgrade head
       - name: Modele zgodne z migracjami
         run: uv run alembic check
-      - name: Użytkownik aplikacji nie widzi schematu Keycloaka (i odwrotnie)
+      - name: Wyniki testu agenta tylko dla harnessu (infra/postgres/harden_harness.sql)
+        env:
+          PGHOST: localhost
+          PGUSER: sentinel
+          PGPASSWORD: ci-only
+          PGDATABASE: sentinel
+        run: |
+          psql -q -v app_user=sentinel_app -v harness_user=sentinel_harness \
+            -f ../infra/postgres/harden_harness.sql
+      - name: Rozdział użytkowników bazy (aplikacja, Keycloak, harness)
         env:
           SENTINEL_TEST_APP_DB_URL: postgresql+psycopg://sentinel_app:ci-only-app@localhost:5432/sentinel
           SENTINEL_TEST_KEYCLOAK_DB_URL: postgresql+psycopg://keycloak:ci-only-kcdb@localhost:5432/sentinel
+          SENTINEL_TEST_HARNESS_DB_URL: postgresql+psycopg://sentinel_harness:ci-only-harness@localhost:5432/sentinel
         run: uv run pytest tests/test_db_roles.py -o addopts="" -v
 
   frontend:
@@ -126,7 +143,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Konfiguracja z .env.example
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          sed -i "s/^AGENT_CLIENT_SECRET=.*/AGENT_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
       - name: Walidacja docker-compose.yml
         run: docker compose config -q
       - name: Budowanie obrazów
@@ -163,6 +182,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^DEMO_MODE=false/DEMO_MODE=true/; s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only/; s/^KEYCLOAK_ADMIN_PASSWORD=.*/KEYCLOAK_ADMIN_PASSWORD=ci-only-kc/; s/^APP_DB_PASSWORD=.*/APP_DB_PASSWORD=ci-only-app/; s/^KEYCLOAK_DB_PASSWORD=.*/KEYCLOAK_DB_PASSWORD=ci-only-kcdb/' .env
+          sed -i "s/^AGENT_CLIENT_SECRET=.*/AGENT_CLIENT_SECRET=$(openssl rand -hex 32)/" .env
       - name: seed_demo (import, feedy offline, skan, dopasowanie, ocena ryzyka)
         run: ./scripts/seed_demo.sh
       - name: Sprawdzenie wyniku przez API

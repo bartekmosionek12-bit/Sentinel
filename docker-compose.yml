@@ -7,7 +7,9 @@
 #   Keycloak (logowanie, MFA) działa w `core`: korzysta z tej samej bazy (osobny schemat
 #             `keycloak`), a z zewnątrz jest dostępny tylko przez nginx pod /auth/realms.
 #   demo-lab  celowo podatne środowisko testowe. `internal: true`, czyli bez wyjścia
-#             na zewnątrz i bez portów na hoście. Widzi ją wyłącznie worker `scans`.
+#             na zewnątrz i bez portów na hoście. Widzą ją wyłącznie worker `scans`
+#             (deterministyczny potok) i `mcp-scanner` (jedyna droga agenta do sieci).
+#   vault     OpenBao (poświadczenia JIT). `internal: true`; widzi go tylko `mcp-scanner`.
 
 x-backend: &backend
   build:
@@ -16,7 +18,7 @@ x-backend: &backend
     target: runtime
   image: sentinel-asi/backend:dev
   env_file: .env
-  environment:
+  environment: &backend-env
     POSTGRES_HOST: db
     # Aplikacja łączy się własnym użytkownikiem (właściciel schematu public), nie
     # administratorem bazy; zakłada go usługa db-init.
@@ -96,6 +98,7 @@ services:
       - >-
         psql -q -v app_user="$$APP_DB_USER" -v app_password="$$APP_DB_PASSWORD"
         -v keycloak_user="$$KEYCLOAK_DB_USER" -v keycloak_password="$$KEYCLOAK_DB_PASSWORD"
+        -v harness_user="$$HARNESS_DB_USER" -v harness_password="$$HARNESS_DB_PASSWORD"
         -v db_name="$$PGDATABASE" -f /init/init_roles.sql
     environment:
       PGHOST: db
@@ -106,6 +109,8 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Ustaw APP_DB_PASSWORD w pliku .env}
       KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:-keycloak}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Ustaw KEYCLOAK_DB_PASSWORD w pliku .env}
+      HARNESS_DB_USER: ${HARNESS_DB_USER:-sentinel_harness}
+      HARNESS_DB_PASSWORD: ${HARNESS_DB_PASSWORD:?Ustaw HARNESS_DB_PASSWORD w pliku .env}
     volumes:
       - ./infra/postgres:/init:ro
     restart: "no"
@@ -124,6 +129,32 @@ services:
     depends_on:
       db-init:
         condition: service_completed_successfully
+
+  # Moduł 19: tabele wyników testu agenta na własność harnessu; aplikacja ma tylko odczyt.
+  db-harden:
+    image: postgres:16-alpine
+    command:
+      - sh
+      - -c
+      - >-
+        psql -q -v app_user="$$APP_DB_USER" -v harness_user="$$HARNESS_DB_USER"
+        -f /init/harden_harness.sql
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-sentinel}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w pliku .env}
+      PGDATABASE: ${POSTGRES_DB:-sentinel}
+      APP_DB_USER: ${APP_DB_USER:-sentinel_app}
+      HARNESS_DB_USER: ${HARNESS_DB_USER:-sentinel_harness}
+    volumes:
+      - ./infra/postgres:/init:ro
+    restart: "no"
+    networks:
+      - core
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 64m
 
   # Logowanie OIDC, MFA (TOTP), blokada po nieudanych próbach. Realm z infra/keycloak.
   keycloak:
@@ -148,6 +179,8 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-kcadmin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Ustaw KEYCLOAK_ADMIN_PASSWORD w pliku .env}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      # Sekret konta usługowego agenta (placeholder w realmie, tylko przy pierwszym imporcie).
+      AGENT_CLIENT_SECRET: ${AGENT_CLIENT_SECRET:?Ustaw AGENT_CLIENT_SECRET w pliku .env}
       JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=30
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
@@ -222,6 +255,119 @@ services:
       - core
       - llm
     mem_limit: 384m
+
+  # --- Etap 5: agent AI -------------------------------------------------------------
+  # Serwer MCP: jedyna droga agenta do narzędzi i sieci celów. Polityka, scope_guard,
+  # poświadczenia JIT z OpenBao i audyt dla każdego wywołania (ARCHITECTURE §5.1).
+  mcp-scanner:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: scanner
+    image: sentinel-asi/scanner:dev
+    command: ["python", "-m", "app.mcp_server.server"]
+    environment:
+      <<: *backend-env
+      HOME: /tmp
+      PATH: /opt/nuclei/bin:/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      OPENBAO_URL: http://openbao:8200
+      OPENBAO_APPROLE_FILE: /run/openbao/approle.json
+      SSH_KNOWN_HOSTS: /run/lab-ssh/known_hosts
+      MCP_URL: http://mcp-scanner:8001/mcp
+    volumes:
+      # nuclei i wyłącznie szablony wykrywające (scripts/fetch_nuclei.sh), tylko do odczytu.
+      - ./data/nuclei/bin:/opt/nuclei/bin:ro
+      - ./data/nuclei/templates:/opt/nuclei-templates:ro
+      - openbao-approle:/run/openbao:ro
+      - lab-ssh-known:/run/lab-ssh:ro
+    networks:
+      core:
+      vault:
+      demo-lab:
+        # Stały adres; jest na denyliście w rules/scope.demo.yaml.
+        ipv4_address: 172.30.99.251
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      bao-init:
+        condition: service_completed_successfully
+    mem_limit: 512m
+
+  # Plan (model) i wykonanie (klient MCP) zadań agenta. Bez dostępu do sieci celów.
+  worker-agent:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "agent", "-c", "1", "-n", "agent@%h", "--loglevel", "INFO"]
+    environment:
+      <<: *backend-env
+      MCP_URL: http://mcp-scanner:8001/mcp
+    networks:
+      - core
+      - llm
+    mem_limit: 384m
+
+  # Moduł 19: niezależny test bezpieczeństwa agenta. Osobny worker, osobna kolejka i osobny
+  # użytkownik bazy (właściciel tabel wyników). Klucz podpisu tylko w wolumenie harnessu.
+  worker-harness:
+    <<: *backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "agent_tests", "-c", "1", "-n", "harness@%h", "--loglevel", "INFO"]
+    environment:
+      <<: *backend-env
+      POSTGRES_USER: ${HARNESS_DB_USER:-sentinel_harness}
+      POSTGRES_PASSWORD: ${HARNESS_DB_PASSWORD:?Ustaw HARNESS_DB_PASSWORD w pliku .env}
+      AGENT_CASES_FILE: /app/ai-tests/agent/cases.yaml
+      HARNESS_SIGNING_KEY: /app/data/harness/signing_key.pem
+    volumes:
+      - ./ai-tests/agent:/app/ai-tests/agent:ro
+      - harness-key:/app/data/harness
+    networks:
+      - core
+      - llm
+    depends_on:
+      db-harden:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+
+  # OpenBao: poświadczenia just-in-time (certyfikaty SSH na 15 minut). Tylko sieć `vault`.
+  openbao:
+    image: openbao/openbao:2.7.2
+    command: ["server", "-config=/etc/openbao/config.hcl"]
+    volumes:
+      - ./infra/openbao/config.hcl:/etc/openbao/config.hcl:ro
+      - openbao-data:/openbao/file
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - vault
+    mem_limit: 256m
+
+  # Jednorazowo przy każdym starcie: inicjalizacja, rozpieczętowanie, CA SSH, AppRole.
+  bao-init:
+    image: openbao/openbao:2.7.2
+    entrypoint: ["/bin/sh", "/policies/init.sh"]
+    user: "0:0"
+    environment:
+      BAO_ADDR: http://openbao:8200
+    volumes:
+      - ./infra/openbao:/policies:ro
+      - openbao-init:/bao-state
+      - openbao-approle:/out/approle
+      - openbao-ca:/out/ca
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - vault
+    depends_on:
+      - openbao
+    mem_limit: 64m
 
   # Lokalny model językowy. Bez portów na hoście i bez dostępu do internetu: pliki modeli
   # pobiera na hoście scripts/fetch_models.sh, a kontener tylko je wczytuje.
@@ -318,9 +464,45 @@ services:
         ipv4_address: 172.30.99.14
     mem_limit: 128m
 
+  # „Zatruty host” (scenariusz demo 6): baner Server i tytuł strony z poleceniem dla agenta.
+  lab-poisoned:
+    image: python:3.12-alpine
+    profiles: ["demo"]
+    command: ["python", "/srv/server.py"]
+    volumes:
+      - ./demo-lab/poisoned:/srv:ro
+    restart: unless-stopped
+    read_only: true
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.15
+    mem_limit: 64m
+
+  # Host do skanu uwierzytelnionego: SSH tylko z certyfikatem z CA OpenBao (15 minut).
+  lab-ssh:
+    build:
+      context: demo-lab/ssh
+    image: sentinel-asi/lab-ssh:dev
+    profiles: ["demo"]
+    environment:
+      LAB_SSH_ADDRESS: 172.30.99.16
+    volumes:
+      - openbao-ca:/ca:ro
+      - lab-ssh-known:/known
+    restart: unless-stopped
+    networks:
+      demo-lab:
+        ipv4_address: 172.30.99.16
+    depends_on:
+      bao-init:
+        condition: service_completed_successfully
+    mem_limit: 64m
+
 networks:
   core:
   llm:
+    internal: true
+  vault:
     internal: true
   demo-lab:
     internal: true
@@ -332,3 +514,9 @@ networks:
 volumes:
   db-data:
   ollama-data:
+  openbao-data:
+  openbao-init:
+  openbao-approle:
+  openbao-ca:
+  lab-ssh-known:
+  harness-key:

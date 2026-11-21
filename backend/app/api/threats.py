@@ -31,6 +31,8 @@ from app.api.schemas import (
     ReviewItemOut,
     RiskLevel,
     ScanRunOut,
+    SignalDecisionOut,
+    SignalItemOut,
     SoftwareOut,
     StatsOut,
     TaskOut,
@@ -45,6 +47,7 @@ from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
 from app.inventory.service import import_assets, parse_assets_csv
 from app.matching.engine import ACTIVE_STATUSES, CandidateError, decide_candidate
+from app.matching.signals import SignalError, decide_signal
 from app.models import (
     Asset,
     AssetHistory,
@@ -55,9 +58,11 @@ from app.models import (
     Notification,
     ScanAction,
     ScanRun,
+    SignalMatch,
     Software,
     Vulnerability,
 )
+from app.notifications.engine import notify
 from app.pipeline import analyze
 from app.runtime import channel_sender
 
@@ -410,6 +415,71 @@ def decide_review(
     return ReviewDecisionOut(
         match_status=software.match_status,
         findings_created=len(report.findings.of_kind("created")),
+    )
+
+
+@router.get(
+    "/signal-queue",
+    response_model=list[SignalItemOut],
+    tags=["weryfikacja"],
+    dependencies=[Depends(require("review:read"))],
+)
+def signal_queue(session: SessionDep) -> list[SignalItemOut]:
+    """Sygnały KEV bez zakresu wersji, dopasowane do inwentarza po nazwie produktu."""
+    rows = session.execute(
+        select(SignalMatch, Vulnerability, Software, Asset)
+        .join(Vulnerability, SignalMatch.vulnerability_id == Vulnerability.id)
+        .join(Software, SignalMatch.software_id == Software.id)
+        .join(Asset, Software.asset_id == Asset.id)
+        .where(SignalMatch.decision == "pending")
+        .order_by(Vulnerability.cve_id, SignalMatch.score.desc())
+    ).all()
+    return [
+        SignalItemOut(
+            id=signal.id,
+            cve_id=vuln.cve_id,
+            source=signal.source,
+            vendor=signal.vendor,
+            product=signal.product,
+            score=signal.score,
+            method=signal.method,
+            reason=signal.reason,
+            kev_due_date=vuln.kev_due_date,
+            created_at=signal.created_at,
+            software=SoftwareOut.model_validate(software),
+            asset=AssetRef.model_validate(asset),
+        )
+        for signal, vuln, software, asset in rows
+    ]
+
+
+@router.post(
+    "/signal-queue/{signal_id}/decision",
+    response_model=SignalDecisionOut,
+    tags=["weryfikacja"],
+)
+def decide_signal_endpoint(
+    signal_id: uuid.UUID,
+    payload: ReviewDecisionIn,
+    session: SessionDep,
+    rulebook: RulebookDep,
+    principal: Annotated[Principal, Depends(require("review:decide"))],
+) -> SignalDecisionOut:
+    """Decyzja człowieka. Finding (typ `signal`) powstaje tylko po akceptacji."""
+    try:
+        report = decide_signal(
+            session,
+            signal_id,
+            accept=payload.accept,
+            decided_by=principal.username,
+            scoring=rulebook.scoring,
+        )
+    except SignalError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    notify(session, report.changes, rulebook.notifications, channel_sender())
+    return SignalDecisionOut(
+        decision="confirmed" if payload.accept else "rejected",
+        findings_created=len(report.of_kind("created")),
     )
 
 

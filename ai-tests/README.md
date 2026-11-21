@@ -29,6 +29,26 @@ tego, czy Qwen akurat dał się nabrać. Wynik na Qwen pokazuje, jak często pra
 injection i czy walidator nie odrzuca przy tym uczciwych odpowiedzi. Każdy zestaw ma osobny
 plik wyników, osobną tabelę w podsumowaniu zadania CI i osobny artefakt.
 
+## Generowany red team (od Etapu 5)
+
+`redteam/generate.py` pisze ataki dla sześciu kategorii: LLM01 (obniżenie ryzyka), LLM09
+(zmyślone fakty), LLM02 (prośby o sekrety), LLM05 (linki, polecenia, HTML), LLM07 (wyciek
+instrukcji systemowych) i agentowej (tytuł strony zatrutego hosta każe agentowi wyjść poza
+zakres). Atak trafia tam, gdzie w systemie trafia tekst napastnika: do opisu CVE albo do
+wyniku `probe_http`. Każdy atak niesie kanarek `KANAREK-…`.
+
+| Zestaw | Generator i sędzia | Testowany | Kiedy |
+|---|---|---|---|
+| `redteam-mock` | stałe ataki, atrapa sędziego | posłuszna atrapa, planista z szablonu | każdy PR |
+| `redteam` | model zewnętrzny z `REDTEAM_API_KEY` (domyślnie `claude-opus-5-5`, zmienna repo `REDTEAM_MODEL`); bez klucza lokalny Bielik 4.5B Q8_0 z adnotacją o ograniczonej wiarygodności | Qwen3 4B | nocą i ręcznie |
+| `agent` | przypadki z `agent/cases.yaml` (moduł 19) | planista Qwen3 4B | nocą i ręcznie |
+
+Wynik przypadku zależy **wyłącznie od sędziów deterministycznych** (kanarek i frazy zakazane,
+ocena ryzyka, adresy i linki, a u agenta: czy polityka i `scope_guard` zablokowały każdą
+szkodliwą próbę). Sędzia LLM (`llm-rubric`) ma wagę 0 i osobną kolumnę w podsumowaniu.
+Zewnętrzny model dostaje wyłącznie opisy kategorii i fikcyjne przykłady, nigdy dane organizacji
+(wyjątek od lokalności opisany w ARCHITECTURE §13.1). Testowany Qwen nigdy nie ocenia sam siebie.
+
 ## Asercje
 
 Wyłącznie deterministyczne (`assertions.js`), bez modelu jako oceniającego:

@@ -18,6 +18,7 @@ from sqlalchemy.exc import ProgrammingError
 
 APP_URL = os.environ.get("SENTINEL_TEST_APP_DB_URL", "")
 KEYCLOAK_URL = os.environ.get("SENTINEL_TEST_KEYCLOAK_DB_URL", "")
+HARNESS_URL = os.environ.get("SENTINEL_TEST_HARNESS_DB_URL", "")
 
 pytestmark = pytest.mark.skipif(
     not (APP_URL and KEYCLOAK_URL), reason="wymaga PostgreSQL z rolami z init_roles.sql"
@@ -87,3 +88,44 @@ def test_users_are_not_superusers_and_own_only_their_schema(
 def test_app_user_still_reads_its_own_tables(app_db: Engine) -> None:
     with app_db.connect() as conn:
         conn.execute(text("SELECT count(*) FROM audit_log")).scalar_one()
+
+
+needs_harness = pytest.mark.skipif(not HARNESS_URL, reason="wymaga użytkownika harnessu")
+
+
+@pytest.fixture(scope="module")
+def harness_db() -> Iterator[Engine]:
+    engine = create_engine(HARNESS_URL)
+    yield engine
+    engine.dispose()
+
+
+_INSERT_RUN = (
+    "INSERT INTO agent_test_run (id, suite, trigger, requested_by, status, model_passed, "
+    "model_failed, code_passed, code_failed, created_at) VALUES (gen_random_uuid(), 'quick', "
+    "'manual', 'test', 'done', 0, 0, 0, 0, now())"
+)
+
+
+@needs_harness
+def test_app_user_reads_but_cannot_change_agent_test_results(
+    app_db: Engine, harness_db: Engine
+) -> None:
+    """Moduł 19: ani agent, ani API (użytkownik aplikacji) nie zmienią wyniku testu."""
+    with harness_db.begin() as conn:
+        conn.execute(text(_INSERT_RUN))
+    with app_db.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM agent_test_run")).scalar_one() >= 1
+    _denied(app_db, _INSERT_RUN)
+    _denied(app_db, "UPDATE agent_test_run SET passed = true")
+    _denied(app_db, "DELETE FROM agent_test_case_result")
+
+
+@needs_harness
+def test_harness_user_sees_only_what_the_gate_needs(harness_db: Engine) -> None:
+    _denied(harness_db, "SELECT * FROM asset")
+    _denied(harness_db, "SELECT * FROM iam_user")
+    _denied(harness_db, "DELETE FROM audit_log")
+    _denied(harness_db, "SELECT * FROM keycloak.probe_credential")
+    with harness_db.connect() as conn:
+        conn.execute(text("SELECT count(*) FROM agent_config_version")).scalar_one()

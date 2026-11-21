@@ -28,8 +28,9 @@ class FakeRunner:
         target: ScopedTarget | ScopedNetwork,
         *,
         timeout: float,
+        port: int | None = None,
     ) -> ToolOutput:
-        argv = build_argv(binary, args, target)
+        argv = build_argv(binary, args, target, port=port)
         self.calls.append(argv)
         return ToolOutput(self._respond(argv), "", 0, argv)
 
