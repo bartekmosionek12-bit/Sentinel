@@ -128,3 +128,56 @@ def test_glossary_for_any_logged_in_user(anon_client: TestClient, tokens: TokenF
 def test_unknown_report_is_404(anon_client: TestClient, tokens: TokenFactory) -> None:
     response = anon_client.get(f"/api/reports/{uuid.uuid4()}", headers=_as(tokens, "manager"))
     assert response.status_code == 404
+
+
+def test_pdf_export_uses_the_same_redaction_and_is_audited(
+    anon_client: TestClient,
+    tokens: TokenFactory,
+    report_id: uuid.UUID,
+    session_factory: sessionmaker[Session],
+) -> None:
+    response = anon_client.get(f"/api/reports/{report_id}/pdf", headers=_as(tokens, "manager"))
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")
+    assert "attachment" in response.headers["content-disposition"]
+    with session_factory() as session:
+        entry = session.scalars(
+            select(AuditLog).where(AuditLog.action == "report_pdf_downloaded")
+        ).one()
+        assert entry.object_id == str(report_id)
+        assert entry.inputs == {"redacted": True, "personal_hidden": False}
+
+
+def test_pdf_html_for_manager_has_no_technical_details(
+    session_factory: sessionmaker[Session], report_id: uuid.UUID
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.api.reports import report_view
+    from app.reports.pdf import render_html
+
+    now = datetime(2026, 11, 21, tzinfo=UTC)
+    with session_factory() as session:
+        report = session.get(Report, report_id)
+        assert report is not None
+        manager = render_html(
+            report_view(report, technical=True, personal=False), generated_at=now, audience="m"
+        )
+        auditor = render_html(
+            report_view(report, technical=True, personal=True), generated_at=now, audience="a"
+        )
+    assert "Co się stało?" in manager
+    assert "web-01" in manager
+    assert "172.30.99" not in manager
+    assert "Zespół WWW" in manager
+    assert "Zespół WWW" not in auditor
+    assert PERSON_HIDDEN in auditor
+
+
+def test_pdf_export_needs_export_permission(
+    anon_client: TestClient, tokens: TokenFactory, report_id: uuid.UUID
+) -> None:
+    assert anon_client.get(f"/api/reports/{report_id}/pdf").status_code == 401
+    missing = anon_client.get(f"/api/reports/{uuid.uuid4()}/pdf", headers=_as(tokens, "manager"))
+    assert missing.status_code == 404

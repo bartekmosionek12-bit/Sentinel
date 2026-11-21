@@ -25,6 +25,8 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - name: Biblioteki systemowe WeasyPrint (PDF raportów)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       - name: Instalacja zależności
         run: uv sync --frozen --extra dev --python 3.12
       - name: Ruff (lint)

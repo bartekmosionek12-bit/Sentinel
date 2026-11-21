@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>{{ report.title }}</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm;
+    @bottom-left { content: "Sentinel ASI · {{ kind_label }} · {{ audience }}"; font-family: "DejaVu Sans", sans-serif; font-size: 8pt; color: #555; }
+    @bottom-right { content: "Strona " counter(page) " z " counter(pages); font-family: "DejaVu Sans", sans-serif; font-size: 8pt; color: #555; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", sans-serif; font-size: 10pt; color: #111; line-height: 1.4; }
+  h1 { font-size: 17pt; margin: 0 0 4pt; }
+  h2 { font-size: 12.5pt; margin: 16pt 0 6pt; border-bottom: 1px solid #bbb; padding-bottom: 2pt; }
+  .meta { color: #444; font-size: 8.5pt; margin-bottom: 10pt; }
+  .light { border: 1.5pt solid #333; padding: 8pt 10pt; margin: 8pt 0 4pt; }
+  .light.red { border-color: #b91c1c; background: #fef2f2; }
+  .light.yellow { border-color: #b45309; background: #fffbeb; }
+  .light.green { border-color: #15803d; background: #f0fdf4; }
+  .light strong { font-size: 11.5pt; }
+  .qa { margin: 0 0 8pt; page-break-inside: avoid; }
+  .qa .q { font-weight: bold; margin-bottom: 1pt; }
+  .source { color: #555; font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  th, td { border-bottom: 0.5pt solid #ccc; padding: 3pt 4pt; text-align: left; vertical-align: top; }
+  th { background: #f1f1f1; }
+  tr { page-break-inside: avoid; }
+  ul.facts { margin: 0 0 6pt 14pt; padding: 0; }
+</style>
+</head>
+<body>
+  <h1>{{ report.title }}</h1>
+  <div class="meta">
+    {{ kind_label }} · utworzony {{ report.created_at[:16] | replace("T", " ") }} UTC przez {{ report.created_by }}
+    · PDF wygenerowany {{ generated_at.strftime("%Y-%m-%d %H:%M") }} UTC · wersja dla: {{ audience }}
+  </div>
+
+  <div class="light {{ report.light }}">
+    <strong>Światło: {{ light_label }}</strong> ({{ light_meaning }}).<br>
+    {{ report.light_reason }}
+    <div class="source">Światło i fakty liczy kod z reguł, nie model językowy.</div>
+  </div>
+
+  <h2>W skrócie</h2>
+  {% for item in report.summary %}
+  <div class="qa">
+    <div class="q">{{ item.question }}</div>
+    <div>{{ item.answer }}</div>
+  </div>
+  {% endfor %}
+  <div class="source">
+    {% if report.summary_source == "model" %}Zdania sformułował lokalny model językowy na podstawie faktów z systemu; odpowiedź przeszła walidator.
+    {% else %}Zdania z szablonu na podstawie faktów z systemu.{% endif %}
+  </div>
+
+  <h2>Fakty, z których powstał raport</h2>
+  {% for item in report.summary %}
+    {% set facts = report.facts.get(item.key, []) %}
+    {% if facts %}
+    <div class="q"><strong>{{ item.question }}</strong></div>
+    <ul class="facts">{% for fact in facts %}<li>{{ fact }}</li>{% endfor %}</ul>
+    {% endif %}
+  {% endfor %}
+
+  {% if report.technical %}
+  <h2>Szczegóły techniczne ({{ report.technical | length }})</h2>
+  <table>
+    <thead>
+      <tr><th>Zasób</th><th>Podatność</th><th>Oprogramowanie</th><th>Ryzyko</th><th>KEV</th><th>Ekspozycja</th><th>Termin</th><th>Naprawa</th></tr>
+    </thead>
+    <tbody>
+    {% for row in report.technical %}
+      <tr>
+        <td>{{ row.asset or "–" }}</td>
+        <td>{{ row.cve_id or row.check or "–" }}</td>
+        <td>{{ row.product or "–" }}</td>
+        <td>{% if row.risk_score is not none %}{{ "%.1f" | format(row.risk_score) }} ({{ row.risk_level }}){% else %}{{ row.result or "–" }}{% endif %}</td>
+        <td>{{ "tak" if row.in_kev else "nie" }}</td>
+        <td>{{ row.exposure or "–" }}</td>
+        <td>{{ row.deadline or "–" }}</td>
+        <td>{{ row.fixed_version or "–" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</body>
+</html>

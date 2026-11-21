@@ -398,6 +398,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** Pobranie pliku z autoryzacją (np. PDF raportu): fetch → blob → link tymczasowy. */
+async function download(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`/api${path}`, { headers: { ...authHeaders() } });
+  if (response.status === 401) tokenSource.onUnauthorized();
+  if (!response.ok) throw new ApiError(response.status, `Błąd serwera (${response.status})`);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Strumień SSE przez fetch: EventSource nie potrafi wysłać nagłówka Authorization. */
 function streamEvents<E extends { type: string }>(
   path: string,
@@ -752,6 +767,7 @@ export const api = {
   reports: () => request<ReportListItem[]>("/reports"),
   report: (id: string) => request<Report>(`/reports/${id}`),
   inbox: () => request<Inbox>("/inbox"),
+  downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
   markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>

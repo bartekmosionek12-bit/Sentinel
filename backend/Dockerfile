@@ -24,6 +24,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Poprawki bezpieczeństwa pakietów systemowych wydane po zbudowaniu obrazu bazowego.
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    # WeasyPrint (PDF raportów): Pango z HarfBuzz i fonty z polskimi znakami.
+    && apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 \
+       libharfbuzz-subset0 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home sentinel
 

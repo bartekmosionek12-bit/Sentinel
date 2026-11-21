@@ -1209,7 +1209,7 @@ R1–R15 z wersji 1 obowiązują. Nowe:
 | **6** | konsola menedżera (strona główna, tabele, karta urządzenia, „Nieznane i niepotwierdzone”, mapa), mock AD/MDM/CMDB, fikcyjna organizacja, PRIVACY.md; PDF raportów, digesty i e-mail; raport „Czy nasz agent AI jest bezpieczny?” | #6, #18, #15, moduł 19 |
 | **7** | compliance techniczny + prawny (KSC i RODO art. 32 pełne, ISO 27001 i CIS mapowania, kwestionariusz, rejestr ryzyk, oś terminów), aktualizacje i EOL | #5 |
 | **8** | AI Security infrastruktury (L1 pasywnie, L3 red team) + podatny chatbot w demo-lab; **moduł 20** (widok z zewnątrz: Artemis, moje.cert.pl, korelacja outside-in / inside-out, §24) | #19, #26 |
-| **9** | 5 scenariuszy demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline | #7 |
+| **9** | scenariusze demo, README, DEMO.md, ROADMAP.md, Playwright, próba generalna offline; jeśli zostanie czas: pipeline skanów przez `mcp-scanner` | #7, #27 |
 
 **Linia cięcia** (odpada od dołu listy ze specyfikacji, więc najpierw sandbox): KRI, DORA, CRA
 i NIST CSF jako szkielety; federacja AD/Entra; rola auditor; akceptacja ryzyka przez
