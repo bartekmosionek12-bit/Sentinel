@@ -44,7 +44,7 @@ services:
 
   defectdojo-init:
     profiles: [defectdojo]
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django@sha256:7f905b5f2c40e4de0394a9d382102a54c0f08ee435d2fc9c7e267e86839fd965
     entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-initializer.sh"]
     environment:
       <<: *dd-env
@@ -58,7 +58,7 @@ services:
 
   defectdojo-uwsgi:
     profiles: [defectdojo]
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django@sha256:7f905b5f2c40e4de0394a9d382102a54c0f08ee435d2fc9c7e267e86839fd965
     entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-uwsgi.sh"]
     environment:
       <<: *dd-env
@@ -74,7 +74,7 @@ services:
 
   defectdojo-worker:
     profiles: [defectdojo]
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django@sha256:7f905b5f2c40e4de0394a9d382102a54c0f08ee435d2fc9c7e267e86839fd965
     entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-celery-worker.sh"]
     environment:
       <<: *dd-env
@@ -87,7 +87,7 @@ services:
 
   defectdojo-beat:
     profiles: [defectdojo]
-    image: defectdojo/defectdojo-django:latest
+    image: defectdojo/defectdojo-django@sha256:7f905b5f2c40e4de0394a9d382102a54c0f08ee435d2fc9c7e267e86839fd965
     entrypoint: ["/wait-for-it.sh", "defectdojo-db:5432", "-t", "60", "--", "/entrypoint-celery-beat.sh"]
     environment:
       <<: *dd-env
@@ -100,7 +100,7 @@ services:
 
   defectdojo-nginx:
     profiles: [defectdojo]
-    image: defectdojo/defectdojo-nginx:latest
+    image: defectdojo/defectdojo-nginx@sha256:27540c8a846975a6f106b133f8dd5d50dc2a5808df96e36d55b46f01dd2c8d78
     environment:
       DD_UWSGI_HOST: defectdojo-uwsgi
       DD_UWSGI_PORT: "3031"

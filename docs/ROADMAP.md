@@ -1,5 +1,14 @@
 # Sentinel ASI: mapa drogowa
 
+## Nie zdążyliśmy, projekt gotowy
+
+Na sprint finałowy świadomie odłożyliśmy: harmonogram z oknami czasowymi, własne sygnatury,
+szyfrowanie w spoczynku, profil pory dnia, ocenę ciekawości, Sentka i test endpointu przez
+agenta. To są możliwe kolejne zadania po oddaniu działającego rdzenia. Detekcja technologii
+z wbudowanego silnika ProjectDiscovery `httpx` także pozostaje do integracji; obecny
+fingerprint wykorzystuje bibliotekę Python `httpx` i nie zgaduje technologii własnymi
+sygnaturami.
+
 Ten plik zbiera to, co świadomie zostaje poza zakresem hackathonu, oraz kolejność, w jakiej
 odcinamy zakres, gdy zabraknie czasu. Plan etapów: [ARCHITECTURE.md, sekcja 19](ARCHITECTURE.md#19-plan-pracy-i-linia-cięcia).
 

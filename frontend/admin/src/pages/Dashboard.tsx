@@ -59,6 +59,7 @@ export function Dashboard() {
     queryFn: api.auditChain,
   });
   const scope = useQuery({ queryKey: ["scope"], queryFn: api.scope });
+  const sprint = useQuery({queryKey: ["sprint-dashboard"], queryFn: api.sprintDashboard, refetchInterval: 15_000});
 
   const s = stats.data;
   const scopeSize = scope.data
@@ -111,6 +112,19 @@ export function Dashboard() {
           to={s && s.awaiting_approval > 0 ? "/skany" : "/weryfikacja"}
         />
       </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Zmiany od ostatniego skanu" value={String(sprint.data?.change_count ?? "–")} hint="Nowe, znikające i zmienione obserwacje" to="/skany" />
+        <Stat label="Panele administracyjne i staging" value={sprint.data ? `${sprint.data.new_admin_panels} / ${sprint.data.staging}` : "–"} hint="Flagi z ostatniego skanu" to="/skany" />
+        <Stat label="Hosty niestabilne" value={String(sprint.data?.unstable_hosts ?? "–")} hint="Przeplatane odpowiedzi w ostatnich przebiegach" to="/zasoby" />
+        <Stat label="DefectDojo" value={sprint.data?.defectdojo ?? "–"} hint="Lokalny profil Docker Compose" to="/skany" />
+      </div>
+
+      <Card className="mt-6"><CardHeader><CardTitle>Ostatnie skany i zmiany</CardTitle></CardHeader><CardContent className="space-y-2 text-sm">
+        {sprint.data?.recent_runs.map((run) => <p key={run.id}>{formatDateTime(run.started_at)} · {run.status} · czas {run.duration_seconds ?? "w toku"} s · ETA {run.eta_seconds ?? "?"} s</p>)}
+        {sprint.data?.changes.slice(0, 5).map((change, index) => <p key={index}>{change.kind}: {change.host} {change.item}</p>)}
+        {sprint.data?.flags.slice(0, 5).map((flag, index) => <p key={index}>{flag.kind}: {flag.host} · dowody {flag.confidence}</p>)}
+      </CardContent></Card>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card>

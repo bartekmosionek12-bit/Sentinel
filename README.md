@@ -8,7 +8,9 @@ hackathon HackNation, zadanie „Attack Surface Intelligence” (AGH).
 deterministyczny, testowalny kod. Lokalny model językowy służy wyłącznie do tłumaczenia
 wyników na ludzki język.
 
-> **Stan:** Etapy 0–3b zrobione, Etap 4 (Keycloak, MFA, RBAC, dwie konsole) w przeglądzie.
+> **Stan sprintu:** Discovery, fingerprint WWW, porównanie przebiegów, import/eksport,
+> nadpisania i lokalny DefectDojo są na gałęzi `sprint-final`. Luki i pomiar skali:
+> [REQUIREMENTS.md](REQUIREMENTS.md), [PERFORMANCE.md](docs/PERFORMANCE.md).
 > Ścieżka krytyczna działa od początku do końca, bez internetu: import
 > inwentarza, skan usług, feedy ze snapshotów, dopasowanie podatności do zasobów, ocena ryzyka
 > z rozbiciem, kolejka weryfikacji, powiadomienia. Do tego wyjaśnienia zagrożeń na trzech
@@ -19,14 +21,33 @@ wyników na ludzki język.
 ## Uruchomienie
 
 ```bash
-cp .env.example .env        # ustaw POSTGRES_PASSWORD i KEYCLOAK_ADMIN_PASSWORD
-docker compose up --build
+python scripts/init_env.py --demo
+./scripts/seed_demo.sh
+docker compose ps
 ```
+
+Pierwsza komenda tworzy ignorowany `.env` z losowymi hasłami i świadomie włącza
+izolowany demo-lab. Druga buduje stos, uruchamia laboratorium i wczytuje dane. Trzecia
+pokazuje stan usług. W zwykłym trybie bez laboratorium użyj `python scripts/init_env.py`
+oraz `docker compose up -d --build`; zakres skanowania pozostaje pusty.
 
 Konsola operacyjna (admin): <http://localhost:8080/admin/>. Dashboard menedżera:
 <http://localhost:8080/dashboard/>. Dokumentacja API: <http://localhost:8080/api/docs>.
-Po takim starcie zakres skanowania jest pusty, system niczego nie skanuje i nie ma kont
-użytkowników (patrz [Logowanie i role](#logowanie-i-role)).
+W zwykłym trybie bez `--demo` zakres jest pusty i system niczego nie skanuje;
+konta użytkowników trzeba wtedy skonfigurować osobno (patrz [Logowanie i role](#logowanie-i-role)).
+
+Lokalny DefectDojo (oddzielny profil Compose, bez połączenia z obcą instancją):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml --profile defectdojo up -d defectdojo-nginx defectdojo-worker defectdojo-beat
+./scripts/bootstrap_defectdojo.sh
+```
+
+DefectDojo jest pod `http://localhost:8081`. Bootstrap tworzy lokalny product,
+engagement, test i token API; zapisuje identyfikatory i token tylko w ignorowanym `.env`.
+Konsola `/admin/skany` wysyła zaznaczone obserwacje jako findingi `Info`, a powtórny
+eksport pomija identyczny identyfikator. Eksport nmap XML jest dostępny jako droga
+awaryjna do importu w DefectDojo.
 
 ## Demo w 3 minuty (bez internetu)
 
@@ -271,8 +292,8 @@ PORT=5174 npm run dev:dashboard  # http://localhost:5174/dashboard/
 # PUBLIC_URL w .env musi wtedy wskazywać adres serwera deweloperskiego
 ```
 
-Zmiany trafiają do `main` wyłącznie przez pull requesty z gałęzi etapowych
-(`stage-N-nazwa`), w konwencji Conventional Commits.
+Na czas sprintu zmiany są commitowane na jednej gałęzi `sprint-final`; merge do `main`
+zostaje po stronie właściciela repozytorium.
 
 ## demo-lab
 

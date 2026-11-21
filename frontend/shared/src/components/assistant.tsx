@@ -158,23 +158,23 @@ export function SentekAssistant({ onTour }: { onTour?: () => void }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-full border border-border bg-card py-1 pr-4 pl-1 shadow-lg hover:border-sky-300"
+        className="fixed right-4 bottom-4 z-40 flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-border bg-card py-1 pr-4 pl-1 shadow-lg hover:border-sky-300"
         aria-label="Zapytaj Sentka"
         data-demo="sentek-button"
       >
-        <Sentek pose="wave" size={44} />
+        <Sentek pose="wave" size={100} className="shrink-0" />
         <span className="text-sm font-medium">Zapytaj Sentka</span>
       </button>
     );
 
   return (
     <section
-      className="fixed right-4 bottom-4 z-40 flex max-h-[min(640px,85vh)] w-[min(380px,calc(100vw-2rem))] flex-col rounded-xl border border-border bg-card shadow-xl"
+      className="fixed right-4 bottom-4 z-40 flex max-h-[min(680px,90vh)] w-[min(420px,calc(100vw-2rem))] flex-col rounded-xl border border-border bg-card shadow-xl"
       aria-label="Asystent Sentek"
       data-demo="sentek-panel"
     >
       <header className="flex items-center gap-3 border-b border-border p-3">
-        <Sentek pose={pose} size={52} />
+        <Sentek pose={pose} size={112} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold">Sentek</h2>
           <p className="text-xs text-muted-foreground">{DISCLAIMER}</p>

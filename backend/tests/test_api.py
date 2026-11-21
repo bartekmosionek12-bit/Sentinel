@@ -14,6 +14,7 @@ def test_openapi_is_served(client: TestClient) -> None:
     response = client.get("/api/openapi.json")
     assert response.status_code == 200
     assert "/api/assets" in response.json()["paths"]
+    assert client.get("/api/sprint/dashboard").json()["recent_runs"] == []
 
 
 def test_create_and_list_assets(client: TestClient) -> None:

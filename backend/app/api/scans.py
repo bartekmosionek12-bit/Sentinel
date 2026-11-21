@@ -75,7 +75,7 @@ def export_defectdojo(payload: DojoSelection, session: SessionDep) -> dict[str, 
     return {"created": created, "duplicates": duplicates}
 
 
-@router.get("/scan-results/{run_id}/nmap.xml", dependencies=[Depends(require("scan:read"))])
+@router.get("/scan-results/{run_id}/nmap.xml")
 def export_nmap_xml(
     run_id: uuid.UUID,
     session: SessionDep,
@@ -238,7 +238,7 @@ def override_scan_result(payload: OverrideIn, session: SessionDep) -> dict[str, 
     return {"host": payload.host, "field": payload.field, "manually_changed": True}
 
 
-@router.get("/scan-results/{run_id}/export", dependencies=[Depends(require("scan:read"))])
+@router.get("/scan-results/{run_id}/export")
 def export_scan_results(
     run_id: uuid.UUID,
     session: SessionDep,
@@ -280,7 +280,7 @@ def export_scan_results(
     )
 
 
-@router.get("/scan-diff", dependencies=[Depends(require("scan:read"))])
+@router.get("/scan-diff")
 def scan_diff(
     session: SessionDep,
     from_run: uuid.UUID,

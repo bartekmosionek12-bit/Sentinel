@@ -123,6 +123,7 @@ export function Home() {
     refetchInterval: 5_000,
   });
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, refetchInterval: 5_000 });
+  const sprint = useQuery({queryKey: ["sprint-dashboard"], queryFn: api.sprintDashboard, refetchInterval: 15_000});
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox, refetchInterval: 5_000 });
   const findings = useQuery({
     queryKey: ["findings", "active"],
@@ -151,6 +152,13 @@ export function Home() {
             <CurrentPicture />
           </div>
           <FreshnessNote />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Tile label="Zmiany od skanu" value={String(sprint.data?.change_count ?? "–")} hint="Nowe i znikające obserwacje" />
+            <Tile label="Panele i staging" value={sprint.data ? `${sprint.data.new_admin_panels} / ${sprint.data.staging}` : "–"} hint="Sygnały wymagające uwagi" />
+            <Tile label="Hosty niestabilne" value={String(sprint.data?.unstable_hosts ?? "–")} hint="Odpowiadają nieregularnie" />
+            <Tile label="DefectDojo" value={sprint.data?.defectdojo ?? "–"} hint="Lokalny rejestr obserwacji" />
+          </div>
+          <Card><CardHeader><CardTitle>Ostatnie przebiegi</CardTitle></CardHeader><CardContent className="space-y-1 text-sm">{sprint.data?.recent_runs.slice(0, 3).map((run) => <p key={run.id}>{formatDateTime(run.started_at)} · {run.status} · czas {run.duration_seconds ?? "w toku"} s · ETA {run.eta_seconds ?? "?"} s</p>)}</CardContent></Card>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Tile
               label="Zagrożenia krytyczne"
