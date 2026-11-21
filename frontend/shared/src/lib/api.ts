@@ -365,10 +365,7 @@ export class ApiError extends Error {
 
 /** Dostawca tokenu dostępu; ustawia go `AuthProvider` po zalogowaniu. */
 type TokenSource = { token: () => string | null; onUnauthorized: () => void };
-let tokenSource: TokenSource = {
-  token: () => null,
-  onUnauthorized: () => undefined,
-};
+let tokenSource: TokenSource = { token: () => null, onUnauthorized: () => undefined };
 
 export function setTokenSource(source: TokenSource): void {
   tokenSource = source;
@@ -382,23 +379,14 @@ function authHeaders(): Record<string, string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...init?.headers,
-    },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
   if (response.status === 401) tokenSource.onUnauthorized();
   if (!response.ok) {
     let message = `Błąd serwera (${response.status})`;
     try {
       const body: unknown = await response.json();
-      if (
-        body &&
-        typeof body === "object" &&
-        "detail" in body &&
-        typeof body.detail === "string"
-      ) {
+      if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
         message = body.detail;
       }
     } catch {
@@ -412,12 +400,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Pobranie pliku z autoryzacją (np. PDF raportu): fetch → blob → link tymczasowy. */
 async function download(path: string, fallbackName: string): Promise<void> {
-  const response = await fetch(`/api${path}`, {
-    headers: { ...authHeaders() },
-  });
+  const response = await fetch(`/api${path}`, { headers: { ...authHeaders() } });
   if (response.status === 401) tokenSource.onUnauthorized();
-  if (!response.ok)
-    throw new ApiError(response.status, `Błąd serwera (${response.status})`);
+  if (!response.ok) throw new ApiError(response.status, `Błąd serwera (${response.status})`);
   const disposition = response.headers.get("Content-Disposition") ?? "";
   const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
   const url = URL.createObjectURL(await response.blob());
@@ -436,10 +421,7 @@ function streamEvents<E extends { type: string }>(
 ): () => void {
   const controller = new AbortController();
   const lost = () =>
-    onEvent({
-      type: "error",
-      message: "Utracono połączenie ze strumieniem",
-    } as unknown as E);
+    onEvent({ type: "error", message: "Utracono połączenie ze strumieniem" } as unknown as E);
   void (async () => {
     try {
       const response = await fetch(`/api${path}`, {
@@ -451,9 +433,7 @@ function streamEvents<E extends { type: string }>(
         lost();
         return;
       }
-      const reader = response.body
-        .pipeThrough(new TextDecoderStream())
-        .getReader();
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = "";
       for (;;) {
         const { value, done } = await reader.read();
@@ -592,13 +572,7 @@ export interface AgentConfig {
   prompt_version: string;
   capability_version: number;
   external_llm: boolean;
-  state:
-    | "pending_test"
-    | "active"
-    | "forced"
-    | "failed"
-    | "superseded"
-    | string;
+  state: "pending_test" | "active" | "forced" | "failed" | "superseded" | string;
   reason: string;
   forced_by: string | null;
   force_justification: string | null;
@@ -725,6 +699,7 @@ export interface CredentialLease {
   revoked_by: string | null;
 }
 
+
 // --- organizacja (Etap 6, #18) ---
 
 export interface Coverage {
@@ -810,14 +785,9 @@ export interface DeviceFilter {
 }
 
 function query(params: Record<string, string | boolean | undefined>): string {
-  const entries = Object.entries(params).filter(
-    ([, v]) => v !== undefined && v !== false,
-  );
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== false);
   if (!entries.length) return "";
-  return (
-    "?" +
-    new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()
-  );
+  return "?" + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
 }
 
 // --- moduł 21: świeżość danych, „Aktualny obraz”, prośby o skanowanie ---
@@ -885,12 +855,9 @@ export const api = {
       body: JSON.stringify({ csv }),
     }),
   stats: () => request<Stats>("/stats"),
-  findings: (status: string) =>
-    request<Page<Finding>>(`/findings?status=${status}&limit=500`),
+  findings: (status: string) => request<Page<Finding>>(`/findings?status=${status}&limit=500`),
   deviceFindings: (assetId: string) =>
-    request<Page<Finding>>(
-      `/findings?status=active&asset_id=${assetId}&limit=100`,
-    ),
+    request<Page<Finding>>(`/findings?status=active&asset_id=${assetId}&limit=100`),
   finding: (id: string) => request<FindingDetail>(`/findings/${id}`),
   updateFinding: (id: string, patch: FindingPatch) =>
     request<FindingDetail>(`/findings/${id}`, {
@@ -899,9 +866,7 @@ export const api = {
     }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
   explanation: (findingId: string, audience: Audience) =>
-    request<Explanation>(
-      `/findings/${findingId}/explanation?audience=${audience}`,
-    ),
+    request<Explanation>(`/findings/${findingId}/explanation?audience=${audience}`),
   requestExplanation: (
     findingId: string,
     body: {
@@ -915,40 +880,29 @@ export const api = {
       body: JSON.stringify(body),
     }),
   /** Strumień zdarzeń generowania (SSE). Zwraca funkcję zamykającą połączenie. */
-  explanationEvents: (
-    jobId: string,
-    onEvent: (event: ExplanationEvent) => void,
-  ) =>
+  explanationEvents: (jobId: string, onEvent: (event: ExplanationEvent) => void) =>
     streamEvents<ExplanationEvent>(
       `/explanations/jobs/${jobId}/events`,
       onEvent,
       (event) => event.type === "done" || event.type === "error",
     ),
-  threatFeed: (scope: "ours" | "all") =>
-    request<ThreatFeed>(`/threat-feed?scope=${scope}`),
+  threatFeed: (scope: "ours" | "all") => request<ThreatFeed>(`/threat-feed?scope=${scope}`),
   syncFeeds: () => request<Task>("/feeds/sync", { method: "POST" }),
   reviewQueue: () => request<ReviewItem[]>("/review-queue"),
   decideReview: (id: string, accept: boolean) =>
-    request<{ match_status: string; findings_created: number }>(
-      `/review-queue/${id}/decision`,
-      {
-        method: "POST",
-        body: JSON.stringify({ accept }),
-      },
-    ),
+    request<{ match_status: string; findings_created: number }>(`/review-queue/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ accept }),
+    }),
   signalQueue: () => request<SignalItem[]>("/signal-queue"),
   decideSignal: (id: string, accept: boolean) =>
-    request<{ decision: string; findings_created: number }>(
-      `/signal-queue/${id}/decision`,
-      {
-        method: "POST",
-        body: JSON.stringify({ accept }),
-      },
-    ),
+    request<{ decision: string; findings_created: number }>(`/signal-queue/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ accept }),
+    }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
-  scanActions: (status: string) =>
-    request<ScanAction[]>(`/scan-actions?status=${status}`),
+  scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>
     request<Task>(`/scan-actions/${id}/approve`, {
       method: "POST",
@@ -963,22 +917,14 @@ export const api = {
   reports: () => request<ReportListItem[]>("/reports"),
   report: (id: string) => request<Report>(`/reports/${id}`),
   inbox: () => request<Inbox>("/inbox"),
-  downloadReportPdf: (id: string) =>
-    download(`/reports/${id}/pdf`, "raport.pdf"),
-  markReportRead: (id: string) =>
-    request<void>(`/reports/${id}/read`, { method: "POST" }),
+  downloadReportPdf: (id: string) => download(`/reports/${id}/pdf`, "raport.pdf"),
+  markReportRead: (id: string) => request<void>(`/reports/${id}/read`, { method: "POST" }),
   orgOverview: () => request<OrgOverview>("/org/overview"),
   freshness: () => request<Freshness>("/freshness"),
   currentReport: () => request<Report>("/reports/current", { method: "POST" }),
   scanRequests: (status?: string) =>
-    request<ScanRequest[]>(
-      `/scan-requests${status ? `?status=${status}` : ""}`,
-    ),
-  requestScan: (
-    scope_kind: ScanRequestScope,
-    scope_ref: string | null,
-    reason: string,
-  ) =>
+    request<ScanRequest[]>(`/scan-requests${status ? `?status=${status}` : ""}`),
+  requestScan: (scope_kind: ScanRequestScope, scope_ref: string | null, reason: string) =>
     request<ScanRequest>("/scan-requests", {
       method: "POST",
       body: JSON.stringify({ scope_kind, scope_ref, reason }),
@@ -997,10 +943,8 @@ export const api = {
     request<DeviceList>(`/org/devices${query({ ...filter })}`),
   device: (id: string, pseudonyms = false) =>
     request<Device>(`/org/devices/${id}${query({ pseudonyms })}`),
-  people: (pseudonyms = false) =>
-    request<OrgPeopleRow[]>(`/org/people${query({ pseudonyms })}`),
-  confirmDevice: (id: string) =>
-    request<Device>(`/org/devices/${id}/confirm`, { method: "POST" }),
+  people: (pseudonyms = false) => request<OrgPeopleRow[]>(`/org/people${query({ pseudonyms })}`),
+  confirmDevice: (id: string) => request<Device>(`/org/devices/${id}/confirm`, { method: "POST" }),
   createReport: () => request<Report>("/reports", { method: "POST" }),
   requestReportSummary: (id: string) =>
     request<{ task_id: string }>(`/reports/${id}/summary`, { method: "POST" }),
@@ -1014,10 +958,7 @@ export const api = {
   agentStatus: () => request<AgentStatus>("/agent/status"),
   agentCapabilities: () => request<AgentCapability[]>("/agent/capabilities"),
   createAgentCapability: (input: AgentCapabilityInput) =>
-    request<AgentConfig>("/agent/capabilities", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    request<AgentConfig>("/agent/capabilities", { method: "POST", body: JSON.stringify(input) }),
   killAgent: (reason: string) =>
     request<Record<string, unknown>>("/agent/kill", {
       method: "POST",
@@ -1026,10 +967,7 @@ export const api = {
   agentLeases: () => request<CredentialLease[]>("/agent/leases?limit=50"),
   agentTasks: () => request<AgentTask[]>("/agent/tasks?limit=20"),
   createAgentTask: (command: string) =>
-    request<AgentTask>("/agent/tasks", {
-      method: "POST",
-      body: JSON.stringify({ command }),
-    }),
+    request<AgentTask>("/agent/tasks", { method: "POST", body: JSON.stringify({ command }) }),
   approveAgentTask: (id: string, reason: string, stepIds?: string[]) =>
     request<Task>(`/agent/tasks/${id}/approve`, {
       method: "POST",
@@ -1044,10 +982,7 @@ export const api = {
   agentTests: () => request<AgentTestRun[]>("/agent/tests?limit=20"),
   agentTest: (id: string) => request<AgentTestRunDetail>(`/agent/tests/${id}`),
   runAgentTest: (suite: "quick" | "full") =>
-    request<Task>("/agent/tests", {
-      method: "POST",
-      body: JSON.stringify({ suite }),
-    }),
+    request<Task>("/agent/tests", { method: "POST", body: JSON.stringify({ suite }) }),
   forceAgentConfig: (id: string, justification: string) =>
     request<AgentConfig>(`/agent/configs/${id}/force`, {
       method: "POST",
