@@ -42,7 +42,7 @@ from app.mcp_server.watcher import KillWatcher
 from app.models import AgentStep, AgentSwitch, AgentTask, AuditLog
 from app.scanners.http_probe import HttpProber
 from app.scanners.nmap import NmapAdapter
-from app.scanners.runner import Cancellations, SubprocessRunner
+from app.scanners.runner import Cancellations, SubprocessRunner, ToolError
 from tests.conftest import FakeResolver, MemoryAudit
 
 SCOPE = {"allow": {"cidrs": ["172.30.99.0/24"]}, "deny": {"cidrs": ["172.30.99.1/32"]}}
@@ -157,6 +157,26 @@ def test_failed_effect_is_reported_and_does_not_stop_the_others() -> None:
     assert results[1].ok is True
 
 
+class _GatedRunner(SubprocessRunner):
+    """Prawdziwy proces, ale reakcja wykonawcy na przerwanie czeka, aż strażnik zapisze stan.
+
+    Testy dzielą jedno połączenie SQLite (StaticPool), więc rollback wątku wykonawcy w trakcie
+    zapisu strażnika cofał też ten zapis. W PostgreSQL każda sesja ma własne połączenie i
+    tego wyścigu nie ma; bramka odtwarza tę izolację w teście.
+    """
+
+    def __init__(self, cancellations: Cancellations, gate: threading.Event) -> None:
+        super().__init__(cancellations)
+        self._gate = gate
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return super().run(*args, **kwargs)
+        except ToolError:
+            self._gate.wait(10)
+            raise
+
+
 def test_kill_switch_end_to_end_all_three_effects(
     session: Session,
     session_factory: sessionmaker[Session],
@@ -175,11 +195,12 @@ def test_kill_switch_end_to_end_all_three_effects(
     session.commit()
     service = AgentService(session, guard, Planner(None))
     cancellations = Cancellations()
+    watcher_done = threading.Event()
     runtime = ToolRuntime(
         session_factory,
         guard,
         Toolbox(
-            nmap=NmapAdapter(SubprocessRunner(cancellations)),
+            nmap=NmapAdapter(_GatedRunner(cancellations, watcher_done)),
             http=HttpProber(),
             vault=FakeVault(),
         ),
@@ -213,6 +234,7 @@ def test_kill_switch_end_to_end_all_three_effects(
     # 3. mcp-scanner: strażnik przerywa trwające wywołanie (prawdziwy proces).
     started = time.monotonic()
     assert KillWatcher(session_factory, cancellations).tick() == 1
+    watcher_done.set()
     worker.join(timeout=10)
     assert not worker.is_alive()
     assert time.monotonic() - started < 5, "proces nmap powinien zginąć od razu, nie po 30 s"
@@ -305,3 +327,24 @@ def test_mcp_rejects_tokens_issued_before_the_last_kill() -> None:
     assert anyio.run(old.verify_token, "t") is None
     assert anyio.run(fresh.verify_token, "t") is not None
     assert anyio.run(during.verify_token, "t") is None
+
+
+def test_killswitch_account_in_realm_can_reach_admin_api_with_least_privilege() -> None:
+    """Keycloak 26.8 wymaga w tokenie audience admin API (zakres `kc-admin-api`).
+
+    Bez tego zakresu admin API odpowiada 401 (sprawdzone na żywo w CI demo-lab).
+    """
+    realm = json.loads(
+        (Path(__file__).resolve().parents[2] / "infra/keycloak/sentinel-realm.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    client = next(c for c in realm["clients"] if c["clientId"] == "sentinel-killswitch")
+    assert "kc-admin-api" in client["defaultClientScopes"]
+    assert client["standardFlowEnabled"] is False
+    assert client["directAccessGrantsEnabled"] is False
+    account = next(
+        u for u in realm["users"] if u.get("serviceAccountClientId") == "sentinel-killswitch"
+    )
+    assert account["clientRoles"] == {"realm-management": ["view-clients", "manage-clients"]}
+    assert not account.get("realmRoles")

@@ -205,6 +205,8 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["basic", "roles", "kc-admin-api"],
+      "optionalClientScopes": [],
       "attributes": {"access.token.lifespan": "60"}
     },
     {

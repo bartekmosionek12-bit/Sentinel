@@ -20,7 +20,7 @@ dependencies = [
     "pyjwt[crypto]>=2.9,<3",
     "mcp>=1.30,<2",
     "paramiko>=3.5,<4",
-    "weasyprint>=63,<70",
+    "weasyprint>=70,<71",
     "jinja2>=3.1,<4",
 ]
 
