@@ -50,6 +50,12 @@ jobs:
     with:
       suite: redteam-mock
 
+  ai-tests-assistant-mock:
+    name: AI tests, Sentek (wroga atrapa)
+    uses: ./.github/workflows/ai-tests.yml
+    with:
+      suite: assistant-mock
+
   ai-tests-qwen:
     name: AI tests, Qwen3 4B
     needs: ai-tests-mock

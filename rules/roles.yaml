@@ -27,6 +27,8 @@ permissions:
   scope:manage: {description: "Zmiana zakresu skanowania", mfa: true}
   scan:read: {description: "Odczyt skanów i akcji skanujących"}
   # Moduł 21: menedżer prosi o skan, ale go nie uruchamia; zatwierdza admin (scan:run).
+  # Sentek: asystent tylko czyta dane z uprawnieniami pytającego; niczego nie uruchamia.
+  assistant:use: {description: "Pytania do asystenta Sentek (odpowiedzi z danych, w granicach własnych uprawnień)"}
   scan:request: {description: "Prośba o nowe skanowanie do kolejki admina (bez uruchamiania skanu)"}
   scan:run: {description: "Uruchamianie skanów L1", mfa: true}
   scan:approve:l2: {description: "Zatwierdzanie akcji L2", mfa: true}
@@ -69,6 +71,7 @@ roles:
       - personal_data:view
       - reports:snapshot
       - scan:request
+      - assistant:use
   auditor:
     description: "Audytor: odczyt i eksport dowodów oraz pełnego dziennika audytu (opcjonalna)"
     kind: human
@@ -87,6 +90,7 @@ roles:
       - review:read
       - agent:read
       - agent_test:read
+      - assistant:use
   agent:
     description: "Agent AI (tożsamość nieludzka): wyłącznie zdolności nadane przez admina"
     kind: agent

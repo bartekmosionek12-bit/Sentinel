@@ -15,6 +15,7 @@ from app.agent.killswitch import KillEffect
 from app.agent.planner import Planner
 from app.agent.service import AgentService
 from app.agent_tests.gate import RuntimeConfig, config_ready, runtime_config
+from app.assistant.classify import ModelClassifier
 from app.core.audit import DbAuditSink
 from app.core.config import Settings, get_settings
 from app.core.db import get_sessionmaker
@@ -124,6 +125,23 @@ def explainer_service(session: Session) -> ExplainerService:
         external=external_provider(settings),
         titles=product_titles(get_rulebook().aliases),
     )
+
+
+def assistant_classifier() -> ModelClassifier:
+    """Model lokalny z krótkim limitem czasu albo same słowa kluczowe. Nigdy model zewnętrzny."""
+    settings = get_settings()
+    timeout = settings.assistant_timeout_seconds
+    provider = None
+    if settings.assistant_use_model and settings.llm_model.strip():
+        provider = OllamaProvider(
+            base_url=settings.ollama_url,
+            model=settings.llm_model.strip(),
+            num_ctx=2048,
+            num_thread=settings.llm_num_thread,
+            keep_alive=settings.ollama_keep_alive,
+            timeout=timeout,
+        )
+    return ModelClassifier(provider, timeout_seconds=timeout)
 
 
 @lru_cache

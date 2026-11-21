@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     llm_num_thread: int = 0
     ollama_keep_alive: str = "-1"
     llm_timeout_seconds: float = 300.0
+    # Sentek (moduł 21): model tylko rozpoznaje intencję; po tym czasie słowa kluczowe.
+    assistant_use_model: bool = True
+    assistant_timeout_seconds: float = 4.0
     # Zewnętrzny LLM: domyślnie WYŁĄCZONY. Dostaje wyłącznie dane zanonimizowane.
     external_llm_enabled: bool = False
     external_llm_url: str = ""
