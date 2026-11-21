@@ -76,6 +76,11 @@ export async function stubApi(
     }
     if (url.pathname === "/api/me") return route.fulfill({ json: me });
     if (url.pathname === "/api/console/admin") return route.fulfill({ status: 204 });
+    if (url.pathname === "/api/assistant") {
+      const answers = fixture("assistant") as Record<string, unknown>;
+      const question = (body as { question?: string } | null)?.question ?? "";
+      return route.fulfill({ json: answers[question] ?? Object.values(answers)[0] });
+    }
     if (request.method() === "PUT" && url.pathname.startsWith("/api/iam/roles/")) {
       const name = decodeURIComponent(url.pathname.split("/").pop() ?? "");
       const input = body as { description: string; permissions: string[] };

@@ -20,6 +20,7 @@ import { Scope } from "@/pages/Scope";
 import { ThreatFeed } from "@/pages/ThreatFeed";
 import { AppShell } from "@shared/components/AppShell";
 import { DemoStage } from "@shared/components/DemoStage";
+import { SentekAssistant, SentekToggle } from "@shared/components/assistant";
 import { Planned } from "@shared/components/Planned";
 import { InboxPage, ReportPage } from "@shared/components/ReportPages";
 import { ZeroDayBanner } from "@shared/components/reports";
@@ -73,8 +74,10 @@ export function App() {
       subtitle="Konsola zespołu IT"
       footer=""
       banner={<ZeroDayBanner basePath="/skrzynka" />}
+      headerExtra={<SentekToggle />}
     >
       <DemoStage />
+      <SentekAssistant />
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/skrzynka" element={<InboxPage basePath="/skrzynka" />} />
