@@ -25,5 +25,19 @@ if (-not $bash) {
     exit 1
 }
 
-& $bash -lc "cd '$($PSScriptRoot -replace '\\','/')' && ./start.sh"
+# Kopia z Windowsa (git z core.autocrlf=true) ma CRLF w skryptach .sh, a wtedy bash ich nie uruchomi
+# ("required file not found"). Zamieniamy CRLF na LF tutaj, zanim bash cokolwiek przeczyta.
+$skip = '\\(node_modules|\.git|\.venv|dist)\\'
+Get-ChildItem -Path $PSScriptRoot -Recurse -File -Include *.sh, .env, .env.example -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch $skip } |
+    ForEach-Object {
+        $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+        if ($bytes -contains 13) {
+            $text = [System.Text.Encoding]::UTF8.GetString($bytes) -replace "`r`n", "`n" -replace "`r", ""
+            [System.IO.File]::WriteAllText($_.FullName, $text, (New-Object System.Text.UTF8Encoding($false)))
+        }
+    }
+
+$unixPath = $PSScriptRoot -replace '\\', '/'
+& $bash -lc "cd '$unixPath' && bash ./start.sh"
 exit $LASTEXITCODE

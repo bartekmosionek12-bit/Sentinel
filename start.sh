@@ -13,4 +13,4 @@ fi
 # Kopie z Windowsa mogą mieć CRLF w skryptach; bash i kontenery potrzebują LF.
 git ls-files -z -- '*.sh' 2>/dev/null | xargs -0 -r sed -i 's/\r$//' 2>/dev/null || true
 
-./scripts/seed_demo.sh
+bash ./scripts/seed_demo.sh

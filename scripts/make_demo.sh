@@ -18,7 +18,7 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-./scripts/ensure_env.sh   # .env, DEMO_MODE=true i brakujące hasła bez ręcznych ustawień
+bash ./scripts/ensure_env.sh   # .env, DEMO_MODE=true i brakujące hasła bez ręcznych ustawień
 
 export COMPOSE_FILE=docker-compose.yml:docker-compose.defectdojo.yml:docker-compose.demo-video.yml
 export COMPOSE_PROFILES=demo,defectdojo
@@ -28,14 +28,14 @@ mkdir -p "$OUT"
 
 echo "==> 1/6 Stos aplikacji, demo-lab i DefectDojo"
 if [ ! -f data/demo-credentials.env ]; then
-  ./scripts/seed_demo.sh   # pierwszy raz: build, zakres demo-lab, konta demo z TOTP
+  bash ./scripts/seed_demo.sh   # pierwszy raz: build, zakres demo-lab, konta demo z TOTP
 else
   SCOPE_FILE=/app/rules/scope.demo.yaml docker compose up -d --build
 fi
 
 echo "==> 2/6 Token DefectDojo"
 if ! grep -Eq '^DEFECTDOJO_TOKEN=.+' .env; then
-  ./scripts/defectdojo_token.sh
+  bash ./scripts/defectdojo_token.sh
   SCOPE_FILE=/app/rules/scope.demo.yaml docker compose up -d api worker-core worker-scans
 fi
 for _ in $(seq 1 60); do
@@ -52,12 +52,12 @@ docker compose stop lab-poisoned >/dev/null 2>&1 || true
 trap 'docker compose start lab-poisoned >/dev/null 2>&1 || true' EXIT
 
 echo "==> 4/6 Nagranie scen (Playwright w kontenerze narzędzi)"
-./scripts/record_demo.sh
+bash ./scripts/record_demo.sh
 [ -n "${ONLY:-}" ] && { echo "Nagrano scenę $ONLY (demo/out/clips)."; exit 0; }
 
 echo "==> 5/6 Lektor i 6/6 montaż z napisami"
 COMPOSE_PROFILES=demo-video docker compose run --rm --no-deps demo-tools bash -c '
   set -e
-  PYTHON=python3 ./scripts/demo_tts.sh
-  PYTHON=python3 ./scripts/assemble_demo.sh'
+  PYTHON=python3 bash ./scripts/demo_tts.sh
+  PYTHON=python3 bash ./scripts/assemble_demo.sh'
 echo "Film: $OUT/demo.mp4"

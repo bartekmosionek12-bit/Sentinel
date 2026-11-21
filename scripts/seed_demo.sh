@@ -9,7 +9,7 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-./scripts/ensure_env.sh
+bash ./scripts/ensure_env.sh
 
 # Zakres: tylko demo-lab. Zgoda seed_demo na skany inwazyjne wygasa po 4 godzinach.
 export SCOPE_FILE=/app/rules/scope.demo.yaml
@@ -21,7 +21,7 @@ export DEMO_APPROVAL_EXPIRES_AT
 
 mkdir -p data/feeds
 echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"
-./scripts/fetch_nuclei.sh || \
+bash ./scripts/fetch_nuclei.sh || \
   echo "nuclei niedostępny: narzędzie verify_cve agenta zwróci błąd, reszta demo działa."
 echo "==> Start stosu z profilem demo (zgoda seed_demo do ${DEMO_APPROVAL_EXPIRES_AT})"
 docker compose --profile demo up -d --build
@@ -36,7 +36,7 @@ echo "==> Agent: zdolności dla demo-lab (L0-L2); działają po zaliczonym teśc
 docker compose exec -T worker-agent python -m app.cli agent-bootstrap
 
 echo "==> Konta demo w Keycloaku (admin, editor, modifier, viewer; każde z TOTP)"
-./scripts/demo_users.sh
+bash ./scripts/demo_users.sh
 
 # Domyślny model to Qwen3 4B (LLM_MODEL=qwen3-4b-q4km w .env.example, wybór: eval/RESULTS.md).
 LLM_MODEL_NAME=$(grep -E '^LLM_MODEL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
