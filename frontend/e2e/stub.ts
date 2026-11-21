@@ -21,6 +21,14 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/iam\/permissions/, "iam_permissions"],
   [/^\/api\/iam\/roles/, "iam_roles"],
   [/^\/api\/iam\/users/, "iam_users"],
+  [/^\/api\/discovery\/runs\/[^/]+\/hosts/, "discovery_hosts"],
+  [/^\/api\/discovery\/runs\/[^/?]+(\?|$)/, "discovery_run"],
+  [/^\/api\/discovery\/runs/, "discovery_runs"],
+  [/^\/api\/discovery\/compare/, "discovery_compare"],
+  [/^\/api\/discovery\/states/, "discovery_states"],
+  [/^\/api\/discovery\/defectdojo\/status/, "dojo_status"],
+  [/^\/api\/discovery\/settings/, "discovery_config"],
+  [/^\/api\/discovery\/targets\/preview/, "discovery_preview"],
 ];
 
 export interface Sent {

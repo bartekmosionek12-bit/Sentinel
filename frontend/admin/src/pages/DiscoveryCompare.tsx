@@ -49,23 +49,25 @@ function RunSelect({
   );
 }
 
-function DiffLines({ diff, label }: { diff?: DictDiff; label: string }) {
+/** Etykiety zmian z odmianą: [nowy, zniknął, zmieniony] w rodzaju danego słowa. */
+function DiffLines({ diff, words }: { diff?: DictDiff; words: [string, string, string] }) {
+  const [added, removed, changed] = words;
   if (!diff) return null;
   return (
     <>
       {Object.entries(diff.added).map(([k, v]) => (
-        <li key={`+${label}${k}`}>
-          <Badge variant="ok">nowy {label}</Badge> <span className="font-mono">{k}</span> {v}
+        <li key={`+${added}${k}`}>
+          <Badge variant="ok">{added}</Badge> <span className="font-mono">{k}</span> {v}
         </li>
       ))}
       {Object.entries(diff.removed).map(([k, v]) => (
-        <li key={`-${label}${k}`}>
-          <Badge variant="danger">zniknął {label}</Badge> <span className="font-mono">{k}</span> {v}
+        <li key={`-${removed}${k}`}>
+          <Badge variant="danger">{removed}</Badge> <span className="font-mono">{k}</span> {v}
         </li>
       ))}
       {Object.entries(diff.changed).map(([k, [a, b]]) => (
-        <li key={`~${label}${k}`}>
-          <Badge variant="warn">zmieniony {label}</Badge> <span className="font-mono">{k}</span>:{" "}
+        <li key={`~${changed}${k}`}>
+          <Badge variant="warn">{changed}</Badge> <span className="font-mono">{k}</span>:{" "}
           <span className="line-through opacity-70">{a || "–"}</span> → {b || "–"}
         </li>
       ))}
@@ -223,9 +225,18 @@ export function DiscoveryCompare() {
                       </Td>
                       <Td>
                         <ul className="space-y-1 text-sm">
-                          <DiffLines diff={h.services} label="usługa" />
-                          <DiffLines diff={h.headers} label="nagłówek" />
-                          <DiffLines diff={h.titles} label="tytuł" />
+                          <DiffLines
+                            diff={h.services}
+                            words={["nowa usługa", "zniknęła usługa", "zmieniona usługa"]}
+                          />
+                          <DiffLines
+                            diff={h.headers}
+                            words={["nowy nagłówek", "zniknął nagłówek", "zmieniony nagłówek"]}
+                          />
+                          <DiffLines
+                            diff={h.titles}
+                            words={["nowy tytuł", "zniknął tytuł", "zmieniony tytuł"]}
+                          />
                           {h.technologies?.added.map((t) => (
                             <li key={`t+${t}`}>
                               <Badge variant="ok">nowa technologia</Badge> {t}

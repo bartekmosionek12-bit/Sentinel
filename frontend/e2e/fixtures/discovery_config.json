@@ -1,0 +1,1 @@
+{"defaults": {"workers": 4, "max_rate": 300, "timing": 3, "batch_initial": 256, "batch_min": 16, "batch_max": 1024, "batch_target_seconds": 20, "discovery_ports": "22,80", "service_ports": "22,80", "http_paths": ["/admin", "/login"]}, "limits": {"workers": 16, "max_rate": 2000, "timing": 3, "addresses": 70000}, "host_state": {"inactive_after_runs": 3, "window": 5}}
