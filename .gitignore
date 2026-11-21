@@ -54,3 +54,7 @@ frontend/dist/
 Thumbs.db
 *.log
 *.swp
+
+# Playwright (frontend/e2e)
+frontend/test-results/
+frontend/playwright-report/
