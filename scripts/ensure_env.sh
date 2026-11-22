@@ -2,7 +2,7 @@
 # Przygotowuje .env tak, żeby demo ruszyło bez ręcznych ustawień.
 #
 #   * brak .env -> kopia .env.example,
-#   * DEMO_MODE=true (ten skrypt wołają tylko skrypty demo: seed_demo.sh, make_demo.sh),
+#   * DEMO_MODE=true (skrypty demo) albo false przy SENTINEL_DEMO=0 (./start.sh --bez-demo),
 #   * puste hasła i sekrety oraz wartości „change-me…” -> losowe (tylko w .env, poza Gitem).
 #
 # Wartości „change-me…” zmieniamy tylko wtedy, gdy baza jeszcze nie istnieje (brak wolumenu
@@ -34,7 +34,13 @@ fi
 # Plik edytowany na Windowsie może mieć końce linii CRLF; bash i docker compose chcą LF.
 sed -i 's/\r$//' .env
 
-if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
+# SENTINEL_DEMO=0 (./start.sh --bez-demo): tryb pracy na własnych celach, bez danych demo.
+if [ "${SENTINEL_DEMO:-1}" = "0" ]; then
+  if ! grep -Eq '^DEMO_MODE=false[[:space:]]*$' .env; then
+    set_value DEMO_MODE false
+    echo "Ustawiłem DEMO_MODE=false w .env (tryb bez demo)."
+  fi
+elif ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
   set_value DEMO_MODE true
   echo "Ustawiłem DEMO_MODE=true w .env."
 fi

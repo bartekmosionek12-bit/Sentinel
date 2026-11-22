@@ -13,7 +13,8 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-if ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
+# SENTINEL_ACCOUNTS=1: te same cztery konta w trybie bez demo (./start.sh --bez-demo).
+if [ "${SENTINEL_ACCOUNTS:-}" != "1" ] && ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
   echo "Konta demo tworzymy tylko przy DEMO_MODE=true w pliku .env." >&2
   exit 1
 fi

@@ -1,4 +1,4 @@
-# Start demo na Windowsie jedną komendą (PowerShell):  .\start.ps1
+# Start demo na Windowsie jedną komendą (PowerShell):  .\start.ps1  (bez demo: .\start.ps1 --bez-demo)
 # Wymaga Docker Desktop i Git for Windows (z niego bierzemy bash). Niczego nie trzeba ustawiać:
 # .env i hasła przygotowuje scripts/ensure_env.sh.
 $ErrorActionPreference = "Stop"
@@ -43,5 +43,7 @@ $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
 if ($dockerCmd) { $env:SENTINEL_DOCKER_DIR = Split-Path $dockerCmd.Source }
 
 $unixPath = $PSScriptRoot -replace '\\', '/'
-& $bash -lc "cd '$unixPath' && bash ./start.sh"
+# Argumenty (np. --bez-demo, --czysta-baza) idą dalej do start.sh; dozwolone tylko proste flagi.
+$flags = ($args | Where-Object { $_ -match '^--[a-z-]+$' }) -join ' '
+& $bash -lc "cd '$unixPath' && bash ./start.sh $flags"
 exit $LASTEXITCODE

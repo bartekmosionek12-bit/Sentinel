@@ -23,8 +23,19 @@ mkdir -p data/feeds
 echo "==> nuclei i szablony detekcji (przypięte wersje i sumy SHA-256)"
 bash ./scripts/fetch_nuclei.sh || \
   echo "nuclei niedostępny: narzędzie verify_cve agenta zwróci błąd, reszta demo działa."
+# Jeden projekt Compose z nakładką DefectDojo (separator ':' także na Windowsie).
+export COMPOSE_PATH_SEPARATOR=:
+export COMPOSE_FILE=docker-compose.yml:docker-compose.defectdojo.yml
+profiles=(--profile demo)
+echo "==> Lokalne DefectDojo (pierwsze uruchomienie: kilka minut na migracje bazy)"
+if DD_NO_RESTART=1 bash ./scripts/defectdojo_local.sh; then
+  profiles+=(--profile defectdojo)
+else
+  echo "DefectDojo nie wystartowało; aplikacja działa dalej, eksport przez „Pobierz nmap XML”." >&2
+fi
+
 echo "==> Start stosu z profilem demo (zgoda seed_demo do ${DEMO_APPROVAL_EXPIRES_AT})"
-docker compose --profile demo up -d --build
+docker compose "${profiles[@]}" up -d --build
 
 echo "==> Czekam 25 s, aż usługi demo-lab zaczną nasłuchiwać"
 sleep 25
@@ -51,20 +62,7 @@ fi
 
 PUBLIC_URL_VALUE=$(grep -E '^PUBLIC_URL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
 PUBLIC_URL_VALUE=${PUBLIC_URL_VALUE:-http://localhost:8080}
-echo "==> Sprawdzam, czy konsola odpowiada przez nginx (${PUBLIC_URL_VALUE}/api/health)"
-ok=""
-for _ in $(seq 1 60); do
-  code=$(docker compose exec -T frontend wget -q -O /dev/null -S http://127.0.0.1:8080/api/health 2>&1 \
-    | awk '/HTTP\//{print $2}' | tail -n1 || true)
-  [ "$code" = "200" ] && { ok=1; break; }
-  sleep 3
-done
-if [ -z "$ok" ]; then
-  echo "Konsola nie odpowiada (ostatni kod: ${code:-brak}). Stan usług i ostatnie logi api:" >&2
-  docker compose ps api frontend keycloak >&2 || true
-  docker compose logs --tail 40 api >&2 || true
-  exit 1
-fi
+bash ./scripts/wait_ready.sh
 echo
 echo "Gotowe."
 echo "  Konsola zespołu IT:   ${PUBLIC_URL_VALUE}/admin/"
