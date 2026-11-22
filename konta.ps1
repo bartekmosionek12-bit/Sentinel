@@ -54,7 +54,4 @@ $unixPath = $PSScriptRoot -replace '\\', '/'
 & $bash -lc "cd '$unixPath' && ${accounts}bash ./scripts/demo_users.sh"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host ""
-Write-Host "Konsola: http://localhost:8080/admin/" -ForegroundColor Green
-Write-Host "Hasla i kod TOTP (data\demo-credentials.env):" -ForegroundColor Green
-Get-Content data\demo-credentials.env
+& $bash -lc "cd '$unixPath' && bash ./scripts/show_accounts.sh"
