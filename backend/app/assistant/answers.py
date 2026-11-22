@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.assistant import live
+from app.assistant import live, recon
 from app.assistant.classify import Intent
 from app.explainer.service import KIND as EXPLANATION_KIND
 from app.iam.tokens import Principal
@@ -38,6 +38,11 @@ SUGGESTIONS = (
     "Pokaż urządzenia z otwartym portem 80",
     "Do kiedy trzeba naprawić zagrożenia?",
     "Co to jest KEV?",
+    "Co się zmieniło od ostatniego skanu?",
+    "Które hosty są niestabilne?",
+    "Gdzie są panele administracyjne?",
+    "Czy jakieś certyfikaty wygasają?",
+    "Jakie technologie wykryto?",
 )
 # Uprawnienie potrzebne do odpowiedzi (poza samym `assistant:use`).
 NEEDS: dict[str, str | None] = {
@@ -53,6 +58,13 @@ NEEDS: dict[str, str | None] = {
     "port_search": "inventory:read",
     "system_status": None,
     "audit_logins": "audit:read",
+    "discovery_changes": "scan:read",
+    "unstable_hosts": "scan:read",
+    "web_flags": "scan:read",
+    "tls_certs": "scan:read",
+    "technologies": "scan:read",
+    "defectdojo_status": "scan:read",
+    "my_access": None,
     "out_of_scope": None,
 }
 TYPE_LABELS = {
@@ -605,4 +617,18 @@ def build(
         return live.system_status(session, intent, config)
     if intent.name == "audit_logins":
         return live.audit_logins(session, intent)
+    if intent.name == "discovery_changes":
+        return recon.discovery_changes(session, intent)
+    if intent.name == "unstable_hosts":
+        return recon.unstable_hosts(session, intent)
+    if intent.name == "web_flags":
+        return recon.web_flags(session, intent)
+    if intent.name == "tls_certs":
+        return recon.tls_certs(session, intent)
+    if intent.name == "technologies":
+        return recon.technologies(session, intent)
+    if intent.name == "defectdojo_status":
+        return recon.defectdojo_status(session, intent)
+    if intent.name == "my_access":
+        return recon.my_access(intent, principal)
     return out_of_scope(intent)

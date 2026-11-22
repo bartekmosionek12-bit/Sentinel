@@ -29,11 +29,32 @@ INTENTS = (
     "port_search",
     "system_status",
     "audit_logins",
+    "discovery_changes",
+    "unstable_hosts",
+    "web_flags",
+    "tls_certs",
+    "technologies",
+    "defectdojo_status",
+    "my_access",
     "out_of_scope",
 )
 # Intencje rozpoznawane tylko słowami kluczowymi (pytania o konkretne dane z bazy):
 # model lokalny ich nie zna, więc przy nich wynik słów kluczowych ma pierwszeństwo.
-KEYWORD_ONLY = frozenset({"kev_list", "port_search", "system_status", "audit_logins"})
+KEYWORD_ONLY = frozenset(
+    {
+        "kev_list",
+        "port_search",
+        "system_status",
+        "audit_logins",
+        "discovery_changes",
+        "unstable_hosts",
+        "web_flags",
+        "tls_certs",
+        "technologies",
+        "defectdojo_status",
+        "my_access",
+    }
+)
 SOURCE_MODEL = "model"
 SOURCE_KEYWORDS = "keywords"
 
@@ -71,6 +92,8 @@ class Intent:
     unknown: bool = False
     port: int | None = None
     critical: bool = False
+    # Dla web_flags: rodzaj flagi z pytania (panel, staging, security_headers, cookie).
+    flag_kind: str | None = None
     # Dla out_of_scope: "action" (prośba o zmianę albo skan poza zakresem) lub "unknown".
     reason: str = ""
     # Czas pracy modelu, gdy go pytaliśmy (także gdy ostatecznie wygrały słowa kluczowe).
@@ -92,6 +115,8 @@ class Intent:
             out["port"] = self.port
         if self.critical:
             out["critical"] = True
+        if self.flag_kind:
+            out["flag_kind"] = self.flag_kind
         if self.reason:
             out["reason"] = self.reason
         return out
@@ -111,6 +136,62 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
         "pomoc",
         "instrukcj",
         "przewodnik",
+    ),
+    "my_access": (
+        "uprawnien",
+        "moja rola",
+        "moje role",
+        "jaka mam role",
+        "jaka role",
+        "kim jestem",
+        "co moge",
+        "do czego mam dostep",
+        "moj dostep",
+    ),
+    "defectdojo_status": ("defectdojo", "dojo", "wyslane do", "wysylk"),
+    "tls_certs": ("certyfikat", "tls", "ssl", "wygasa", "wygasl", "samopodpis"),
+    "unstable_hosts": (
+        "niestabiln",
+        "nieaktywn",
+        "niepotwierdzon",
+        "znikaj",
+        "pojawiaj",
+        "przerywa",
+        "migaj",
+        "flapp",
+        "stan hostow",
+        "stany hostow",
+    ),
+    "discovery_changes": (
+        "zmienil",
+        "zmian",
+        "porownaj",
+        "porownani",
+        "roznic",
+        "co nowego",
+        "zniknel",
+        "nowe uslug",
+        "od ostatniego",
+    ),
+    "web_flags": (
+        "panel",
+        "staging",
+        "srodowisk test",
+        "srodowiska test",
+        "testow",
+        "naglowk",
+        "ciasteczk",
+        "cookie",
+        "headers",
+    ),
+    "technologies": (
+        "technologi",
+        "jakie oprogramowanie",
+        "stack",
+        "wersje oprogramowania",
+        "co dziala na",
+        "fingerprint",
+        "sygnatur",
     ),
     "audit_logins": (
         "logowal",
@@ -251,6 +332,21 @@ SOFT_ACTION_WORDS = frozenset({"uruchom", "uruchomcie", "uruchomic", "odpal", "o
 _PORT_RE = re.compile(r"\bport\w*\s*(?:nr\.?\s*)?(\d{1,5})\b|\b(\d{1,5})\s*/\s*(?:tcp|udp)\b")
 # Słowa o urządzeniach nieznanych (shadow IT).
 UNKNOWN_STEMS = ("nieznan", "shadow", "obce", "niezgloszon", "nieautoryz")
+# Rodzaj flagi z fingerprintu, o który pyta człowiek (pierwszy pasujący wygrywa).
+FLAG_STEMS = (
+    ("staging", ("staging", "srodowisk test", "srodowiska test", "testow")),
+    ("panel", ("panel",)),
+    ("security_headers", ("naglowk", "headers")),
+    ("cookie", ("ciasteczk", "cookie")),
+)
+
+
+def find_flag_kind(text: str) -> str | None:
+    tokens = words(text)
+    for kind, stems in FLAG_STEMS:
+        if has_stem(tokens, stems):
+            return kind
+    return None
 
 
 def find_params(text: str, catalog: Catalog) -> dict[str, Any]:
@@ -263,6 +359,7 @@ def find_params(text: str, catalog: Catalog) -> dict[str, Any]:
         "unknown": has_stem(words(text), UNKNOWN_STEMS) > 0,
         "port": find_port(text),
         "critical": has_stem(words(text), ("krytyczn",)) > 0,
+        "flag_kind": find_flag_kind(text),
     }
 
 
@@ -289,6 +386,26 @@ def classify_keywords(text: str, catalog: Catalog) -> Intent:
         scores["devices"] += 1
     if params["port"] is not None:
         scores["port_search"] += 1
+    elif scores["discovery_changes"] or scores["unstable_hosts"]:
+        # „Co się zmieniło w portach?” to pytanie o zmiany, nie o konkretny port.
+        scores["port_search"] = 0
+    # „Pokaż panele” i „strona logowania” to flagi z fingerprintu, nie dziennik logowań.
+    if scores["web_flags"] and has_stem(tokens, ("panel", "stron")):
+        scores["audit_logins"] = 0
+    # „Co się zmieniło w zagrożeniach?” to pytanie o ryzyko; zmiany z discovery dotyczą
+    # hostów, usług i przebiegów.
+    if (
+        scores["discovery_changes"]
+        and scores["top_risks"]
+        and not has_stem(tokens, ("skan", "host", "uslug", "siec", "przebieg", "discovery"))
+    ):
+        scores["discovery_changes"] = 0
+    # „Czy DefectDojo działa?” pyta o integrację, nie o stan całego systemu.
+    if scores["defectdojo_status"]:
+        scores["system_status"] = 0
+    # Nieaktywne i niestabilne hosty to stan z discovery, nie inwentarz.
+    if scores["unstable_hosts"]:
+        scores["devices"] = 0
     # Prośba o skan wygrywa z pytaniem o urządzenia, gdy pada słowo o skanowaniu.
     if scores["scan_request"]:
         scores["scan_request"] += 1
@@ -319,6 +436,7 @@ def _resolve(intent: Intent, params: dict[str, Any]) -> Intent:
         unknown=bool(params.get("unknown")),
         port=params.get("port"),
         critical=bool(params.get("critical")),
+        flag_kind=params.get("flag_kind"),
     )
     if intent.name == "device_story" and intent.device is None:
         return replace(intent, name="devices")
