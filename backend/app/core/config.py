@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     assistant_timeout_seconds: float = 4.0
     # Zewnętrzny LLM: domyślnie WYŁĄCZONY. Dostaje wyłącznie dane zanonimizowane.
     external_llm_enabled: bool = False
+    # Warstwa 2 (analiza logów warstwy 1): off = zalecenia z szablonu, bez modelu (domyślnie);
+    # local = model przez API Ollamy (LLM_MODEL); external = zewnętrzne API, tylko gdy
+    # EXTERNAL_LLM_ENABLED=true i wyłącznie z danymi po anonimizacji.
+    redteam_llm: str = "off"
     external_llm_url: str = ""
     external_llm_model: str = ""
     external_llm_api_key: str = ""

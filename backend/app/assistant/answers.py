@@ -63,7 +63,8 @@ NEEDS: dict[str, str | None] = {
     "deadlines": "findings:read",
     "devices": "inventory:read",
     "device_story": "inventory:read",
-    "scan_request": "agent:task",
+    # Zlecenie skanu agentowi to warstwa 3: administrator albo delegacja (docs/WARSTWY.md).
+    "scan_request": "redteam:layer3",
     "explain": None,
     "tour": None,
     "kev_list": "findings:read",

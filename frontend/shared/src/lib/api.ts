@@ -1126,6 +1126,152 @@ export interface IamUser {
   last_seen_at: string | null;
 }
 
+// --- Trzy warstwy skanowania i delegacje (docs/WARSTWY.md) ---------------------------
+
+export interface LayerAccess {
+  allowed: boolean;
+  /** „rola” (administrator) albo „delegacja” (osoba × podsieć × okno czasu). */
+  via: "rola" | "delegacja" | null;
+  /** Podsieci delegacji; null = cały zakres skanowania. */
+  scope: string[] | null;
+  until: string | null;
+}
+
+export interface RedteamLayer {
+  layer: 1 | 2 | 3;
+  name: string;
+  description: string;
+  permission: string;
+  trigger: string;
+  uses_model: boolean;
+  access: LayerAccess;
+}
+
+export type Severity = "critical" | "high" | "medium" | "low" | "info";
+
+export interface RedteamGroup {
+  group_key: string;
+  check: string;
+  title: string;
+  severity: Severity;
+  category: string;
+  count: number;
+  unique_hosts: number;
+  hosts: {
+    ip: string;
+    port: number | null;
+    protocol: string;
+    service: string;
+    evidence: string[];
+  }[];
+}
+
+export interface RedteamRun {
+  id: string;
+  status: "queued" | "running" | "done" | "failed";
+  targets: string[];
+  reason: string;
+  requested_by: string;
+  via_delegation: boolean;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  hosts: number;
+  summary: {
+    hosts?: number;
+    findings?: number;
+    groups?: number;
+    by_severity?: Partial<Record<Severity, number>>;
+    errors?: number;
+  };
+  error: string | null;
+}
+
+export interface RedteamAdvice {
+  group_key: string;
+  risk: string;
+  steps: string[];
+  effort?: string;
+  source: "model" | "template";
+}
+
+export interface RedteamAnalysis {
+  id: string;
+  status: "queued" | "running" | "done" | "failed";
+  source: "" | "model" | "template";
+  model: string | null;
+  requested_by: string;
+  created_at: string;
+  finished_at: string | null;
+  content: {
+    summary?: string;
+    groups?: RedteamAdvice[];
+    strategy?: string[];
+    problems?: string[];
+  };
+  error: string | null;
+}
+
+export interface RedteamRunDetail extends RedteamRun {
+  groups: RedteamGroup[];
+  log: Record<string, unknown>[];
+  analysis: RedteamAnalysis | null;
+}
+
+export interface LayerDelegation {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  layer: 1 | 2 | 3;
+  layer_name: string;
+  scope: string[];
+  valid_from: string;
+  valid_until: string;
+  reason: string;
+  granted_by: string;
+  granted_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  state: "aktywna" | "zaplanowana" | "wygasła" | "odwołana";
+}
+
+export interface DelegationInput {
+  user_id: string;
+  layer: number;
+  scope: string[];
+  valid_from: string;
+  valid_until: string;
+  reason: string;
+}
+
+export interface NonHumanIdentities {
+  roles: { name: string; description: string; kind: string; permissions: string[] }[];
+  accounts: {
+    id: string;
+    username: string;
+    kind: string;
+    roles: string[];
+    last_seen_at: string | null;
+  }[];
+  agent: {
+    layer: 3;
+    killed: boolean;
+    capability: {
+      version: number;
+      tools: string[];
+      targets: string[];
+      max_level: number;
+      windows: unknown[];
+      max_calls_per_task: number;
+      max_calls_per_target: number;
+      note: string;
+      created_by: string;
+    } | null;
+    layer3_delegations: number;
+  };
+}
+
 export const api = {
   health: () => request<Health>("/health"),
   me: () => request<Me>("/me"),
@@ -1433,4 +1579,35 @@ export const api = {
     request<IamUser>(`/iam/users/${userId}/roles/${encodeURIComponent(role)}`, {
       method: "DELETE",
     }),
+  redteamLayers: () => request<RedteamLayer[]>("/redteam/layers"),
+  redteamRuns: () => request<RedteamRun[]>("/redteam/runs"),
+  redteamLatest: () => request<(RedteamRun & { groups: RedteamGroup[] }) | null>("/redteam/latest"),
+  redteamRun: (id: string) => request<RedteamRunDetail>(`/redteam/runs/${id}`),
+  startLayer1: (targets: string[], reason: string) =>
+    request<RedteamRun>("/redteam/layer1/runs", {
+      method: "POST",
+      body: JSON.stringify({ targets, reason }),
+    }),
+  requestAnalysis: (runId: string) =>
+    request<RedteamAnalysis>(`/redteam/runs/${runId}/analysis`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  redteamToDojo: (runId: string) =>
+    request<{ sent: number; groups: number; detail?: string; test?: number }>(
+      `/redteam/runs/${runId}/defectdojo`,
+      { method: "POST" },
+    ),
+  delegations: () => request<LayerDelegation[]>("/iam/delegations"),
+  createDelegation: (input: DelegationInput) =>
+    request<LayerDelegation>("/iam/delegations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  revokeDelegation: (id: string) =>
+    request<LayerDelegation>(`/iam/delegations/${id}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  nonHuman: () => request<NonHumanIdentities>("/iam/non-human"),
 };

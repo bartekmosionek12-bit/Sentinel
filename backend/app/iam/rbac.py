@@ -17,7 +17,10 @@ PrincipalKind = str  # "human", "agent", "system"
 KINDS = ("human", "agent", "system")
 # Uprawnień z tej listy nie da się włożyć do roli własnej: zarządzanie tożsamością zostaje
 # wyłącznie przy roli `administrator` z pliku (brak eskalacji przez edytor ról).
-RESERVED_PERMISSIONS = frozenset({"iam:manage"})
+# Warstwy skanowania i agent: tylko administrator albo delegacja z terminem (app/iam/delegation.py).
+RESERVED_PERMISSIONS = frozenset(
+    {"iam:manage", "agent:task", "redteam:layer1", "redteam:layer2", "redteam:layer3"}
+)
 # Role z pliku, które administrator może nadać w konsoli. `administrator` nadaje tylko Keycloak.
 GRANTABLE_BUILTIN_ROLES = ("editor", "modifier", "viewer")
 

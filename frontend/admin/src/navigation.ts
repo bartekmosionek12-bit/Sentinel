@@ -13,6 +13,8 @@ import {
   Server,
   ShieldAlert,
   Fingerprint,
+  Layers3,
+  ShieldCheck,
   UserCog,
 } from "lucide-react";
 
@@ -90,6 +92,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "Skanowanie podatności",
+    items: [
+      {
+        path: "/warstwy",
+        label: "Trzy warstwy",
+        icon: Layers3,
+        permission: "findings:read",
+        summary:
+          "Warstwa 1: deterministyczny skan, warstwa 2: analiza LLM, warstwa 3: agent AI. Każdą uruchamia się osobno i jawnie.",
+      },
+    ],
+  },
+  {
     title: "Kontrola",
     items: [
       {
@@ -103,6 +118,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: "/agent", label: "Agent AI", icon: Bot, end: true },
       { path: "/agent/test", label: "Test agenta", icon: FlaskConical },
       { path: "/audyt", label: "Dziennik audytu", icon: ScrollText, permission: "audit:read" },
+      {
+        path: "/iam",
+        label: "IAM",
+        icon: ShieldCheck,
+        permission: "iam:read",
+        summary:
+          "Human i non-human identity osobno: role, delegacje trzech warstw skanowania i zdolności agenta AI.",
+      },
       { path: "/role", label: "Role i użytkownicy", icon: UserCog, permission: "iam:read" },
     ],
   },

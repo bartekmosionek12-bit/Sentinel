@@ -24,6 +24,7 @@ from app.core.audit import AuditEvent, AuditSink, DbAuditSink
 from app.core.config import Settings, get_settings
 from app.core.db import get_session, get_sessionmaker
 from app.iam.custom_roles import apply_grants
+from app.iam.delegation import apply_delegations
 from app.iam.rbac import RoleCatalog
 from app.iam.tokens import Principal, TokenError, TokenPolicy, TokenVerifier
 from app.models import Notification, User
@@ -192,6 +193,8 @@ def get_principal(
         )
     # Role nadane w edytorze ról (P1) dokładamy do ról z tokenu przy każdym żądaniu.
     principal = apply_grants(session, get_role_catalog(), principal)
+    # Delegacje warstw skanowania (osoba × warstwa × podsieć × okno czasu), tylko po MFA.
+    principal = apply_delegations(session, principal)
     request.state.principal = principal
     context = request_context.current()
     if context is not None:

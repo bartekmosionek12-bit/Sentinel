@@ -45,7 +45,9 @@ CAPABILITIES = (
     ("reports:export", "eksportować wyniki"),
     ("defectdojo:export", "wysyłać wyniki do DefectDojo"),
     ("audit:read", "czytać dziennik audytu"),
-    ("agent:task", "zlecać zadania agentowi"),
+    ("redteam:layer1", "uruchamiać skan podatności warstwy 1"),
+    ("redteam:layer2", "zlecać analizę wyników warstwy 1 (warstwa 2)"),
+    ("redteam:layer3", "zlecać zadania agentowi AI (warstwa 3)"),
 )
 
 

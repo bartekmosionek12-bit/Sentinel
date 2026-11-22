@@ -979,6 +979,7 @@ def test_signature(
         (signature,) = parse_signatures({"signatures": [definition]})
     except SignatureError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    run: DiscoveryRun | None
     if payload.run_id:
         run = _get_run(session, payload.run_id)
     else:

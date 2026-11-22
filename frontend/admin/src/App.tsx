@@ -14,6 +14,8 @@ import { Signatures } from "@/pages/Signatures";
 import { Schedules } from "@/pages/Schedules";
 import { DiscoveryRunPage } from "@/pages/DiscoveryRun";
 import { Findings } from "@/pages/Findings";
+import { Iam } from "@/pages/Iam";
+import { LayerRun, Layers } from "@/pages/Layers";
 import { ReportDetail, Reports } from "@/pages/Reports";
 import { ReviewQueue } from "@/pages/ReviewQueue";
 import { Roles } from "@/pages/Roles";
@@ -122,6 +124,9 @@ export function App() {
         <Route path="/agent/test/:id" element={<AgentTestDetail />} />
         <Route path="/audyt" element={<AuditLog />} />
         <Route path="/role" element={<Roles />} />
+        <Route path="/iam" element={<Iam />} />
+        <Route path="/warstwy" element={<Layers />} />
+        <Route path="/warstwy/:id" element={<LayerRun />} />
         {planned.map((item) => (
           <Route key={item.path} path={item.path} element={<Planned item={item} />} />
         ))}

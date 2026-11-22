@@ -1,9 +1,10 @@
 """API agenta AI i testu bezpieczeństwa agenta (Etap 5, moduł 19).
 
 Model niczego tu nie wykonuje: API zapisuje polecenie, a plan układa worker `agent`.
-Zatwierdzenie wymaga `agent:task` (MFA) i dodatkowo uprawnienia do poziomu każdego
-zatwierdzanego kroku (`scan:approve:l2`, `scan:approve:l3`). Rola `agent` nie ma żadnego
-uprawnienia z tego pliku, w tym `agent_test:*`.
+Agent to warstwa 3 (docs/WARSTWY.md): polecenie wymaga `redteam:layer3` (administrator
+albo delegacja w IAM), zatwierdzenie `agent:task` i warstwy 3 w podsieci delegacji oraz
+uprawnienia do poziomu każdego zatwierdzanego kroku (`scan:approve:l2`, `scan:approve:l3`).
+Rola `agent` nie ma żadnego uprawnienia z tego pliku, w tym `agent_test:*`.
 """
 
 from __future__ import annotations
@@ -32,7 +33,8 @@ from app.agent_tests.gate import (
 from app.api.deps import DispatcherDep, ScopeGuardDep, SessionDep, SettingsDep
 from app.api.schemas import OrmModel, TaskOut
 from app.core.scope_guard import Intrusiveness, ScopeGuard, domain_matches
-from app.iam.deps import AuditSinkDep, ensure, require
+from app.iam import delegation
+from app.iam.deps import AuditSinkDep, deny, ensure, get_role_catalog, require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
 from app.models import (
@@ -420,8 +422,9 @@ def create_task(
     session: SessionDep,
     service: ServiceDep,
     dispatcher: DispatcherDep,
-    principal: Annotated[Principal, Depends(require("agent:task"))],
+    principal: Annotated[Principal, Depends(require("redteam:layer3"))],
 ) -> AgentTaskOut:
+    """Warstwa 3 (docs/WARSTWY.md): jawne polecenie człowieka z uprawnieniem warstwy 3."""
     try:
         task = service.create_task(payload.command, actor=principal.actor)
     except AgentError as error:
@@ -436,6 +439,7 @@ def create_task(
 def approve_task(
     task_id: uuid.UUID,
     payload: TaskApproveIn,
+    session: SessionDep,
     service: ServiceDep,
     dispatcher: DispatcherDep,
     principal: Annotated[Principal, Depends(require("agent:task"))],
@@ -449,6 +453,30 @@ def approve_task(
         if permission is not None:
             ensure(principal, permission, request, audit)
         return True
+
+    # Delegacja warstwy 3 obejmuje tylko swoje podsieci: każdy zatwierdzany krok musi w nich
+    # leżeć (administrator: cały zakres, który i tak pilnuje scope_guard i zdolności agenta).
+    layer3 = delegation.access(session, get_role_catalog(), principal, 3)
+    if not layer3.allowed:
+        deny(principal, "redteam:layer3", request, audit)
+    if layer3.scope is not None:
+        steps = session.scalars(
+            select(AgentStep).where(AgentStep.task_id == task_id, AgentStep.status == "planned")
+        )
+        chosen = set(payload.step_ids) if payload.step_ids is not None else None
+        outside = [
+            step.target
+            for step in steps
+            if (chosen is None or step.id in chosen)
+            and delegation.covers(layer3.scope, [step.target])
+        ]
+        if outside:
+            deny(
+                principal,
+                f"redteam:layer3 poza podsiecią delegacji ({', '.join(outside[:5])})",
+                request,
+                audit,
+            )
 
     try:
         service.approve(

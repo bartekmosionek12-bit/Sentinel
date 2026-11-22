@@ -170,15 +170,16 @@ def test_deadlines_are_internal_not_legal(world: Session) -> None:
 
 
 def test_scan_request_is_only_proposed_as_agent_task(world: Session) -> None:
-    answer = _ask(world, "zeskanuj web-01", role="editor")
+    answer = _ask(world, "zeskanuj web-01", role="administrator")
     assert answer.action is not None
     assert answer.action["kind"] == "agent_task"
     assert "web-01" in answer.action["command"]
     assert "Sam nie skanuję" in answer.text[1]
-    # Odczyt (viewer) nie zleca zadań agentowi.
-    denied = _ask(world, "zeskanuj web-01", role="viewer")
-    assert denied.action is None
-    assert "agent:task" in denied.text[1]
+    # Agent to warstwa 3: bez delegacji nie zleca go ani odczyt, ani editor.
+    for role in ("viewer", "editor"):
+        denied = _ask(world, "zeskanuj web-01", role=role)
+        assert denied.action is None
+        assert "redteam:layer3" in denied.text[1]
 
 
 def test_action_requests_are_refused(world: Session) -> None:
@@ -297,7 +298,8 @@ def test_eval_cases_with_keywords_only(world: Session) -> None:
             case,
             classifier=KEYWORDS_ONLY,
             config=CONFIG,
-            principal=_principal("editor"),
+            # Administrator: jedyna rola, która domyślnie ma agenta (scan_request → warstwa 3).
+            principal=_principal("administrator"),
             today=TODAY,
         )
         for case in cases

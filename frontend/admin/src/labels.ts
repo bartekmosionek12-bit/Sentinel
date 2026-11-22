@@ -1,3 +1,5 @@
+import type { Severity } from "@shared/lib/api";
+
 type Variant = "ok" | "warn" | "danger" | "neutral" | "info";
 
 export const RUN_STATUS: Record<string, { label: string; variant: Variant }> = {
@@ -47,3 +49,19 @@ export function formatSeconds(value: number | null | undefined): string {
   if (m < 60) return `${m} min ${s % 60} s`;
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
+
+/** Ważność podatności z warstwy 1 (docs/WARSTWY.md). */
+export const SEVERITY_LABEL: Record<Severity, string> = {
+  critical: "krytyczna",
+  high: "wysoka",
+  medium: "średnia",
+  low: "niska",
+  info: "informacyjna",
+};
+export const SEVERITY_VARIANT = {
+  critical: "danger",
+  high: "danger",
+  medium: "warn",
+  low: "info",
+  info: "neutral",
+} as const;

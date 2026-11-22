@@ -50,6 +50,12 @@ permissions:
   iam:read: {description: "Odczyt użytkowników, ról i uprawnień"}
   iam:manage: {description: "Użytkownicy, role i uprawnienia (edytor ról)", mfa: true}
   risk:accept: {description: "Formalna akceptacja ryzyka (status „ryzyko zaakceptowane”)", mfa: true}
+  # Trzy warstwy skanowania podatności (docs/WARSTWY.md). Domyślnie wyłącznie administrator;
+  # innym ludziom daje je tylko delegacja w IAM: konkretna osoba, podsieć i okno czasu.
+  # Nie wchodzą do ról własnych (RESERVED_PERMISSIONS), więc nie da się ich nadać na stałe.
+  redteam:layer1: {description: "Warstwa 1: deterministyczny skan podatności narzędziami red team (ręczne wywołanie)", mfa: true}
+  redteam:layer2: {description: "Warstwa 2: analiza logów warstwy 1 przez model językowy i zalecenia (ręczne wywołanie)", mfa: true}
+  redteam:layer3: {description: "Warstwa 3: zlecanie zadań autonomicznemu agentowi AI", mfa: true}
 
 roles:
   administrator:
@@ -83,7 +89,6 @@ roles:
       - explanations:generate
       - llm:external:use
       - agent:read
-      - agent:task
       - agent:kill
       - agent_test:read
       - agent_test:run

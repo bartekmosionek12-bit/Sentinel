@@ -68,6 +68,29 @@ def run_discovery(run_id: str) -> dict[str, Any]:
         return {"run_id": run_id, "status": run.status, "hosts_up": run.hosts_up}
 
 
+@celery_app.task(name="app.workers.tasks.scans.run_redteam_layer1")
+def run_redteam_layer1(run_id: str) -> dict[str, Any]:
+    """Warstwa 1: zlecana wyłącznie z ręcznego wywołania w API (brak harmonogramu)."""
+    from app.redteam.engine import Layer1Config, Layer1Scanner
+    from app.runtime import get_scope_guard
+
+    config = Layer1Config.from_file(get_settings().rules_dir / "redteam.yaml")
+    with get_sessionmaker()() as session:
+        run = Layer1Scanner(session, get_scope_guard(), config).run(uuid.UUID(run_id))
+        return {"run_id": run_id, "status": run.status, "summary": run.summary}
+
+
+@celery_app.task(name="app.workers.tasks.llm.analyze_redteam")
+def analyze_redteam(analysis_id: str) -> dict[str, Any]:
+    """Warstwa 2: zlecana wyłącznie z ręcznego wywołania w API, nigdy po warstwie 1."""
+    from app.redteam.analysis import analyze
+    from app.runtime import redteam_provider
+
+    with get_sessionmaker()() as session:
+        row = analyze(session, uuid.UUID(analysis_id), redteam_provider(get_settings()))
+        return {"analysis_id": analysis_id, "status": row.status, "source": row.source}
+
+
 @celery_app.task(name="app.workers.tasks.discovery_schedules")
 def discovery_schedules() -> dict[str, Any]:
     """Co minutę: start przebiegów z harmonogramu i wznowienia w kolejnym oknie."""

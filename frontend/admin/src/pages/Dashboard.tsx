@@ -13,10 +13,10 @@ import {
   CardTitle,
 } from "@shared/components/ui/card";
 import { Table, Td, Th } from "@shared/components/ui/table";
-import { api, type RiskLevel } from "@shared/lib/api";
+import { api, type RiskLevel, type Severity } from "@shared/lib/api";
 import { formatDateTime } from "@shared/lib/utils";
 
-import { HOST_STATE } from "@/labels";
+import { HOST_STATE, SEVERITY_LABEL, SEVERITY_VARIANT } from "@/labels";
 import { RunsTable } from "@/pages/Discovery";
 
 const LEVELS: RiskLevel[] = ["krytyczny", "wysoki", "średni", "niski"];
@@ -267,6 +267,57 @@ function duration(seconds: number | null): string {
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`;
 }
 
+/** Wynik ostatniego skanu warstwy 1 (deterministyczny, uruchamiany ręcznie). */
+function Layer1Overview() {
+  const latest = useQuery({ queryKey: ["redteam", "latest"], queryFn: api.redteamLatest });
+  const run = latest.data;
+  return (
+    <section className="mt-6" aria-label="Warstwa 1: skan podatności">
+      <h2 className="mb-3 text-base font-semibold">Warstwa 1: skan podatności</h2>
+      {run ? (
+        <Card>
+          <CardContent className="space-y-3 pt-5 text-sm">
+            <p className="flex flex-wrap items-center gap-2">
+              <Link className="underline" to={`/warstwy/${run.id}`}>
+                {run.finished_at ? formatDateTime(run.finished_at) : "przebieg"}
+              </Link>
+              <span className="font-mono text-xs">{run.targets.join(", ")}</span>
+              <span>
+                {run.hosts} hostów, {run.groups.length} grup podatności
+              </span>
+              {(["critical", "high", "medium", "low"] as Severity[]).map((sev) =>
+                run.summary.by_severity?.[sev] ? (
+                  <Badge key={sev} variant={SEVERITY_VARIANT[sev]}>
+                    {SEVERITY_LABEL[sev]}: {run.summary.by_severity[sev]}
+                  </Badge>
+                ) : null,
+              )}
+            </p>
+            <ul className="space-y-1">
+              {run.groups.slice(0, 5).map((g) => (
+                <li key={g.group_key} className="flex flex-wrap items-center gap-2">
+                  <Badge variant={SEVERITY_VARIANT[g.severity]}>{SEVERITY_LABEL[g.severity]}</Badge>
+                  {g.title}
+                  <span className="text-xs text-muted-foreground">({g.unique_hosts} hostów)</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {latest.isPending
+            ? "Wczytywanie…"
+            : "Warstwa 1 nie była jeszcze uruchamiana. Skan uruchamia administrator albo osoba z delegacją."}{" "}
+          <Link className="underline" to="/warstwy">
+            Trzy warstwy
+          </Link>
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function Dashboard() {
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const stats = useQuery({
@@ -486,6 +537,7 @@ export function Dashboard() {
       </div>
 
       <DiscoveryOverview />
+      <Layer1Overview />
 
       <Card className="mt-6">
         <CardHeader>

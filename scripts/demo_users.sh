@@ -4,7 +4,8 @@
 # sekret TOTP kont demo). Tylko DEMO_MODE=true.
 #
 # Hasła i sekret TOTP bierze z .env (DEMO_ADMIN_PASSWORD, DEMO_ADMIN_TOTP_SECRET,
-# DEMO_EDITOR_PASSWORD, DEMO_MODIFIER_PASSWORD, DEMO_VIEWER_PASSWORD); puste wartości generuje
+# DEMO_EDITOR_PASSWORD, DEMO_MODIFIER_PASSWORD, DEMO_VIEWER_PASSWORD, DEMO_ANALYST_PASSWORD,
+# DEMO_OPERATOR_PASSWORD); puste wartości generuje
 # i zapisuje w data/demo-credentials.env
 # (poza Gitem, uprawnienia 600), żeby kolejne uruchomienia używały tych samych.
 # Nazwiska są fikcyjne, adresy e-mail w domenie example (RFC 2606).
@@ -50,6 +51,10 @@ TOTP_SECRET=$(value DEMO_ADMIN_TOTP_SECRET); TOTP_SECRET=${TOTP_SECRET:-$(random
 EDITOR_PASSWORD=$(value DEMO_EDITOR_PASSWORD); EDITOR_PASSWORD=${EDITOR_PASSWORD:-$(random 18)}
 MODIFIER_PASSWORD=$(value DEMO_MODIFIER_PASSWORD); MODIFIER_PASSWORD=${MODIFIER_PASSWORD:-$(random 18)}
 VIEWER_PASSWORD=$(value DEMO_VIEWER_PASSWORD); VIEWER_PASSWORD=${VIEWER_PASSWORD:-$(random 18)}
+# Dwa dodatkowe konta z niższymi uprawnieniami: bez warstw skanowania i agenta, dopóki
+# administrator nie da im delegacji w IAM (docs/WARSTWY.md).
+ANALYST_PASSWORD=$(value DEMO_ANALYST_PASSWORD); ANALYST_PASSWORD=${ANALYST_PASSWORD:-$(random 18)}
+OPERATOR_PASSWORD=$(value DEMO_OPERATOR_PASSWORD); OPERATOR_PASSWORD=${OPERATOR_PASSWORD:-$(random 18)}
 
 # Aplikacje TOTP przyjmują sekret w Base32; Keycloak przechowuje jego surowe bajty.
 TOTP_BASE32=$("$PY" -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
@@ -62,11 +67,14 @@ DEMO_ADMIN_TOTP_BASE32=${TOTP_BASE32}
 DEMO_EDITOR_PASSWORD=${EDITOR_PASSWORD}
 DEMO_MODIFIER_PASSWORD=${MODIFIER_PASSWORD}
 DEMO_VIEWER_PASSWORD=${VIEWER_PASSWORD}
+DEMO_ANALYST_PASSWORD=${ANALYST_PASSWORD}
+DEMO_OPERATOR_PASSWORD=${OPERATOR_PASSWORD}
 CREDS
 
 USERS=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" TOTP_SECRET="$TOTP_SECRET" \
   EDITOR_PASSWORD="$EDITOR_PASSWORD" MODIFIER_PASSWORD="$MODIFIER_PASSWORD" \
-  VIEWER_PASSWORD="$VIEWER_PASSWORD" "$PY" - <<'PY'
+  VIEWER_PASSWORD="$VIEWER_PASSWORD" ANALYST_PASSWORD="$ANALYST_PASSWORD" \
+  OPERATOR_PASSWORD="$OPERATOR_PASSWORD" "$PY" - <<'PY'
 import json, os
 
 def user(name, first, last, role, password, totp=None):
@@ -92,6 +100,8 @@ print(json.dumps({"ifResourceExists": "OVERWRITE", "users": [
     user("editor", "Edward", "Demonstracyjny", "editor", os.environ["EDITOR_PASSWORD"], os.environ["TOTP_SECRET"]),
     user("modifier", "Monika", "Demonstracyjna", "modifier", os.environ["MODIFIER_PASSWORD"], os.environ["TOTP_SECRET"]),
     user("viewer", "Wiktor", "Demonstracyjny", "viewer", os.environ["VIEWER_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("analityk", "Adam", "Analityk", "editor", os.environ["ANALYST_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("operator", "Olga", "Operator", "modifier", os.environ["OPERATOR_PASSWORD"], os.environ["TOTP_SECRET"]),
 ]}))
 PY
 )
@@ -112,8 +122,10 @@ done
 
 echo "Konta demo gotowe (hasła w ${CREDS}):"
 echo "  admin     Administracja (wszystko, edytor ról)"
-echo "  editor    Dodawanie, usuwanie, modyfikacja (skany, zatwierdzanie planów agenta i L2+)"
+echo "  editor    Dodawanie, usuwanie, modyfikacja (skany, zatwierdzanie akcji L2+)"
 echo "  modifier  Modyfikacja i odczyt"
 echo "  viewer    Odczyt"
+echo "  analityk  Dodawanie, usuwanie, modyfikacja; warstwy skanowania tylko z delegacji w IAM"
+echo "  operator  Modyfikacja i odczyt; warstwy skanowania tylko z delegacji w IAM"
 echo "  Każde konto: hasło + TOTP (wspólny sekret kont demo, Base32: ${TOTP_BASE32})"
 echo "  TOTP do aplikacji: otpauth://totp/Sentinel%20ASI:demo?secret=${TOTP_BASE32}&issuer=Sentinel%20ASI"

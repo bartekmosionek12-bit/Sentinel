@@ -43,6 +43,7 @@ from app.models.ops import (
     ScanRun,
     ScanTarget,
 )
+from app.models.redteam import LayerDelegation, RedteamAnalysis, RedteamFinding, RedteamRun
 from app.models.report import Report, ReportDelivery, ReportRead
 from app.models.threat import VulnAffected, Vulnerability
 
@@ -72,12 +73,16 @@ __all__ = [
     "Finding",
     "FindingEvent",
     "LLMCache",
+    "LayerDelegation",
     "MatchCandidate",
     "NetworkSegment",
     "Notification",
     "Observation",
     "ObservationOverride",
     "Permission",
+    "RedteamAnalysis",
+    "RedteamFinding",
+    "RedteamRun",
     "Report",
     "ReportDelivery",
     "ReportRead",

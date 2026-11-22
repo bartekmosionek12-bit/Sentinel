@@ -60,6 +60,10 @@ class Dispatcher(Protocol):
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
     ) -> str: ...
 
+    def run_redteam_layer1(self, run_id: uuid.UUID) -> str: ...
+
+    def analyze_redteam(self, analysis_id: uuid.UUID) -> str: ...
+
 
 class CeleryDispatcher:
     def _send(self, name: str, *args: str) -> str:
@@ -117,6 +121,12 @@ class CeleryDispatcher:
 
     def run_discovery(self, run_id: uuid.UUID) -> str:
         return self._send("app.workers.tasks.scans.run_discovery", str(run_id))
+
+    def run_redteam_layer1(self, run_id: uuid.UUID) -> str:
+        return self._send("app.workers.tasks.scans.run_redteam_layer1", str(run_id))
+
+    def analyze_redteam(self, analysis_id: uuid.UUID) -> str:
+        return self._send("app.workers.tasks.llm.analyze_redteam", str(analysis_id))
 
     def run_agent_test(
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None

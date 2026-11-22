@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shar
 import { Input } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
 import { api, type AgentStatus, type AgentStep, type AgentTask } from "@shared/lib/api";
+import { useAuth } from "@shared/lib/auth-context";
 import { SignedBy } from "@shared/lib/auth";
 import { formatDateTime } from "@shared/lib/utils";
 
@@ -208,6 +209,7 @@ function KillEffects({ status }: { status: AgentStatus }) {
 
 function NewTask({ disabled }: { disabled: boolean }) {
   const queryClient = useQueryClient();
+  const layer3 = useAuth().can("redteam:layer3");
   const [command, setCommand] = useState("");
   const create = useMutation({
     mutationFn: () => api.createAgentTask(command.trim()),
@@ -236,7 +238,7 @@ function NewTask({ disabled }: { disabled: boolean }) {
             onChange={(e) => setCommand(e.target.value)}
           />
           <Button
-            disabled={disabled || command.trim().length < 3 || create.isPending}
+            disabled={disabled || !layer3 || command.trim().length < 3 || create.isPending}
             onClick={() => create.mutate()}
           >
             Zleć zadanie
@@ -245,6 +247,11 @@ function NewTask({ disabled }: { disabled: boolean }) {
         {disabled && (
           <p className="mt-2 text-sm text-muted-foreground">
             Agent nie przyjmuje zadań: brak aktywnych zdolności albo włączony kill switch.
+          </p>
+        )}
+        {!layer3 && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Agent to warstwa 3: zadanie zleca administrator albo osoba z delegacją warstwy 3 w IAM.
           </p>
         )}
         {create.error && (
