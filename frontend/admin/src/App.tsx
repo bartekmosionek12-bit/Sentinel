@@ -18,7 +18,6 @@ import { Iam } from "@/pages/Iam";
 import { LayerRun, Layers } from "@/pages/Layers";
 import { ReportDetail, Reports } from "@/pages/Reports";
 import { ReviewQueue } from "@/pages/ReviewQueue";
-import { Roles } from "@/pages/Roles";
 import { Scans } from "@/pages/Scans";
 import { Scope } from "@/pages/Scope";
 import { ThreatFeed } from "@/pages/ThreatFeed";
@@ -123,7 +122,7 @@ export function App() {
         <Route path="/agent/test" element={<AgentTests />} />
         <Route path="/agent/test/:id" element={<AgentTestDetail />} />
         <Route path="/audyt" element={<AuditLog />} />
-        <Route path="/role" element={<Roles />} />
+        <Route path="/role" element={<Navigate to="/iam?tab=role" replace />} />
         <Route path="/iam" element={<Iam />} />
         <Route path="/warstwy" element={<Layers />} />
         <Route path="/warstwy/:id" element={<LayerRun />} />

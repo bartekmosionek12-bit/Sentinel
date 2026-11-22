@@ -1,9 +1,10 @@
-/** Role i użytkownicy (P1, brief pkt 12–13): macierz uprawnień, edytor ról, nadawanie ról. */
+/** Role (P1, brief pkt 12–13): macierz uprawnień, edytor ról i wiersz użytkownika z nadawaniem
+ *  ról. Wszystko pokazuje jedna podstrona IAM (pages/Iam.tsx). */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Lock } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { PageHeader, QueryState } from "@shared/components/page";
+import { QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
 import {
@@ -16,7 +17,6 @@ import {
 import { Input, Select } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
 import { api, type IamPermission, type IamRole, type IamUser } from "@shared/lib/api";
-import { useAuth } from "@shared/lib/auth-context";
 import { formatDateTime } from "@shared/lib/utils";
 
 const NAME_PATTERN = "[a-z][a-z0-9_\\-]{2,39}";
@@ -24,8 +24,7 @@ const NAME_PATTERN = "[a-z][a-z0-9_\\-]{2,39}";
 function useIam() {
   const roles = useQuery({ queryKey: ["iam", "roles"], queryFn: api.iamRoles });
   const permissions = useQuery({ queryKey: ["iam", "permissions"], queryFn: api.iamPermissions });
-  const users = useQuery({ queryKey: ["iam", "users"], queryFn: api.iamUsers });
-  return { roles, permissions, users };
+  return { roles, permissions };
 }
 
 function has(role: IamRole, permission: string): boolean {
@@ -249,7 +248,18 @@ function RoleEditor({
   );
 }
 
-export function UserRow({ user, roles, manage }: { user: IamUser; roles: IamRole[]; manage: boolean }) {
+export function UserRow({
+  user,
+  roles,
+  manage,
+  layers,
+}: {
+  user: IamUser;
+  roles: IamRole[];
+  manage: boolean;
+  /** Dostęp do warstw skanowania (z roli albo delegacji), gdy wiersz jest w panelu IAM. */
+  layers?: string;
+}) {
   const queryClient = useQueryClient();
   const [role, setRole] = useState("");
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["iam", "users"] });
@@ -296,6 +306,11 @@ export function UserRow({ user, roles, manage }: { user: IamUser; roles: IamRole
           ))}
         </div>
       </Td>
+      {layers !== undefined && (
+        <Td className="text-xs" data-testid={`layers-${user.username}`}>
+          {layers}
+        </Td>
+      )}
       <Td className="whitespace-nowrap">
         {user.last_seen_at ? formatDateTime(user.last_seen_at) : "—"}
       </Td>
@@ -331,47 +346,13 @@ export function UserRow({ user, roles, manage }: { user: IamUser; roles: IamRole
   );
 }
 
-function Users({ users, roles, manage }: { users: IamUser[]; roles: IamRole[]; manage: boolean }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Użytkownicy</CardTitle>
-        <CardDescription>
-          Konto pojawia się po pierwszym logowaniu przez Keycloak. Rolę Administracja nadaje się
-          tylko w Keycloak; tutaj można nadać pozostałe role wbudowane i role własne.
-        </CardDescription>
-      </CardHeader>
-      <Table>
-        <thead>
-          <tr>
-            <Th>Konto</Th>
-            <Th>Role</Th>
-            <Th>Ostatnio aktywne</Th>
-            {manage && <Th>Nadaj rolę</Th>}
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <UserRow key={user.id} user={user} roles={roles} manage={manage} />
-          ))}
-        </tbody>
-      </Table>
-    </Card>
-  );
-}
-
-export function Roles() {
-  const { can } = useAuth();
-  const { roles, permissions, users } = useIam();
-  const manage = can("iam:manage");
-  const pending = roles.isPending || permissions.isPending || users.isPending;
-  const error = roles.error ?? permissions.error ?? users.error;
+/** Zakładka „Role i uprawnienia” w panelu IAM: macierz i edytor ról własnych. */
+export function RolesPanel({ manage }: { manage: boolean }) {
+  const { roles, permissions } = useIam();
+  const pending = roles.isPending || permissions.isPending;
+  const error = roles.error ?? permissions.error;
   return (
     <>
-      <PageHeader
-        title="Role i użytkownicy"
-        description="Cztery role z briefu: Administracja; Dodawanie, usuwanie, modyfikacja; Modyfikacja i odczyt; Odczyt. Backend sprawdza uprawnienie na każdym endpoincie (deny-by-default), a ta strona tylko je pokazuje i zmienia."
-      />
       <QueryState isPending={pending} error={error} empty={false} emptyText="" />
       {roles.data && permissions.data && (
         <>
@@ -379,7 +360,6 @@ export function Roles() {
           {manage && <RoleEditor roles={roles.data} permissions={permissions.data} />}
         </>
       )}
-      {roles.data && users.data && <Users users={users.data} roles={roles.data} manage={manage} />}
     </>
   );
 }

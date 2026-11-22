@@ -44,7 +44,8 @@ Granice, które pilnuje test `test_matrix_covers_key_expectations`:
 
 ## Edytor ról
 
-Administrator w konsoli (Administracja → Role i użytkownicy) może:
+Administrator w konsoli (Kontrola → IAM: role i użytkownicy, zakładki „Ludzie” i „Role i
+uprawnienia”) może:
 
 - utworzyć, zmienić i usunąć **rolę własną** złożoną z uprawnień z listy poniżej
   (`PUT`/`DELETE /api/iam/roles/{nazwa}`); rola własna nie może zawierać `iam:manage`

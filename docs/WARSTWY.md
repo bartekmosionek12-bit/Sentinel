@@ -35,12 +35,14 @@ to wpisy `layer_delegated` i `layer_delegation_revoked` w dzienniku audytu.
 Decyzja z 22.11.2026: rola `editor` nie ma już `agent:task`. Agent i warstwy red team są
 domyślnie tylko dla administratora; editor zatwierdza dalej akcje L2/L3 zwykłych skanów.
 
-## Panel IAM (`/iam`)
+## Panel IAM (`/iam`, „IAM: role i użytkownicy”)
 
-- **Human**: trzy warstwy obok siebie z listą osób, które mają do nich dostęp (z roli albo
-  z delegacji); ludzie i ich role (nadawanie ról jak w „Role i użytkownicy”); formularz
-  delegacji; lista delegacji ze stanem (aktywna, zaplanowana, wygasła, odwołana) i odwołaniem.
-- **Non-human**: agent AI jako tożsamość warstwy 3. Jego „rolą” są zdolności (narzędzia, cele,
+- **Ludzie (human)**: konta z rolami, kolumną „Warstwy skanowania” i nadawaniem ról; tabela
+  dostępu do warstw (z roli albo z delegacji); formularz delegacji; lista delegacji ze stanem
+  (aktywna, zaplanowana, wygasła, odwołana) i odwołaniem. Same skany nie są w IAM: uruchamia się
+  je w Kontrola → Warstwy skanowania, obok Agenta AI.
+- **Role i uprawnienia**: macierz i edytor ról własnych.
+- **Agent AI i konta techniczne (non-human)**: agent AI jako tożsamość warstwy 3. Jego „rolą” są zdolności (narzędzia, cele,
   najwyższy poziom, limity) nadawane w tym samym miejscu; wchodzą w życie po zaliczonym teście
   bezpieczeństwa agenta. Do tego role techniczne `agent` i `system` (bez uprawnień do API)
   i konta techniczne, które wywołały API.

@@ -124,7 +124,7 @@ jest oznaczony jako syntetyczny.
 
 ### Role i użytkownicy (P1)
 
-Strona „Role i użytkownicy” (`/admin/role`, uprawnienie `iam:read`) pokazuje macierz
+Strona „IAM: role i użytkownicy” (`/admin/iam`, uprawnienie `iam:read`) pokazuje macierz
 uprawnień czterech ról z briefu i ról własnych. Administrator tworzy w edytorze rolę własną z
 dowolnego podzbioru uprawnień z [`rules/roles.yaml`](rules/roles.yaml), z wyjątkiem
 `iam:manage`, i nadaje użytkownikom role wbudowane (bez Administracji, którą nadaje się tylko w
@@ -267,7 +267,7 @@ kontekście, a ciasteczka Keycloaka mają flagę `Secure`.
 | Sygnały bez CPE | Wpis KEV bez zakresu wersji w NVD trafia do kolejki weryfikacji jako sygnał; finding powstaje wyłącznie po decyzji człowieka. |
 | Kolejki | Osobne kolejki Celery: `default`, `scans`, `feeds`, `llm` (zawsze jedno zadanie naraz), `agent`, `agent_tests`. |
 | Tożsamość i RBAC | Keycloak (OIDC, PKCE), TOTP dla każdej roli, krótkie sesje z unieważnianiem, blokada po nieudanych próbach, break-glass z alertem. Cztery role z briefu, edytor ról własnych, nadawanie ról z konsoli, uprawnienie na każdym endpoincie, odmowy w audycie ([ROLES.md](docs/ROLES.md)). |
-| Interfejs | Jedna konsola zespołu IT `/admin/`: Pulpit, Skrzynka, Raporty, Zasoby z kartą hosta, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Agent AI, Test agenta, Dziennik audytu, Role i użytkownicy. Menu i formularze zależą od uprawnień roli; o dostępie decyduje backend. |
+| Interfejs | Jedna konsola zespołu IT `/admin/`: Pulpit, Skrzynka, Raporty, Zasoby z kartą hosta, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji, Skany, Zakres skanowania, Agent AI, Test agenta, Dziennik audytu, Warstwy skanowania, IAM: role i użytkownicy. Menu i formularze zależą od uprawnień roli; o dostępie decyduje backend. |
 | Sentek | Asystent (na razie tylko API, interfejs w P10): model rozpoznaje tylko intencję (limit 4 s, potem słowa kluczowe), odpowiedź buduje kod z bazy z RBAC, prośba o skan to tylko propozycja zadania dla agenta, odmowa poleceń zmieniających cokolwiek, audyt bez treści pytania. Eval 39 wypowiedzi, promptfoo z wrogą atrapą w każdym PR. |
 
 ## Zakres skanowania
