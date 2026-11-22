@@ -55,6 +55,9 @@ VIEWER_PASSWORD=$(value DEMO_VIEWER_PASSWORD); VIEWER_PASSWORD=${VIEWER_PASSWORD
 # administrator nie da im delegacji w IAM (docs/WARSTWY.md).
 ANALYST_PASSWORD=$(value DEMO_ANALYST_PASSWORD); ANALYST_PASSWORD=${ANALYST_PASSWORD:-$(random 18)}
 OPERATOR_PASSWORD=$(value DEMO_OPERATOR_PASSWORD); OPERATOR_PASSWORD=${OPERATOR_PASSWORD:-$(random 18)}
+# Dwa kolejne konta: jedno z rolą editor, drugie z rolą viewer.
+REDAKTOR_PASSWORD=$(value DEMO_REDAKTOR_PASSWORD); REDAKTOR_PASSWORD=${REDAKTOR_PASSWORD:-$(random 18)}
+OBSERWATOR_PASSWORD=$(value DEMO_OBSERWATOR_PASSWORD); OBSERWATOR_PASSWORD=${OBSERWATOR_PASSWORD:-$(random 18)}
 
 # Aplikacje TOTP przyjmują sekret w Base32; Keycloak przechowuje jego surowe bajty.
 TOTP_BASE32=$("$PY" -c "import base64,sys; print(base64.b32encode(sys.argv[1].encode()).decode().rstrip('='))" "$TOTP_SECRET")
@@ -69,12 +72,15 @@ DEMO_MODIFIER_PASSWORD=${MODIFIER_PASSWORD}
 DEMO_VIEWER_PASSWORD=${VIEWER_PASSWORD}
 DEMO_ANALYST_PASSWORD=${ANALYST_PASSWORD}
 DEMO_OPERATOR_PASSWORD=${OPERATOR_PASSWORD}
+DEMO_REDAKTOR_PASSWORD=${REDAKTOR_PASSWORD}
+DEMO_OBSERWATOR_PASSWORD=${OBSERWATOR_PASSWORD}
 CREDS
 
 USERS=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" TOTP_SECRET="$TOTP_SECRET" \
   EDITOR_PASSWORD="$EDITOR_PASSWORD" MODIFIER_PASSWORD="$MODIFIER_PASSWORD" \
   VIEWER_PASSWORD="$VIEWER_PASSWORD" ANALYST_PASSWORD="$ANALYST_PASSWORD" \
-  OPERATOR_PASSWORD="$OPERATOR_PASSWORD" "$PY" - <<'PY'
+  OPERATOR_PASSWORD="$OPERATOR_PASSWORD" REDAKTOR_PASSWORD="$REDAKTOR_PASSWORD" \
+  OBSERWATOR_PASSWORD="$OBSERWATOR_PASSWORD" "$PY" - <<'PY'
 import json, os
 
 def user(name, first, last, role, password, totp=None):
@@ -102,6 +108,8 @@ print(json.dumps({"ifResourceExists": "OVERWRITE", "users": [
     user("viewer", "Wiktor", "Demonstracyjny", "viewer", os.environ["VIEWER_PASSWORD"], os.environ["TOTP_SECRET"]),
     user("analityk", "Adam", "Analityk", "editor", os.environ["ANALYST_PASSWORD"], os.environ["TOTP_SECRET"]),
     user("operator", "Olga", "Operator", "modifier", os.environ["OPERATOR_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("redaktor", "Robert", "Redaktor", "editor", os.environ["REDAKTOR_PASSWORD"], os.environ["TOTP_SECRET"]),
+    user("obserwator", "Ola", "Obserwator", "viewer", os.environ["OBSERWATOR_PASSWORD"], os.environ["TOTP_SECRET"]),
 ]}))
 PY
 )
@@ -127,5 +135,7 @@ echo "  modifier  Modyfikacja i odczyt"
 echo "  viewer    Odczyt"
 echo "  analityk  Dodawanie, usuwanie, modyfikacja; warstwy skanowania tylko z delegacji w IAM"
 echo "  operator  Modyfikacja i odczyt; warstwy skanowania tylko z delegacji w IAM"
+echo "  redaktor    Dodawanie, usuwanie, modyfikacja (editor)"
+echo "  obserwator  Odczyt (viewer)"
 echo "  Każde konto: hasło + TOTP (wspólny sekret kont demo, Base32: ${TOTP_BASE32})"
 echo "  TOTP do aplikacji: otpauth://totp/Sentinel%20ASI:demo?secret=${TOTP_BASE32}&issuer=Sentinel%20ASI"
