@@ -73,6 +73,10 @@ class DiscoverySettings:
     service_ports: str = "22,80,443,8080"
     http_paths: tuple[str, ...] = ("/admin", "/login")
     fingerprint: bool = True
+    # Hosty niestabilne: adresy, które odpowiadały w poprzednim przebiegu, a teraz milczą,
+    # dostają drugą, pojedynczą próbę (osobna paczka /32, ta sama brama i limity).
+    retry_missing: bool = True
+    retry_limit: int = 256
 
 
 @dataclass(frozen=True)
@@ -399,8 +403,52 @@ class DiscoveryEngine:
                     )
                     session.commit()
 
+            # Faza 1b: ponowna próba dla hostów, które odpowiadały poprzednio (brief: powtarzanie
+            # pomiarów dla hostów niestabilnych). Każdy adres osobno przez scope_guard.
+            recovered = 0
+            retried = 0
+            if settings.retry_missing and not stopped():
+                missing = self._previously_seen(run, parsed.networks, set(observations))
+                retry_futures: dict[Future[SweepResult], str] = {}
+                for ip in missing[: max(0, settings.retry_limit)]:
+                    prefix = 128 if ":" in ip else 32
+                    try:
+                        scoped = self._guard.authorize_network(
+                            f"{ip}/{prefix}",
+                            tool="nmap",
+                            intrusiveness=Intrusiveness.LIGHT,
+                            rule_name="discovery_retry",
+                            max_addresses=1,
+                        )
+                    except ScopeError:
+                        continue
+                    retry_futures[pool.submit(self._sweep, scoped, settings)] = ip
+                for future in retry_futures:
+                    result = future.result()
+                    retried += 1
+                    self._batch(
+                        run,
+                        result.network.address,
+                        1,
+                        "failed" if result.error else "done",
+                        len(result.hosts),
+                        int(result.seconds * 1000),
+                        result.error,
+                        "retry",
+                    )
+                    for host in result.hosts:
+                        if host.ip == retry_futures[future] and host.ip not in observations:
+                            observations[host.ip] = self._observe(run, host)
+                            alive.append(host)
+                            recovered += 1
+                run.hosts_up = len(observations) + len(parsed.domains)
+                session.commit()
+            totals["retried"] = retried
+            totals["recovered_on_retry"] = recovered
+
             # Faza 2: usługi i HTTP na aktywnych hostach, też równolegle i przez bramę.
             pending: dict[Future[ServiceResult], str] = {}
+            domain_addresses: set[str] = set()
             hosts = deque(alive)
             while hosts or pending:
                 while hosts and len(pending) < settings.workers and not stopped():
@@ -425,10 +473,14 @@ class DiscoveryEngine:
                         session.commit()
                         continue
                     if host.ip == host.hostname:  # domena: obserwacja pod adresem z DNS
-                        observations.setdefault(
-                            target.address,
-                            self._observe(run, DiscoveredHost(target.address, host.hostname)),
-                        )
+                        if target.address not in observations:
+                            observations[target.address] = self._observe(
+                                run, DiscoveredHost(target.address, host.hostname)
+                            )
+                        domain_addresses.add(target.address)
+                        # Od razu widać host w konsoli, zanim skończy się skan usług.
+                        run.hosts_up = len(observations)
+                        session.commit()
                     pending[pool.submit(self._services, target, http_target, settings)] = (
                         target.address
                     )
@@ -444,6 +496,9 @@ class DiscoveryEngine:
                         observation.http = outcome.http
                         observation.flags = flags_for(observation.hostname, outcome.http)
                     totals["hosts_failed"] += bool(outcome.error)
+                    if ip in domain_addresses:
+                        run.addresses_done += 1
+                        run.batches_done += 1
                     self._batch(
                         run,
                         ip,
@@ -505,6 +560,33 @@ class DiscoveryEngine:
         )
         session.commit()
         return run
+
+    def _previously_seen(
+        self, run: DiscoveryRun, networks: list[IpNetwork], answered: set[str]
+    ) -> list[str]:
+        """Adresy z ostatniego zakończonego przebiegu, które leżą w celach tego przebiegu,
+        a teraz nie odpowiedziały."""
+        previous = self._session.scalar(
+            select(DiscoveryRun)
+            .where(DiscoveryRun.status.in_(("done", "stopped")), DiscoveryRun.id != run.id)
+            .order_by(DiscoveryRun.created_at.desc())
+            .limit(1)
+        )
+        if previous is None:
+            return []
+        found: list[str] = []
+        for ip in self._session.scalars(
+            select(Observation.ip).where(Observation.run_id == previous.id)
+        ):
+            if ip in answered:
+                continue
+            try:
+                address = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if any(address.version == n.version and address in n for n in networks):
+                found.append(ip)
+        return sorted(found, key=lambda value: int(ipaddress.ip_address(value)))
 
     def _observe(self, run: DiscoveryRun, host: DiscoveredHost) -> Observation:
         observation = Observation(run_id=run.id, ip=host.ip, hostname=host.hostname)

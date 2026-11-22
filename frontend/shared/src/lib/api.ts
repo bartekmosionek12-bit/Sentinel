@@ -537,6 +537,12 @@ export interface HostState {
   label: string;
   history: boolean[];
   misses: number;
+  time_profile?: {
+    day: { seen: number; total: number };
+    night: { seen: number; total: number };
+    pattern: "day_only" | "night_only" | null;
+    label: string;
+  };
 }
 
 export interface DiscoveryHost {

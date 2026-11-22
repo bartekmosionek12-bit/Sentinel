@@ -559,6 +559,14 @@ def set_override(
     """Ręczna zmiana wyniku. Zapisana osobno, więc kolejny skan jej nie nadpisze."""
     if payload.field not in OVERRIDE_FIELDS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tego pola nie można zmienić")
+    if payload.field == "tags" and payload.value not in (None, "", []):
+        raw = payload.value.split(",") if isinstance(payload.value, str) else payload.value
+        if not isinstance(raw, list) or not all(isinstance(t, str) for t in raw):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tagi to lista tekstów")
+        tags = list(dict.fromkeys(t.strip().lower()[:40] for t in raw if t.strip()))
+        if len(tags) > 20:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Najwyżej 20 tagów")
+        payload.value = tags or None
     row = session.scalar(
         select(ObservationOverride).where(
             ObservationOverride.ip == ip, ObservationOverride.field == payload.field

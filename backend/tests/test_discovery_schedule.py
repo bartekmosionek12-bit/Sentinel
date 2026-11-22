@@ -175,3 +175,68 @@ def test_paused_run_does_not_count_as_miss(session_factory: sessionmaker[Session
                 session.add(Observation(run_id=run.id, ip="10.10.0.5"))
         session.commit()
         assert host_states(session)["10.10.0.5"]["state"] == "active"
+
+
+class FlakyLab(FakeLab):
+    """Host 10.10.0.7 nie odpowiada na sweep całej paczki, ale odpowiada na ponowną próbę /32."""
+
+    def _respond(self, argv: tuple[str, ...]) -> str:
+        from tests.scanner_fakes import discovery_xml
+
+        if "-sn" in argv and argv[-1].endswith("/24"):
+            return discovery_xml(sorted(ip for ip in self.services if ip != "10.10.0.7"))
+        return super()._respond(argv)
+
+
+def test_missing_host_gets_a_second_probe(session_factory: sessionmaker[Session]) -> None:
+    services = {
+        "10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http")],
+        "10.10.0.7": [ServiceInfo(port=22, protocol="tcp", name="ssh")],
+    }
+    stable = FakeLab(services)
+    flaky = FlakyLab(services)
+    from app.discovery.schedule import new_run
+
+    ids = []
+    for lab in (stable, flaky):
+        guard, nmap = _engine(session_factory, lab)
+        with session_factory() as session:
+            run = new_run(
+                session,
+                CONFIG,
+                ["10.10.0.0/24"],
+                name="r",
+                settings={"workers": 1},
+                actor="t",
+            )
+            session.commit()
+            run_id = run.id
+        with session_factory() as session:
+            done = DiscoveryEngine(session, guard, CONFIG, nmap=nmap).run(run_id)
+            ids.append(done.id)
+            summary = dict(done.summary)
+    assert summary["retried"] == 1
+    assert summary["recovered_on_retry"] == 1
+    with session_factory() as session:
+        from app.models import Observation
+
+        ips = set(session.scalars(select(Observation.ip).where(Observation.run_id == ids[1])))
+        assert ips == {"10.10.0.5", "10.10.0.7"}
+    assert any("10.10.0.7/32" in " ".join(c) for c in flaky.runner.calls)
+
+
+def test_time_of_day_pattern() -> None:
+    from app.discovery.analysis import time_profile
+
+    noon = datetime(2026, 11, 20, 11, tzinfo=UTC)  # 12:00 w Warszawie
+    midnight = datetime(2026, 11, 20, 23, tzinfo=UTC)  # 00:00 w Warszawie
+    samples = [
+        (noon, True),
+        (noon + timedelta(days=1), True),
+        (midnight, False),
+        (midnight + timedelta(days=1), False),
+    ]
+    profile = time_profile(samples)
+    assert profile["pattern"] == "day_only"
+    assert profile["label"] == "odpowiada tylko w dzień"
+    assert time_profile(samples[:3])["pattern"] is None  # za mało pomiarów nocą

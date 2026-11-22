@@ -28,10 +28,18 @@ export function HostStateBadge({ state }: { state: DiscoveryHost["state"] }) {
     variant: "neutral" as const,
     hint: "",
   };
+  const when = state.time_profile?.label;
   return (
-    <Badge variant={item.variant} title={item.hint}>
-      {item.label}
-    </Badge>
+    <span className="inline-flex flex-wrap gap-1">
+      <Badge variant={item.variant} title={item.hint}>
+        {item.label}
+      </Badge>
+      {when && (
+        <Badge variant="info" title="Wzorzec z przebiegów w dzień (7–19) i w nocy">
+          {when}
+        </Badge>
+      )}
+    </span>
   );
 }
 
@@ -138,7 +146,25 @@ const EDITABLE: { field: string; label: string; placeholder: string }[] = [
     label: "Notatka",
     placeholder: "np. środowisko testowe zespołu X",
   },
+  {
+    field: "tags",
+    label: "Tagi (po przecinku)",
+    placeholder: "np. dmz, zespół-x, do-weryfikacji",
+  },
 ];
+
+function fieldValue(host: DiscoveryHost, field: string): string {
+  if (field === "tags") return host.tags.join(", ");
+  return String(host[field as keyof DiscoveryHost] ?? "");
+}
+
+function toValue(field: string, value: string): unknown {
+  if (field === "tags") {
+    const tags = [...new Set(value.split(",").map((t) => t.trim()).filter(Boolean))];
+    return tags.length ? tags : null;
+  }
+  return value.trim() || null;
+}
 
 function HostEditor({ host }: { host: DiscoveryHost }) {
   const queryClient = useQueryClient();
@@ -146,7 +172,7 @@ function HostEditor({ host }: { host: DiscoveryHost }) {
   const save = useMutation({
     mutationFn: async () => {
       for (const [field, value] of Object.entries(values)) {
-        await api.setOverride(host.ip, field, value.trim() || null);
+        await api.setOverride(host.ip, field, toValue(field, value));
       }
     },
     onSuccess: () => {
@@ -173,7 +199,7 @@ function HostEditor({ host }: { host: DiscoveryHost }) {
               data-demo={`edit-${field}`}
               className="mt-1"
               placeholder={placeholder}
-              value={values[field] ?? String(host[field as keyof DiscoveryHost] ?? "")}
+              value={values[field] ?? fieldValue(host, field)}
               onChange={(e) => setValues((v) => ({ ...v, [field]: e.target.value }))}
             />
           </label>
@@ -272,6 +298,9 @@ export function DiscoveryRunPage() {
     (a, b) => b.flags.length - a.flags.length || a.ip.localeCompare(b.ip, "en", { numeric: true }),
   );
   const sweep = r?.batches.filter((b) => b.phase === "sweep") ?? [];
+  const [tag, setTag] = useState("");
+  const allTags = [...new Set(list.flatMap((h) => h.tags))].sort();
+  const shown = tag ? list.filter((h) => h.tags.includes(tag)) : list;
   const toggle = (ip: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -313,6 +342,23 @@ export function DiscoveryRunPage() {
               {r.settings.timing ?? 3}
             </p>
             {r.error && <p className="text-sm text-red-700">{r.error}</p>}
+            {r.status === "paused" && (
+              <p className="text-sm" data-demo="run-paused">
+                Przebieg przekroczył okno czasowe z harmonogramu. Rozpoczęte paczki zostały
+                dokończone, a pozostałe{" "}
+                {Number(r.summary?.remaining_addresses ?? 0).toLocaleString("pl-PL")} adresów
+                zostanie zeskanowanych w kolejnym oknie.{" "}
+                <Link className="text-primary underline" to="/discovery/harmonogram">
+                  Harmonogram
+                </Link>
+              </p>
+            )}
+            {Number(r.summary?.retried ?? 0) > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Ponowna próba dla {String(r.summary?.retried)} hostów, które odpowiadały
+                poprzednio; odpowiedziało {String(r.summary?.recovered_on_retry ?? 0)}.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -365,6 +411,7 @@ export function DiscoveryRunPage() {
         </Card>
       )}
 
+      {list.length > 0 && <ServiceGroups hosts={list} />}
       <Card data-demo="hosts">
         <CardHeader>
           <CardTitle>Hosty ({list.length})</CardTitle>
@@ -430,7 +477,25 @@ export function DiscoveryRunPage() {
             empty={list.length === 0}
             emptyText="Jeszcze nie wykryto żadnego hosta."
           />
-          {list.length > 0 && (
+          {allTags.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" data-demo="tag-filter">
+              Tagi:
+              <Button size="sm" variant={tag ? "ghost" : "outline"} onClick={() => setTag("")}>
+                wszystkie
+              </Button>
+              {allTags.map((t) => (
+                <Button
+                  key={t}
+                  size="sm"
+                  variant={tag === t ? "outline" : "ghost"}
+                  onClick={() => setTag(t)}
+                >
+                  #{t}
+                </Button>
+              ))}
+            </div>
+          )}
+          {shown.length > 0 && (
             <Table>
               <thead>
                 <tr>
@@ -445,7 +510,7 @@ export function DiscoveryRunPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((host) => (
+                {shown.map((host) => (
                   <HostRows
                     key={host.ip}
                     host={host}
@@ -512,6 +577,9 @@ function HostRows({
             )}
           </p>
           {host.note && <p className="text-xs">{host.note}</p>}
+          {host.tags.length > 0 && (
+            <p className="text-xs text-primary">{host.tags.map((t) => `#${t}`).join(" ")}</p>
+          )}
         </Td>
         <Td>
           <HostStateBadge state={host.state} />
@@ -538,5 +606,64 @@ function HostRows({
         </tr>
       )}
     </>
+  );
+}
+
+/** Grupowanie podobnych usług (brief): ten sam port, usługa i produkt na wielu hostach. */
+function ServiceGroups({ hosts }: { hosts: DiscoveryHost[] }) {
+  const groups = new Map<string, { label: string; hosts: string[] }>();
+  for (const host of hosts) {
+    for (const s of host.services) {
+      const product = [s.product, s.version].filter(Boolean).join(" ");
+      const key = `${s.port}/${s.protocol ?? "tcp"}|${s.name ?? ""}|${product}`;
+      const label = `${s.port}/${s.protocol ?? "tcp"} ${s.name || "?"}${product ? ` · ${product}` : ""}`;
+      const group = groups.get(key) ?? { label, hosts: [] };
+      group.hosts.push(host.hostname ? `${host.hostname} (${host.ip})` : host.ip);
+      groups.set(key, group);
+    }
+    for (const tech of host.technologies) {
+      const key = `tech|${tech}`;
+      const group = groups.get(key) ?? { label: `technologia: ${tech}`, hosts: [] };
+      group.hosts.push(host.hostname ? `${host.hostname} (${host.ip})` : host.ip);
+      groups.set(key, group);
+    }
+  }
+  const rows = [...groups.values()].sort(
+    (a, b) => b.hosts.length - a.hosts.length || a.label.localeCompare(b.label, "pl"),
+  );
+  if (!rows.length) return null;
+  return (
+    <Card className="mb-6" data-demo="service-groups">
+      <CardHeader>
+        <CardTitle>Grupy podobnych usług</CardTitle>
+        <CardDescription>
+          Ten sam port, usługa i wersja albo ta sama technologia na wielu hostach: łatwiej
+          ocenić skalę i zrobić jedną poprawkę dla całej grupy.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="max-h-80 overflow-y-auto">
+        <Table>
+          <thead>
+            <tr>
+              <Th>Usługa</Th>
+              <Th>Hosty</Th>
+              <Th>Gdzie</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 50).map((g) => (
+              <tr key={g.label}>
+                <Td className="font-mono text-xs">{g.label}</Td>
+                <Td>{g.hosts.length}</Td>
+                <Td className="text-xs">
+                  {g.hosts.slice(0, 4).join(", ")}
+                  {g.hosts.length > 4 && ` +${g.hosts.length - 4}`}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

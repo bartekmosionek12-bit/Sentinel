@@ -6,7 +6,9 @@ import ipaddress
 import itertools
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,6 +39,47 @@ def _covers(targets: list[str], ip: str) -> bool:
     return False
 
 
+DAY_HOURS = range(7, 19)  # 07:00–18:59 czasu lokalnego to „dzień”, reszta „noc”
+TIMEZONE = "Europe/Warsaw"
+
+
+def time_profile(samples: list[tuple[datetime, bool]], tz: str = TIMEZONE) -> dict[str, Any]:
+    """Odpowiedzi hosta według pory dnia (brief: różnice zależne od pory dnia).
+
+    Wzorzec „tylko w dzień” / „tylko w nocy” pokazujemy, gdy w obu porach są co najmniej dwa
+    pomiary i host odpowiada w jednej porze w ≥ 80% przebiegów, a w drugiej w ≤ 20%.
+    """
+    zone = ZoneInfo(tz)
+    buckets = {"day": [0, 0], "night": [0, 0]}
+    for moment, answered in samples:
+        local = (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone(zone)
+        key = "day" if local.hour in DAY_HOURS else "night"
+        buckets[key][0] += int(answered)
+        buckets[key][1] += 1
+    rates = {k: (seen / total if total else None) for k, (seen, total) in buckets.items()}
+    pattern = None
+    day, night = rates["day"], rates["night"]
+    if (
+        buckets["day"][1] >= 2
+        and buckets["night"][1] >= 2
+        and day is not None
+        and night is not None
+    ):
+        if day >= 0.8 and night <= 0.2:
+            pattern = "day_only"
+        elif night >= 0.8 and day <= 0.2:
+            pattern = "night_only"
+    return {
+        "day": {"seen": buckets["day"][0], "total": buckets["day"][1]},
+        "night": {"seen": buckets["night"][0], "total": buckets["night"][1]},
+        "pattern": pattern,
+        "label": {
+            "day_only": "odpowiada tylko w dzień",
+            "night_only": "odpowiada tylko w nocy",
+        }.get(pattern or "", ""),
+    }
+
+
 def host_states(
     session: Session, *, inactive_after: int = 3, window: int = 5
 ) -> dict[str, dict[str, Any]]:
@@ -64,14 +107,14 @@ def host_states(
     out: dict[str, dict[str, Any]] = {}
     for ip in all_ips:
         history: list[bool] = []
+        samples: list[tuple[datetime, bool]] = []
         for run in runs:
             # Przebieg wstrzymany na końcu okna nie objął całego zakresu: brak odpowiedzi
             # liczymy tylko z przebiegów zakończonych, nie z przerwanych.
             covered = run.status != "paused" and _covers(run.targets, ip)
             if ip in seen[run.id] or covered:
                 history.append(ip in seen[run.id])
-            if len(history) >= max(window, inactive_after):
-                break
+                samples.append((run.created_at, ip in seen[run.id]))
         recent = history[:window]
         misses = 0
         for answered in history:
@@ -92,6 +135,7 @@ def host_states(
             "label": STATE_LABELS[state],
             "history": history[:window],
             "misses": misses,
+            "time_profile": time_profile(samples),
         }
     return out
 

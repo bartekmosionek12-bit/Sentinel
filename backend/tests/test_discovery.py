@@ -87,11 +87,17 @@ def test_discovery_end_to_end(
 
     edit = client.put("/api/discovery/overrides/10.10.0.5", json={"field": "note", "value": "DMZ"})
     assert edit.status_code == 200, edit.text
+    tagged = client.put(
+        "/api/discovery/overrides/10.10.0.5",
+        json={"field": "tags", "value": ["DMZ", " zespół-x ", "dmz"]},
+    )
+    assert tagged.status_code == 200, tagged.text
     third = _run(client, session_factory, lab)
     hosts = client.get(f"/api/discovery/runs/{third}/hosts").json()
     rows = hosts["hosts"] if isinstance(hosts, dict) else hosts
     host = next(h for h in rows if h["ip"] == "10.10.0.5")
     assert host["note"] == "DMZ"
+    assert host["tags"] == ["dmz", "zespół-x"]
     assert "note" in host["edited"]
 
     csv = client.get(f"/api/discovery/runs/{third}/export", params={"format": "csv"})
