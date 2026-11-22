@@ -18,6 +18,10 @@ wyników na ludzki język.
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); co poza linią cięcia:
 > [docs/ROADMAP.md](docs/ROADMAP.md).
 
+> **Dokumentacja techniczna:** [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md) (architektura,
+> zgodność z briefem, bezpieczeństwo, dane, role, API, uruchomienie, testy). Scenariusz filmu
+> demo: [docs/SCENARIUSZ_FILMU.md](docs/SCENARIUSZ_FILMU.md).
+
 ## Uruchomienie (jedna komenda, bez ustawień)
 
 Potrzebny tylko Docker Desktop (Windows, macOS) albo Docker z compose (Linux); na Windowsie
@@ -33,8 +37,8 @@ sekrety (tylko w `.env`, poza Gitem), buduje obrazy i stawia demo razem z labem,
 wypisuje konta demo i sekret TOTP (zapisane też w `data/demo-credentials.env`).
 Pierwszy start pobiera obrazy i trwa kilka minut.
 
-Konsola zespołu IT: <http://localhost:8080/admin/> (`/` przekierowuje tutaj). Dashboard
-menedżera: <http://localhost:8080/dashboard/>. Dokumentacja API: <http://localhost:8080/api/docs>.
+Konsola zespołu IT: <http://localhost:8080/admin/> (`/` przekierowuje tutaj). Dokumentacja
+API: <http://localhost:8080/api/docs>.
 
 Bez trybu demo (pusty zakres, brak kont): `cp .env.example .env`, ustaw hasła i
 `docker compose up --build`.

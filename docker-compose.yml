@@ -267,6 +267,20 @@ services:
       target: scanner
     image: sentinel-asi/scanner:dev
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "scans", "-c", "2", "-n", "scans@%h", "--loglevel", "INFO"]
+    # Warstwa 1 red team (docs/WARSTWY.md) uruchamia nuclei: ta sama binarka i te same
+    # szablony wykrywające co w mcp-scanner, tylko do odczytu. Bez nich przebieg zapisuje
+    # adnotację „nuclei pominięty”, a wynik nmap zostaje.
+    environment:
+      <<: *backend-env
+      # nuclei zapisuje konfigurację w katalogu domowym; system plików jest tylko do odczytu.
+      HOME: /tmp
+      PATH: /opt/nuclei/bin:/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - ./data/feeds:/app/data/feeds:ro
+      - ./backend/tests/fixtures/feeds:/app/demo-feeds:ro
+      - ./demo-lab:/app/demo-lab:ro
+      - ./data/nuclei/bin:/opt/nuclei/bin:ro
+      - ./data/nuclei/templates:/opt/nuclei-templates:ro
     # Komputer z labem mentorów (porty na localhost) widziany z kontenera. Nic nie skanuje,
     # dopóki adres nie jest w zakresie (rules/scope.mentor-lab.yaml, scripts/mentor_lab.sh).
     extra_hosts:
