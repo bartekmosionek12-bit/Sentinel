@@ -7,7 +7,8 @@
 # lab. Używaj tylko na własnej maszynie i wróć do zwykłego zakresu po teście.
 #
 # Adres bramy zależy od systemu: Docker Desktop (Windows, macOS) 192.168.65.254,
-# Docker na Linuksie 172.17.0.1. Skrypt sprawdza, czy rozwiązany adres jest na liście.
+# Docker na Linuksie 172.17.0.1. Nowszy Docker Desktop zwraca też adres IPv6
+# fdc4:f303:9324::254; scope_guard wymaga, żeby KAŻDY adres nazwy był w zakresie.
 
 allow:
   domains:
@@ -15,6 +16,7 @@ allow:
   cidrs:
     - 172.30.99.0/24       # demo-lab, jak w scope.demo.yaml
     - 192.168.65.254/32    # host.docker.internal w Docker Desktop
+    - fdc4:f303:9324::254/128  # to samo, adres IPv6 (nowszy Docker Desktop)
     - 172.17.0.1/32        # host-gateway w Dockerze na Linuksie
 
 deny:
