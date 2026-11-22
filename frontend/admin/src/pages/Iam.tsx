@@ -1,12 +1,13 @@
-/** IAM: tożsamości ludzi (role i delegacje warstw) oddzielone od tożsamości nie-ludzkich
- *  (agent AI i konta techniczne). Domyślnie trzy warstwy skanowania ma tylko administrator;
+/** IAM: jedna podstrona na role i użytkowników. Tożsamości ludzi (role, dostęp do warstw,
+ *  delegacje), role i uprawnienia (macierz, edytor) oraz tożsamości nie-ludzkie (agent AI i konta
+ *  techniczne). Domyślnie trzy warstwy skanowania ma tylko administrator;
  *  delegacja daje jedną warstwę konkretnej osobie na konkretnej podsieci w oknie czasu. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Link as LinkIcon, User, Users } from "lucide-react";
+import { Bot, KeyRound, Link as LinkIcon, Users } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { UserRow } from "@/pages/Roles";
+import { RolesPanel, UserRow } from "@/pages/Roles";
 import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
 import { Button } from "@shared/components/ui/button";
@@ -55,6 +56,7 @@ function localInput(date: Date): string {
 }
 
 /** Trzy warstwy obok siebie: co robią, jak się je uruchamia i kto ma do nich dostęp. */
+/** Kto ma dostęp do której warstwy (z roli albo z delegacji). Same skany są w Kontrola → Warstwy skanowania. */
 function LayerOverview({
   layers,
   users,
@@ -66,54 +68,69 @@ function LayerOverview({
 }) {
   const admins = users.filter(isAdmin).map((u) => u.display_name || u.username);
   return (
-    <div className="mb-6 grid gap-4 lg:grid-cols-3" data-testid="layer-overview">
-      {layers.map((layer) => {
-        const active = delegations.filter((d) => d.layer === layer.layer && d.state === "aktywna");
-        return (
-          <Card key={layer.layer} className="flex flex-col">
-            <CardHeader>
-              <CardTitle>
-                Warstwa {layer.layer}: {layer.name}
-              </CardTitle>
-              <CardDescription>{layer.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="mt-auto space-y-2 text-sm">
-              <p>
-                <span className="text-xs font-medium text-muted-foreground">Uruchomienie: </span>
-                {layer.trigger}
-              </p>
-              <p>
-                <span className="text-xs font-medium text-muted-foreground">Uprawnienie: </span>
-                <code className="text-xs">{layer.permission}</code>
-              </p>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Dostęp</p>
-                <ul className="mt-1 space-y-1">
-                  <li>
-                    <Badge variant="info">z roli</Badge> Administracja
+    <Card className="mb-6" data-testid="layer-overview">
+      <CardHeader>
+        <CardTitle>Dostęp do warstw skanowania</CardTitle>
+        <CardDescription>
+          Uprawnienia do trzech warstw wynikają wyłącznie z IAM: rola Administracja albo delegacja
+          z terminem i podsiecią. Same skany uruchamia się w Kontrola → Warstwy skanowania.
+        </CardDescription>
+      </CardHeader>
+      <div className="overflow-x-auto">
+        <Table>
+          <thead>
+            <tr>
+              <Th>Warstwa</Th>
+              <Th>Uprawnienie</Th>
+              <Th>Z roli</Th>
+              <Th>Aktywne delegacje</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {layers.map((layer) => {
+              const active = delegations.filter(
+                (d) => d.layer === layer.layer && d.state === "aktywna",
+              );
+              return (
+                <tr key={layer.layer}>
+                  <Td>
+                    Warstwa {layer.layer}: {layer.name}
+                  </Td>
+                  <Td>
+                    <code className="text-xs">{layer.permission}</code>
+                  </Td>
+                  <Td>
+                    <Badge variant="info">Administracja</Badge>
                     {admins.length > 0 && (
-                      <span className="text-muted-foreground"> ({admins.join(", ")})</span>
-                    )}
-                  </li>
-                  {active.map((d) => (
-                    <li key={d.id}>
-                      <Badge variant="ok">delegacja</Badge> {d.display_name || d.username}:{" "}
-                      <span className="font-mono text-xs">{d.scope.join(", ")}</span>{" "}
-                      <span className="text-xs text-muted-foreground">
-                        do {formatDateTime(d.valid_until)}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        {admins.join(", ")}
                       </span>
-                    </li>
-                  ))}
-                  {active.length === 0 && (
-                    <li className="text-xs text-muted-foreground">Brak aktywnych delegacji.</li>
-                  )}
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
+                    )}
+                  </Td>
+                  <Td>
+                    {active.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">brak</span>
+                    ) : (
+                      <ul className="space-y-1">
+                        {active.map((d) => (
+                          <li key={d.id}>
+                            {d.display_name || d.username}:{" "}
+                            <span className="font-mono text-xs">{d.scope.join(", ")}</span>{" "}
+                            <span className="text-xs text-muted-foreground">
+                              do {formatDateTime(d.valid_until)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </div>
+    </Card>
   );
 }
 
@@ -350,13 +367,13 @@ function HumanTab({
     delegations.filter((d) => d.user_id === id && d.state === "aktywna");
   return (
     <>
-      <LayerOverview layers={layers} users={humans} delegations={delegations} />
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Ludzie i role</CardTitle>
+          <CardTitle>Ludzie, role i dostęp do warstw</CardTitle>
           <CardDescription>
-            Role z Keycloak (szare) i nadane w konsoli (niebieskie). Rolę Administracja nadaje się
-            tylko w Keycloak. Kolumna „Warstwy” pokazuje aktywne delegacje.
+            Konto pojawia się po pierwszym logowaniu przez Keycloak. Role z Keycloak są szare, nadane
+            w konsoli niebieskie; Administrację nadaje się tylko w Keycloak. Kolumna „Warstwy
+            skanowania” pokazuje dostęp z roli albo z aktywnej delegacji.
           </CardDescription>
         </CardHeader>
         <div className="overflow-x-auto">
@@ -365,35 +382,34 @@ function HumanTab({
               <tr>
                 <Th>Konto</Th>
                 <Th>Role</Th>
+                <Th>Warstwy skanowania</Th>
                 <Th>Ostatnio aktywne</Th>
                 {manage && <Th>Nadaj rolę</Th>}
               </tr>
             </thead>
             <tbody>
               {humans.map((user) => (
-                <UserRow key={user.id} user={user} roles={roles} manage={manage} />
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  roles={roles}
+                  manage={manage}
+                  layers={
+                    isAdmin(user)
+                      ? "warstwy 1, 2 i 3 z roli Administracja"
+                      : byUser(user.id).length > 0
+                        ? byUser(user.id)
+                            .map((d) => `warstwa ${d.layer} (${d.scope.join(", ")})`)
+                            .join("; ")
+                        : "brak (domyślnie)"
+                  }
+                />
               ))}
             </tbody>
           </Table>
         </div>
-        <CardContent>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Warstwy</p>
-          <ul className="space-y-1 text-sm">
-            {humans.map((user) => (
-              <li key={user.id} data-testid={`layers-${user.username}`}>
-                <span className="font-medium">{user.display_name || user.username}:</span>{" "}
-                {isAdmin(user)
-                  ? "warstwy 1, 2 i 3 z roli Administracja"
-                  : byUser(user.id).length > 0
-                    ? byUser(user.id)
-                        .map((d) => `warstwa ${d.layer} (${d.scope.join(", ")})`)
-                        .join("; ")
-                    : "brak (domyślnie)"}
-              </li>
-            ))}
-          </ul>
-        </CardContent>
       </Card>
+      <LayerOverview layers={layers} users={humans} delegations={delegations} />
       {manage && <DelegationForm users={users} />}
       <Delegations delegations={delegations} manage={manage} />
     </>
@@ -617,14 +633,17 @@ function NonHumanTab({ data, configure }: { data: NonHumanIdentities; configure:
 }
 
 const TABS = [
-  { key: "human", label: "Human: ludzie", icon: Users },
-  { key: "non-human", label: "Non-human: agent AI i konta techniczne", icon: Bot },
+  { key: "human", label: "Ludzie (human)", icon: Users },
+  { key: "role", label: "Role i uprawnienia", icon: KeyRound },
+  { key: "non-human", label: "Agent AI i konta techniczne (non-human)", icon: Bot },
 ] as const;
+
+type Tab = (typeof TABS)[number]["key"];
 
 export function Iam() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "non-human" ? "non-human" : "human";
+  const tab: Tab = TABS.find((t) => t.key === params.get("tab"))?.key ?? "human";
   const manage = can("iam:manage");
   const users = useQuery({ queryKey: ["iam", "users"], queryFn: api.iamUsers });
   const roles = useQuery({ queryKey: ["iam", "roles"], queryFn: api.iamRoles });
@@ -640,10 +659,10 @@ export function Iam() {
   return (
     <>
       <PageHeader
-        title="IAM"
-        description="Tożsamości ludzi i tożsamości nie-ludzkie osobno. Role, delegacje trzech warstw skanowania i zdolności agenta AI."
+        title="IAM: role i użytkownicy"
+        description="Jedno miejsce na tożsamości i uprawnienia. Cztery role z briefu i role własne, ludzie z ich rolami i dostępem do warstw skanowania, delegacje oraz agent AI i konta techniczne. Backend sprawdza uprawnienie na każdym endpoincie (deny-by-default), a ta strona tylko je pokazuje i zmienia."
       />
-      <div role="tablist" aria-label="Rodzaj tożsamości" className="mb-4 flex flex-wrap gap-2">
+      <div role="tablist" aria-label="Widok IAM" className="mb-4 flex flex-wrap gap-2">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -656,21 +675,26 @@ export function Iam() {
             )}
             onClick={() => setParams(key === "human" ? {} : { tab: key })}
           >
-            {key === "human" ? <User className="size-4" /> : <Icon className="size-4" />}
+            <Icon className="size-4" />
             {label}
           </button>
         ))}
       </div>
-      <QueryState isPending={pending} error={error} empty={false} emptyText="" />
-      {tab === "human" && users.data && roles.data && delegations.data && layers.data && (
-        <HumanTab
-          users={users.data}
-          roles={roles.data}
-          layers={layers.data}
-          delegations={delegations.data}
-          manage={manage}
-        />
+      {tab === "human" && (
+        <>
+          <QueryState isPending={pending} error={error} empty={false} emptyText="" />
+          {users.data && roles.data && delegations.data && layers.data && (
+            <HumanTab
+              users={users.data}
+              roles={roles.data}
+              layers={layers.data}
+              delegations={delegations.data}
+              manage={manage}
+            />
+          )}
+        </>
       )}
+      {tab === "role" && <RolesPanel manage={manage} />}
       {tab === "non-human" && (
         <>
           <QueryState

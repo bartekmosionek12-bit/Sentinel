@@ -10,8 +10,13 @@ const nav = (page: import("@playwright/test").Page) =>
 
 test("administrator widzi macierz ról i tworzy rolę własną bez iam:manage", async ({ page }) => {
   const sent = await stubApi(page);
+  // Stary adres /role prowadzi do zakładki „Role i uprawnienia” w jednym panelu IAM.
   await page.goto("/admin/role");
-  await expect(page.getByRole("heading", { name: "Role i użytkownicy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "IAM: role i użytkownicy" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Role i uprawnienia" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   for (const label of ["Administracja", "Dodawanie, usuwanie, modyfikacja", "Odczyt"]) {
     await expect(page.getByRole("columnheader", { name: label, exact: true })).toBeVisible();
   }
@@ -36,7 +41,7 @@ test("administrator widzi macierz ról i tworzy rolę własną bez iam:manage", 
 
 test("administrator nadaje rolę z konsoli; Administracji nie da się nadać", async ({ page }) => {
   const sent = await stubApi(page);
-  await page.goto("/admin/role");
+  await page.goto("/admin/iam");
   const select = page.getByLabel("Rola dla viewer");
   await expect(select.locator("option", { hasText: "Administracja" })).toHaveCount(0);
   await select.selectOption("editor");
@@ -52,7 +57,7 @@ test("rola Odczyt: bez ról, audytu i formularzy zapisu", async ({ page }) => {
   await stubApi(page, { role: "viewer" });
   await page.goto("/admin/zasoby");
   await expect(page.getByRole("heading", { name: "Zasoby" })).toBeVisible();
-  await expect(nav(page).getByRole("link", { name: "Role i użytkownicy" })).toHaveCount(0);
+  await expect(nav(page).getByRole("link", { name: "IAM: role i użytkownicy" })).toHaveCount(0);
   await expect(nav(page).getByRole("link", { name: "Dziennik audytu" })).toHaveCount(0);
   await expect(nav(page).getByRole("link", { name: "Zgodność" })).toHaveCount(0);
   await expect(page.getByText("Dodaj zasób ręcznie")).toHaveCount(0);
@@ -259,9 +264,9 @@ test("IAM: ludzie i tożsamości nie-ludzkie osobno, delegacja warstwy na podsie
   const sent = await stubApi(page);
   await page.goto("/admin/");
   await nav(page).getByRole("button", { name: "Kontrola" }).click();
-  await nav(page).getByRole("link", { name: "IAM", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "IAM" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Human: ludzie/ })).toHaveAttribute(
+  await nav(page).getByRole("link", { name: "IAM: role i użytkownicy" }).click();
+  await expect(page.getByRole("heading", { name: "IAM: role i użytkownicy" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Ludzie/ })).toHaveAttribute(
     "aria-selected",
     "true",
   );
@@ -287,7 +292,7 @@ test("IAM: ludzie i tożsamości nie-ludzkie osobno, delegacja warstwy na podsie
   await page.getByRole("button", { name: "Odwołaj delegację analityk warstwa 1" }).click();
   await expect.poll(() => sent.some((s) => s.path.endsWith("/revoke"))).toBe(true);
 
-  await page.getByRole("tab", { name: /Non-human/ }).click();
+  await page.getByRole("tab", { name: /non-human/ }).click();
   await expect(page.getByText("Agent AI (warstwa 3)")).toBeVisible();
   await expect(page.getByText("aktywny, zdolności v2")).toBeVisible();
   await expect(page.getByRole("cell", { name: "sentinel-agent" })).toBeVisible();
@@ -302,8 +307,8 @@ test("trzy warstwy: osobne karty, grupy podatności, warstwa 2 i DefectDojo na �
   await expect(page.getByRole("region", { name: "Warstwa 1: skan podatności" })).toContainText(
     "Anonimowe logowanie FTP",
   );
-  await nav(page).getByRole("button", { name: "Skanowanie podatności" }).click();
-  await nav(page).getByRole("link", { name: "Trzy warstwy" }).click();
+  await nav(page).getByRole("button", { name: "Kontrola" }).click();
+  await nav(page).getByRole("link", { name: "Warstwy skanowania" }).click();
   for (const id of ["layer-1", "layer-2", "layer-3"]) {
     await expect(page.getByTestId(id)).toBeVisible();
   }

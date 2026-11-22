@@ -225,11 +225,11 @@ ani parametrów), a ścieżek wszystkich sygnatur razem może być najwyżej 10.
 - **Test agenta** (`/agent/test`): scenariusze sprawdzające, czy agent nie omija zasad.
 - **Dziennik audytu** (`/audyt`): każda akcja ludzi, harmonogramu i agenta (kto, co, kiedy,
   dlaczego, z jakimi parametrami); filtr i eksport.
-- **Role i użytkownicy** (`/role`): macierz uprawnień, edytor ról własnych, użytkownicy.
-- **IAM** (`/iam`): zakładki Human i Non-human. Ludzie: role, dostęp do trzech warstw,
-  delegacje (osoba × warstwa × podsieć × okno czasu). Non-human: agent AI ze zdolnościami,
-  role i konta techniczne.
-- **Trzy warstwy** (`/warstwy`, sekcja „Skanowanie podatności”): warstwa 1 to deterministyczny
+- **IAM: role i użytkownicy** (`/iam`, stary adres `/role` prowadzi tutaj): jedna podstrona z
+  trzema zakładkami. Ludzie: konta z rolami, nadawanie ról, dostęp do trzech warstw, delegacje
+  (osoba × warstwa × podsieć × okno czasu). Role i uprawnienia: macierz i edytor ról własnych.
+  Agent AI i konta techniczne: zdolności agenta, role i konta techniczne.
+- **Warstwy skanowania** (`/warstwy`, w Kontroli obok Agenta AI): warstwa 1 to deterministyczny
   skan narzędziami red team (nmap z bezpiecznym NSE, nuclei bez tagów eksploatacji), warstwa 2
   to analiza jej logów modelem (domyślnie szablon reguł), warstwa 3 to agent AI. Każda
   uruchamiana osobno i jawnie; domyślnie tylko administrator. Szczegóły:
@@ -479,7 +479,7 @@ Wszystkie ścieżki pod `/api/discovery`. Uprawnienie sprawdza backend; macierz 
 | 9. Bezpieczeństwo i ostrożność | rozdział 7, Zakres, Dziennik audytu |
 | 10. Czytelność dashboardu i raportu | Pulpit, raport HTML |
 | 11. Import i eksport | Import wyników, eksport JSON/CSV/XML, raport; rozdział 8 |
-| 12. Role | Role i użytkownicy, [ROLES.md](ROLES.md); 4.10 |
+| 12. Role | IAM: role i użytkownicy, [ROLES.md](ROLES.md); 4.10 |
 
 ## 12. Wydajność i wybór języka
 

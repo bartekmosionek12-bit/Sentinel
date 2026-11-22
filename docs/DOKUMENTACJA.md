@@ -266,9 +266,8 @@ do czego rola ma uprawnienia; backend i tak sprawdza każde żądanie.
 |---|---|
 | Przegląd | **Pulpit**: kafelki wskaźników, ostatnie przebiegi discovery, wynik warstwy 1, sprawy do decyzji, aktywność z audytu, stan systemu; Raporty |
 | Discovery | Przebiegi discovery (nowy przebieg, import, lista), strona przebiegu, Porównanie i stany, Harmonogram, Sygnatury detekcyjne |
-| Skanowanie podatności | Trzy warstwy (warstwa 1, 2, 3 z osobnymi przyciskami) |
 | Podatności (moduł dodatkowy) | Zasoby, Zagrożenia, Feed zagrożeń, Kolejka weryfikacji |
-| Kontrola | Skany podatności, Zakres skanowania, Agent AI, Test agenta, Dziennik audytu, Role i użytkownicy, IAM |
+| Kontrola | Skany podatności, Zakres skanowania, Warstwy skanowania (warstwa 1, 2, 3 z osobnymi przyciskami), Agent AI, Test agenta, Dziennik audytu, IAM: role i użytkownicy |
 
 Strona przebiegu ma statystyki (status, adresy, aktywne hosty, czas, ETA), paczki, grupy
 usług, tabelę hostów z flagami, stanem, tagami i filtrem po tagu, kartę hosta z pełnym
@@ -478,14 +477,17 @@ Administrator tworzy w konsoli **role własne** z listy uprawnień (brief, pkt 1
 wyjątkiem uprawnień zarezerwowanych (`iam:manage`, `agent:task`, `redteam:layer1/2/3`), co
 zamyka eskalację przez edytor ról. Macierz rola × endpoint: [ROLES.md](ROLES.md).
 
-### 11.2 Panel IAM: tożsamości ludzkie i nieludzkie
+### 11.2 Panel IAM: role, użytkownicy i tożsamości nieludzkie
 
-Kontrola → IAM (`/iam`) ma dwie zakładki:
+Kontrola → IAM: role i użytkownicy (`/iam`) to jedna podstrona na wszystko, co dotyczy
+tożsamości i uprawnień. Ma trzy zakładki:
 
-- **Human**: trzy warstwy skanowania podatności z listą osób, które mają do nich dostęp (z
-  roli albo z delegacji); ludzie i ich role; formularz delegacji; lista delegacji ze stanem
-  (aktywna, zaplanowana, wygasła, odwołana) i przyciskiem odwołania.
-- **Non-human**: agent AI jako tożsamość warstwy 3, którego „rolą” są zdolności (narzędzia,
+- **Ludzie (human)**: tabela kont z rolami, dostępem do warstw skanowania i nadawaniem ról;
+  tabela „kto ma dostęp do której warstwy” (z roli albo z delegacji); formularz delegacji;
+  lista delegacji ze stanem (aktywna, zaplanowana, wygasła, odwołana) i przyciskiem odwołania.
+- **Role i uprawnienia**: macierz rola × uprawnienie i edytor ról własnych (stary adres
+  `/role` prowadzi tutaj).
+- **Agent AI i konta techniczne (non-human)**: agent AI jako tożsamość warstwy 3, którego „rolą” są zdolności (narzędzia,
   cele, najwyższy poziom, limity) nadawane przez administratora i aktywne dopiero po
   zaliczonym teście bezpieczeństwa; role techniczne `agent` i `system` bez uprawnień do API;
   konta techniczne, które wywołały API.

@@ -56,7 +56,7 @@ narzędzia, sieć demo-lab, maks. L2) i od razu uruchamia szybki test agenta (br
    Wywołanie `POST /api/scans` jego tokenem kończy się 403, a `admin` widzi w Dzienniku
    audytu `access_denied` dla `user:viewer` na `scan:run`.
 2. `modifier` zmienia status zagrożenia (`findings:update`), ale nie uruchomi skanu.
-3. `admin` → **Role i użytkownicy**: macierz uprawnień, edytor ról (np. rola `audytor` z
+3. `admin` → **IAM: role i użytkownicy** (zakładka „Role i uprawnienia”): macierz uprawnień, edytor ról (np. rola `audytor` z
    `audit:read`; `iam:manage` jest zablokowane) i nadanie roli koncie `viewer`. W Dzienniku
    audytu: `role_created`, `role_granted`.
 
