@@ -154,3 +154,48 @@ def test_agent_bootstrap_creates_pending_capability_and_queues_test(
     assert capability.version == result["capability"]
     assert capability.active is False
     assert capability.targets == ["172.30.99.0/24"]
+
+
+def test_register_users_makes_demo_accounts_visible_in_iam(session: Session) -> None:
+    import json
+
+    from sqlalchemy import select
+
+    from app.cli import cmd_register_users
+    from app.models import User
+
+    with pytest.raises(CliError, match="DEMO_MODE=true"):
+        cmd_register_users(session, _settings(), "[]")
+
+    accounts = [
+        {
+            "subject": "kc-1",
+            "username": "redaktor",
+            "display_name": "Robert Redaktor",
+            "email": "redaktor@demo.sentinel.example",
+            "roles": ["editor"],
+        },
+        {
+            "subject": "kc-2",
+            "username": "obserwator",
+            "display_name": "Ola Obserwator",
+            "email": "obserwator@demo.sentinel.example",
+            "roles": ["viewer"],
+        },
+    ]
+    demo = _settings(DEMO_MODE="true")
+    assert cmd_register_users(session, demo, json.dumps(accounts)) == {
+        "added": ["redaktor", "obserwator"],
+        "updated": [],
+    }
+    # Ponowne wywołanie (kolejny start) nie dubluje kont.
+    assert cmd_register_users(session, demo, json.dumps(accounts))["updated"] == [
+        "redaktor",
+        "obserwator",
+    ]
+    users = {u.username: u for u in session.scalars(select(User))}
+    assert users["redaktor"].roles == ["editor"]
+    assert users["obserwator"].roles == ["viewer"]
+    assert users["obserwator"].last_seen_at is None
+    with pytest.raises(CliError, match="subject i username"):
+        cmd_register_users(session, demo, json.dumps([{"username": "x"}]))
