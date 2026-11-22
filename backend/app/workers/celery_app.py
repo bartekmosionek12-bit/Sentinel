@@ -45,6 +45,12 @@ celery_app.conf.update(
     beat_schedule={
         # Feedy co 6 godzin (offline: ponowne wczytanie snapshotu niczego nie zmienia).
         "sync-feeds": {"task": "app.workers.tasks.feeds.sync_feeds", "schedule": 6 * 3600.0},
+        # Harmonogram discovery: co minutę sprawdza okna czasowe i wznowienia (kolejka default,
+        # sam przebieg idzie do kolejki `scans`).
+        "discovery-schedules": {
+            "task": "app.workers.tasks.discovery_schedules",
+            "schedule": 60.0,
+        },
         # Skan zakresu raz na dobę. Przy pustym zakresie nic się nie wykonuje.
         "scheduled-scan": {"task": "app.workers.tasks.scans.run_scan", "schedule": 24 * 3600.0},
         # Digest z powiadomień `delivery: digest` raz na dobę (Etap 6).

@@ -257,6 +257,7 @@ const RUN_STATUS: Record<
   planned: { label: "zaplanowany", variant: "neutral" },
   awaiting_approval: { label: "czeka na zgodę", variant: "warn" },
   stopped: { label: "zatrzymany", variant: "warn" },
+  paused: { label: "wstrzymany do kolejnego okna", variant: "warn" },
   failed: { label: "błąd", variant: "danger" },
 };
 

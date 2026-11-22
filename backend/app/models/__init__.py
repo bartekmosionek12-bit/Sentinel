@@ -16,6 +16,7 @@ from app.models.discovery import (
     DefectDojoExport,
     DiscoveryBatch,
     DiscoveryRun,
+    DiscoverySchedule,
     Observation,
     ObservationOverride,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "DefectDojoExport",
     "DiscoveryBatch",
     "DiscoveryRun",
+    "DiscoverySchedule",
     "FeedSync",
     "Finding",
     "FindingEvent",

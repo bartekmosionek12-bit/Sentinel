@@ -11,6 +11,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Discovery } from "@/pages/Discovery";
 import { DiscoveryCompare } from "@/pages/DiscoveryCompare";
 import { Signatures } from "@/pages/Signatures";
+import { Schedules } from "@/pages/Schedules";
 import { DiscoveryRunPage } from "@/pages/DiscoveryRun";
 import { Findings } from "@/pages/Findings";
 import { ReportDetail, Reports } from "@/pages/Reports";
@@ -112,6 +113,7 @@ export function App() {
         <Route path="/discovery" element={<Discovery />} />
         <Route path="/discovery/porownanie" element={<DiscoveryCompare />} />
         <Route path="/discovery/sygnatury" element={<Signatures />} />
+        <Route path="/discovery/harmonogram" element={<Schedules />} />
         <Route path="/discovery/:id" element={<DiscoveryRunPage />} />
         <Route path="/skany" element={<Scans />} />
         <Route path="/zakres" element={<Scope />} />

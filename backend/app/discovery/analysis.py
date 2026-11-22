@@ -50,7 +50,7 @@ def host_states(
     runs = list(
         session.scalars(
             select(DiscoveryRun)
-            .where(DiscoveryRun.status.in_(("done", "stopped")))
+            .where(DiscoveryRun.status.in_(("done", "stopped", "paused")))
             .order_by(DiscoveryRun.created_at.desc())
             .limit(50)
         )
@@ -65,7 +65,10 @@ def host_states(
     for ip in all_ips:
         history: list[bool] = []
         for run in runs:
-            if ip in seen[run.id] or _covers(run.targets, ip):
+            # Przebieg wstrzymany na końcu okna nie objął całego zakresu: brak odpowiedzi
+            # liczymy tylko z przebiegów zakończonych, nie z przerwanych.
+            covered = run.status != "paused" and _covers(run.targets, ip)
+            if ip in seen[run.id] or covered:
                 history.append(ip in seen[run.id])
             if len(history) >= max(window, inactive_after):
                 break

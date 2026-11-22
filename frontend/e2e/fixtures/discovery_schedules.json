@@ -1,0 +1,24 @@
+[
+  {
+    "id": "5c6b1f2e-0000-4000-8000-000000000001",
+    "name": "Nocny skan labu",
+    "targets": ["172.30.99.0/24"],
+    "targets_count": 1,
+    "settings": {"workers": 4},
+    "interval_minutes": 1440,
+    "window_start": "22:00",
+    "window_end": "06:00",
+    "days": [0, 1, 2, 3, 4],
+    "timezone": "Europe/Warsaw",
+    "enabled": true,
+    "created_by": "user:admin",
+    "updated_at": "2026-11-21T20:00:00Z",
+    "last_started_at": "2026-11-21T21:00:00Z",
+    "in_window": false,
+    "window_ends_at": null,
+    "next_window_at": "2026-11-23T21:00:00Z",
+    "next_start_at": "2026-11-23T21:00:00Z",
+    "resume_pending": true,
+    "last_run": null
+  }
+]

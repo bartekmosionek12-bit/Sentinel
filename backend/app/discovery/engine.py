@@ -20,6 +20,7 @@ import uuid
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,13 @@ from app.discovery.signatures import (
     load_raw,
     load_signatures,
 )
-from app.models import CustomSignature, DiscoveryBatch, DiscoveryRun, Observation
+from app.models import (
+    CustomSignature,
+    DiscoveryBatch,
+    DiscoveryRun,
+    DiscoverySchedule,
+    Observation,
+)
 from app.models.base import utcnow
 from app.scanners.models import DiscoveredHost, HostScan
 from app.scanners.nmap import NmapAdapter
@@ -170,6 +177,9 @@ class BatchQueue:
 
     def __bool__(self) -> bool:
         return bool(self._queue)
+
+    def remaining(self) -> list[str]:
+        return [str(network) for network in self._queue]
 
     def take(self, size: int) -> IpNetwork:
         network = self._queue.popleft()
@@ -311,8 +321,20 @@ class DiscoveryEngine:
             ) / max(1, settings.workers)
             return remaining_addresses * per_address + pending_hosts * 20.0 / settings.workers
 
+        deadline = run.deadline
+        if deadline is not None and deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        window_closed = False
+
         def stopped() -> bool:
+            nonlocal window_closed
             session.refresh(run, ["status"])
+            if run.status == "running" and deadline is not None and utcnow() >= deadline:
+                # Koniec okna czasowego: kończymy rozpoczęte paczki, resztę zapisujemy
+                # i wznawiamy w kolejnym oknie (brief, sekcja 2).
+                window_closed = True
+                run.status = "stopping"
+                session.commit()
             return run.status == "stopping"
 
         queue = BatchQueue(parsed.networks)
@@ -439,7 +461,22 @@ class DiscoveryEngine:
         run.duration_seconds = round(time.monotonic() - started, 2)
         run.eta_seconds = 0
         run.finished_at = utcnow()
-        run.status = "stopped" if run.status == "stopping" else "done"
+        if window_closed:
+            # Aktywne hosty bez skanu usług wracają do kolejki razem z niezeskanowanymi
+            # sieciami; wznowienie zrobi dla nich sweep (tani) i pełny skan usług.
+            unscanned = [
+                h.hostname if h.ip == h.hostname else f"{h.ip}/{32 if ':' not in h.ip else 128}"
+                for h in hosts
+            ]
+            remaining = {"networks": queue.remaining(), "hosts": unscanned}
+            run.remaining = remaining
+            run.status = "paused"
+            if run.schedule_id is not None:
+                schedule = session.get(DiscoverySchedule, run.schedule_id)
+                if schedule is not None:
+                    schedule.resume_run_id = run.id
+        else:
+            run.status = "stopped" if run.status == "stopping" else "done"
         run.summary = {
             **totals,
             "addresses_per_second": round(run.addresses_done / max(run.duration_seconds, 0.01), 1),
@@ -447,6 +484,13 @@ class DiscoveryEngine:
             "web": sum(len(o.http) for o in observations.values()),
             "flags": sum(len(o.flags) for o in observations.values()),
             "target_errors": parsed.errors,
+            "window_closed": window_closed,
+            "remaining_addresses": (
+                sum(ipaddress.ip_network(n).num_addresses for n in run.remaining["networks"])
+                + len(run.remaining["hosts"])
+                if run.remaining
+                else 0
+            ),
         }
         audit.record(
             session,

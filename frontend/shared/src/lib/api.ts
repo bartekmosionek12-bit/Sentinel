@@ -427,7 +427,7 @@ export interface TargetPreview {
 export interface DiscoveryRun {
   id: string;
   name: string;
-  status: "queued" | "running" | "stopping" | "stopped" | "done" | "failed";
+  status: "queued" | "running" | "stopping" | "stopped" | "paused" | "done" | "failed";
   source: "scan" | "import";
   targets: string[];
   targets_count: number;
@@ -445,6 +445,44 @@ export interface DiscoveryRun {
   duration_seconds: number | null;
   error: string | null;
   summary: Record<string, unknown> | null;
+  schedule_id?: string | null;
+  resume_of?: string | null;
+  deadline?: string | null;
+}
+
+export interface DiscoveryScheduleInput {
+  name: string;
+  text: string;
+  interval_minutes: number;
+  window_start: string;
+  window_end: string;
+  days: number[];
+  timezone: string;
+  enabled: boolean;
+  settings?: Partial<DiscoverySettings>;
+}
+
+export interface DiscoverySchedule {
+  id: string;
+  name: string;
+  targets: string[];
+  targets_count: number;
+  settings: Partial<DiscoverySettings>;
+  interval_minutes: number;
+  window_start: string;
+  window_end: string;
+  days: number[];
+  timezone: string;
+  enabled: boolean;
+  created_by: string;
+  updated_at: string;
+  last_started_at: string | null;
+  in_window: boolean;
+  window_ends_at: string | null;
+  next_window_at: string | null;
+  next_start_at: string | null;
+  resume_pending: boolean;
+  last_run: DiscoveryRun | null;
 }
 
 export interface DiscoveryBatch {
@@ -1214,6 +1252,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content, filename, name: `Import ${filename}` }),
     }),
+  discoverySchedules: () => request<DiscoverySchedule[]>("/discovery/schedules"),
+  saveDiscoverySchedule: (input: DiscoveryScheduleInput, id?: string) =>
+    request<DiscoverySchedule>(id ? `/discovery/schedules/${id}` : "/discovery/schedules", {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteDiscoverySchedule: (id: string) =>
+    request<void>(`/discovery/schedules/${id}`, { method: "DELETE" }),
   signatures: () => request<SignatureList>("/discovery/signatures"),
   checkSignature: (yaml: string) =>
     request<{ ok: boolean; definition: SignatureDefinition }>("/discovery/signatures/check", {

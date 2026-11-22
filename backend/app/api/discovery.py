@@ -27,6 +27,14 @@ from app.discovery.analysis import (
 from app.discovery.defectdojo import DojoClient, DojoConfig, DojoError, findings_for
 from app.discovery.engine import DiscoveryConfig, parse_targets
 from app.discovery.io import ImportError_, hosts_csv, nmap_xml, parse_import, rows_csv
+from app.discovery.schedule import (
+    RunError,
+    current_window,
+    new_run,
+    next_start,
+    next_window,
+)
+from app.discovery.schedule import validate as validate_schedule
 from app.discovery.signatures import KINDS, MATCH_TYPES, MAX_PATHS, SignatureError, combine
 from app.iam.deps import require
 from app.iam.redaction import RedactingRoute
@@ -36,6 +44,7 @@ from app.models import (
     DefectDojoExport,
     DiscoveryBatch,
     DiscoveryRun,
+    DiscoverySchedule,
     Observation,
     ObservationOverride,
 )
@@ -109,6 +118,9 @@ def _run_out(run: DiscoveryRun) -> dict[str, Any]:
         "duration_seconds": run.duration_seconds,
         "error": run.error,
         "summary": run.summary,
+        "schedule_id": str(run.schedule_id) if run.schedule_id else None,
+        "resume_of": str(run.resume_of) if run.resume_of else None,
+        "deadline": run.deadline,
     }
 
 
@@ -207,6 +219,71 @@ def preview_targets(payload: TargetsIn, guard: ScopeGuardDep, principal: Reader)
 def create_run(
     payload: RunIn, session: SessionDep, dispatcher: DispatcherDep, principal: Runner
 ) -> dict[str, Any]:
+    try:
+        run = new_run(
+            session,
+            discovery_config(),
+            payload.all(),
+            name=payload.name,
+            settings=payload.settings,
+            actor=principal.actor,
+        )
+    except RunError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    session.commit()
+    dispatcher.run_discovery(run.id)
+    return _run_out(run)
+
+
+# --- harmonogram ---------------------------------------------------------------------
+
+
+class ScheduleIn(TargetsIn):
+    name: str = Field(min_length=1, max_length=200)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    interval_minutes: int = Field(default=1440, ge=15, le=60 * 24 * 31)
+    window_start: str = "22:00"
+    window_end: str = "06:00"
+    days: list[int] = Field(default_factory=lambda: list(range(7)), max_length=7)
+    timezone: str = Field(default="Europe/Warsaw", max_length=64)
+    enabled: bool = True
+
+
+def _schedule_out(session: SessionDep, schedule: DiscoverySchedule) -> dict[str, Any]:
+    now = utcnow()
+    window = current_window(schedule, now)
+    upcoming = next_window(schedule, now)
+    last = session.scalar(
+        select(DiscoveryRun)
+        .where(DiscoveryRun.schedule_id == schedule.id)
+        .order_by(DiscoveryRun.created_at.desc())
+        .limit(1)
+    )
+    return {
+        "id": str(schedule.id),
+        "name": schedule.name,
+        "targets": schedule.targets[:5000],
+        "targets_count": len(schedule.targets),
+        "settings": schedule.settings,
+        "interval_minutes": schedule.interval_minutes,
+        "window_start": schedule.window_start,
+        "window_end": schedule.window_end,
+        "days": schedule.days,
+        "timezone": schedule.timezone,
+        "enabled": schedule.enabled,
+        "created_by": schedule.created_by,
+        "updated_at": schedule.updated_at,
+        "last_started_at": schedule.last_started_at,
+        "in_window": window is not None,
+        "window_ends_at": window.end if window else None,
+        "next_window_at": upcoming.start if upcoming and window is None else None,
+        "next_start_at": next_start(schedule, now),
+        "resume_pending": schedule.resume_run_id is not None,
+        "last_run": _run_out(last) if last else None,
+    }
+
+
+def _apply_schedule(schedule: DiscoverySchedule, payload: ScheduleIn) -> None:
     parsed = parse_targets(payload.all())
     if parsed.errors:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(parsed.errors[:5]))
@@ -218,34 +295,98 @@ def create_run(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"Za dużo adresów ({parsed.addresses}, limit {limit})",
         )
-    settings = discovery_config().settings(payload.settings)
-    run = DiscoveryRun(
-        name=payload.name or f"Przebieg {utcnow():%Y-%m-%d %H:%M}",
-        targets=[*map(str, parsed.networks), *parsed.domains],
-        settings={**settings.__dict__, "http_paths": list(settings.http_paths)},
-        created_by=principal.actor,
-        addresses_total=parsed.addresses,
-    )
-    session.add(run)
-    session.flush()
+    days = sorted(set(payload.days))
+    try:
+        validate_schedule(
+            payload.window_start,
+            payload.window_end,
+            days,
+            payload.timezone,
+            payload.interval_minutes,
+        )
+    except RunError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    resolved = discovery_config().settings(payload.settings)
+    schedule.name = payload.name
+    schedule.targets = [*map(str, parsed.networks), *parsed.domains]
+    schedule.settings = {**resolved.__dict__, "http_paths": list(resolved.http_paths)}
+    schedule.interval_minutes = payload.interval_minutes
+    schedule.window_start = payload.window_start
+    schedule.window_end = payload.window_end
+    schedule.days = days
+    schedule.timezone = payload.timezone
+    schedule.enabled = payload.enabled
+    schedule.updated_at = utcnow()
+
+
+def _schedule_audit(
+    session: SessionDep, principal: Principal, action: str, reason: str, schedule: DiscoverySchedule
+) -> None:
     audit.record(
         session,
         audit.AuditEvent(
             actor=principal.actor,
-            action="discovery_requested",
-            reason="Zlecono przebieg discovery",
+            action=action,
+            reason=reason,
             inputs={
-                "targets": run.targets[:50],
-                "addresses": parsed.addresses,
-                "settings": run.settings,
+                "name": schedule.name,
+                "targets": schedule.targets[:5000],
+                "interval_minutes": schedule.interval_minutes,
+                "window": f"{schedule.window_start}-{schedule.window_end}",
+                "days": schedule.days,
+                "enabled": schedule.enabled,
             },
-            object_type="discovery_run",
-            object_id=str(run.id),
+            object_type="discovery_schedule",
+            object_id=str(schedule.id),
         ),
     )
+
+
+def _get_schedule(session: SessionDep, schedule_id: uuid.UUID) -> DiscoverySchedule:
+    schedule = session.get(DiscoverySchedule, schedule_id)
+    if schedule is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie ma takiego harmonogramu")
+    return schedule
+
+
+@router.get("/schedules")
+def list_schedules(session: SessionDep, principal: Reader) -> list[dict[str, Any]]:
+    rows = session.scalars(select(DiscoverySchedule).order_by(DiscoverySchedule.created_at))
+    return [_schedule_out(session, row) for row in rows]
+
+
+@router.post("/schedules", status_code=status.HTTP_201_CREATED)
+def create_schedule(payload: ScheduleIn, session: SessionDep, principal: Runner) -> dict[str, Any]:
+    schedule = DiscoverySchedule(created_by=principal.actor)
+    _apply_schedule(schedule, payload)
+    session.add(schedule)
+    session.flush()
+    _schedule_audit(session, principal, "discovery_schedule_created", "Nowy harmonogram", schedule)
     session.commit()
-    dispatcher.run_discovery(run.id)
-    return _run_out(run)
+    return _schedule_out(session, schedule)
+
+
+@router.put("/schedules/{schedule_id}")
+def update_schedule(
+    schedule_id: uuid.UUID, payload: ScheduleIn, session: SessionDep, principal: Runner
+) -> dict[str, Any]:
+    schedule = _get_schedule(session, schedule_id)
+    _apply_schedule(schedule, payload)
+    _schedule_audit(
+        session, principal, "discovery_schedule_updated", "Zmieniono harmonogram", schedule
+    )
+    session.commit()
+    return _schedule_out(session, schedule)
+
+
+@router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_schedule(schedule_id: uuid.UUID, session: SessionDep, principal: Runner) -> None:
+    schedule = _get_schedule(session, schedule_id)
+    _schedule_audit(
+        session, principal, "discovery_schedule_deleted", "Usunięto harmonogram", schedule
+    )
+    session.delete(schedule)
+    session.commit()
 
 
 @router.get("/runs")

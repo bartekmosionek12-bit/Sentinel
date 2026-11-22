@@ -155,6 +155,10 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/discovery/runs/{run_id}/export` | `reports:export` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/runs/{run_id}/hosts` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/runs/{run_id}/stop` | `scan:run` | ✓ | ✓ | · | · |
+| GET | `/api/discovery/schedules` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/schedules` | `scan:run` | ✓ | ✓ | · | · |
+| DELETE | `/api/discovery/schedules/{schedule_id}` | `scan:run` | ✓ | ✓ | · | · |
+| PUT | `/api/discovery/schedules/{schedule_id}` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/discovery/settings` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/signatures` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/signatures/check` | `scan:run` | ✓ | ✓ | · | · |

@@ -5,6 +5,7 @@ export const RUN_STATUS: Record<string, { label: string; variant: Variant }> = {
   running: { label: "W toku", variant: "info" },
   stopping: { label: "Zatrzymywanie", variant: "warn" },
   stopped: { label: "Zatrzymany", variant: "warn" },
+  paused: { label: "Wstrzymany (koniec okna)", variant: "warn" },
   done: { label: "Zakończony", variant: "ok" },
   failed: { label: "Błąd", variant: "danger" },
 };
