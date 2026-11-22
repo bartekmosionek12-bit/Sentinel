@@ -411,3 +411,118 @@ def test_jailbreak_and_injection_never_start_anything(world: Session, question: 
         assert answer.action["kind"] == "agent_task"
     else:
         assert answer.intent == "out_of_scope"
+
+
+# --- pytania o discovery, DefectDojo i uprawnienia -----------------------------------
+
+
+@pytest.mark.parametrize(
+    ("question", "intent"),
+    [
+        ("co się zmieniło od ostatniego skanu?", "discovery_changes"),
+        ("porównaj dwa ostatnie przebiegi", "discovery_changes"),
+        ("jakie zmiany w portach od ostatniego przebiegu?", "discovery_changes"),
+        ("które hosty są niestabilne?", "unstable_hosts"),
+        ("pokaż nieaktywne hosty", "unstable_hosts"),
+        ("gdzie są panele administracyjne?", "web_flags"),
+        ("czy mamy środowiska testowe albo staging?", "web_flags"),
+        ("gdzie brakuje nagłówków bezpieczeństwa?", "web_flags"),
+        ("czy jakieś certyfikaty wygasają?", "tls_certs"),
+        ("pokaż certyfikaty TLS", "tls_certs"),
+        ("jakie technologie wykryto?", "technologies"),
+        ("czy defectdojo działa?", "defectdojo_status"),
+        ("ile wysłaliśmy do DefectDojo?", "defectdojo_status"),
+        ("jakie mam uprawnienia?", "my_access"),
+        ("kim jestem w systemie?", "my_access"),
+        ("co się zmieniło w zagrożeniach?", "top_risks"),
+    ],
+)
+def test_recon_intents(world: Session, question: str, intent: str) -> None:
+    found = classify_keywords(question, catalog(world, CONFIG, _principal("viewer")))
+    assert found.name == intent, question
+
+
+def _discovery(session: Session) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import DiscoveryRun, Observation
+
+    start = datetime(2026, 11, 20, 10, tzinfo=UTC)
+    hosts = [
+        # (ip, hostname, porty w kolejnych przebiegach od najstarszego)
+        ("172.30.99.10", "gitea", [[3001], [3001], [3001, 2223]]),
+        ("172.30.99.11", None, [[8787], [], [8787]]),
+        ("172.30.99.12", "stary", [[22], [], []]),
+    ]
+    for index in range(3):
+        run = DiscoveryRun(
+            name=f"lab {index}",
+            status="done",
+            targets=["172.30.99.0/24"],
+            created_at=start + timedelta(hours=index),
+            hosts_up=0,
+        )
+        session.add(run)
+        session.flush()
+        for ip, hostname, history in hosts:
+            ports = history[index]
+            if not ports:
+                continue
+            session.add(
+                Observation(
+                    run_id=run.id,
+                    ip=ip,
+                    hostname=hostname,
+                    services=[{"port": p, "protocol": "tcp", "name": "http"} for p in ports],
+                    http=[
+                        {
+                            "port": 3001,
+                            "technologies": ["Gitea"],
+                            "tls": {
+                                "not_after": (start + timedelta(days=10)).isoformat(),
+                                "self_signed": True,
+                            },
+                        }
+                    ]
+                    if ip.endswith(".10")
+                    else [],
+                    flags=[
+                        {"kind": "panel", "label": "Panel logowania", "evidence": ["/user/login"]}
+                    ]
+                    if ip.endswith(".10")
+                    else [],
+                )
+            )
+    session.commit()
+
+
+def test_discovery_answers_come_from_runs(world: Session) -> None:
+    empty = _ask(world, "co się zmieniło od ostatniego skanu?")
+    assert empty.text[0].startswith("Nie ma jeszcze zakończonego przebiegu")
+    _discovery(world)
+    changes = _ask(world, "co się zmieniło od ostatniego skanu?")
+    joined = " ".join(changes.text)
+    assert "1 nowy host" in joined
+    assert "172.30.99.11" in joined
+    assert "gitea (172.30.99.10): +2223/tcp" in joined
+    assert changes.text[-1].startswith("[Porównanie przebiegów](/discovery/porownanie?older=")
+    unstable = " ".join(_ask(world, "które hosty są niestabilne?").text)
+    assert "niestabilny: 172.30.99.11, historia ✓✗✓" in unstable
+    assert "stary (172.30.99.12)" in unstable
+    panels = " ".join(_ask(world, "gdzie są panele administracyjne?").text)
+    assert "gitea (172.30.99.10): Panel logowania (/user/login)" in panels
+    certs = " ".join(_ask(world, "czy jakieś certyfikaty wygasają?").text)
+    assert "samopodpisany: gitea (172.30.99.10):3001" in certs
+    tech = " ".join(_ask(world, "jakie technologie wykryto?").text)
+    assert "Gitea: 1 host" in tech
+
+
+def test_defectdojo_and_access_answers(world: Session) -> None:
+    dojo = _ask(world, "czy defectdojo działa?")
+    assert dojo.text[0].startswith("Do DefectDojo nie wysłano jeszcze")
+    viewer = " ".join(_ask(world, "jakie mam uprawnienia?").text)
+    assert "rola: viewer" in viewer
+    assert "Nie możesz:" in viewer
+    assert "uruchamiać skany" in viewer
+    admin = " ".join(_ask(world, "jakie mam uprawnienia?", role="administrator").text)
+    assert "Nie możesz:" not in admin

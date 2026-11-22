@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.crypto import EncryptedJSON, EncryptedText
 from app.models.base import Base, CreatedAt, UuidPk, utcnow
 
 ASSET_TYPES = (
@@ -59,7 +60,7 @@ class Asset(Base):
         ForeignKey("network_segment.id", ondelete="SET NULL"), index=True
     )
     tags: Mapped[list[str]] = mapped_column(default=list)
-    attributes: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    attributes: Mapped[dict[str, Any]] = mapped_column(EncryptedJSON, default=dict)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     first_seen: Mapped[datetime] = mapped_column(default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(default=utcnow)
@@ -121,7 +122,7 @@ class Software(Base):
     vendor: Mapped[str] = mapped_column(String(255), default="")
     product: Mapped[str] = mapped_column(String(255))
     version: Mapped[str] = mapped_column(String(128), default="")
-    raw_banner: Mapped[str | None] = mapped_column(Text)
+    raw_banner: Mapped[str | None] = mapped_column(EncryptedText)
     cpe: Mapped[str | None] = mapped_column(String(512))
     cpe_vendor: Mapped[str | None] = mapped_column(String(255))
     cpe_product: Mapped[str | None] = mapped_column(String(255))

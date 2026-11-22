@@ -15,7 +15,8 @@ from typing import Any
 from sqlalchemy import Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, CreatedAt, JsonType, UuidPk, utcnow
+from app.core.crypto import EncryptedJSON, EncryptedText
+from app.models.base import Base, CreatedAt, UuidPk, utcnow
 
 
 class DiscoveryRun(Base):
@@ -25,7 +26,7 @@ class DiscoveryRun(Base):
     name: Mapped[str] = mapped_column(String(200), default="")
     status: Mapped[str] = mapped_column(String(20), default="queued")
     source: Mapped[str] = mapped_column(String(20), default="scan")  # scan | import
-    targets: Mapped[list[str]] = mapped_column(default=list)
+    targets: Mapped[list[str]] = mapped_column(EncryptedJSON, default=list)
     settings: Mapped[dict[str, Any]] = mapped_column(default=dict)
     created_by: Mapped[str] = mapped_column(String(255), default="system")
     created_at: Mapped[CreatedAt]
@@ -67,10 +68,11 @@ class Observation(Base):
         ForeignKey("discovery_run.id", ondelete="CASCADE"), index=True
     )
     ip: Mapped[str] = mapped_column(String(64), index=True)
-    hostname: Mapped[str | None] = mapped_column(String(255))
-    services: Mapped[list[Any]] = mapped_column(default=list)
-    http: Mapped[list[Any]] = mapped_column(default=list)
-    flags: Mapped[list[Any]] = mapped_column(default=list)
+    # Wyniki skanu: szyfrowane w spoczynku (app/core/crypto.py).
+    hostname: Mapped[str | None] = mapped_column(EncryptedText)
+    services: Mapped[list[Any]] = mapped_column(EncryptedJSON, default=list)
+    http: Mapped[list[Any]] = mapped_column(EncryptedJSON, default=list)
+    flags: Mapped[list[Any]] = mapped_column(EncryptedJSON, default=list)
     created_at: Mapped[CreatedAt]
 
 
@@ -83,7 +85,7 @@ class ObservationOverride(Base):
     id: Mapped[UuidPk]
     ip: Mapped[str] = mapped_column(String(64), index=True)
     field: Mapped[str] = mapped_column(String(40))
-    value: Mapped[Any] = mapped_column(JsonType, nullable=True)
+    value: Mapped[Any] = mapped_column(EncryptedJSON, nullable=True)
     updated_by: Mapped[str] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(default=utcnow)
 

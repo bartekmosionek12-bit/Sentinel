@@ -24,6 +24,8 @@ const QUICK = [
   "Wskaż hosty Shadow IT",
   "Sprawdź stan feedów i systemu",
   "Zaproponuj bezpieczny skan L1",
+  "Co się zmieniło od ostatniego skanu?",
+  "Gdzie są panele administracyjne?",
 ];
 
 /** Linki w Markdownie z odpowiedzi ([etykieta](/ścieżka)) jako linki do widoków konsoli.

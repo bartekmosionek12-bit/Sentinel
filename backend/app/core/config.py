@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://redis:6379/0"
 
+    # Szyfrowanie pól wrażliwych w spoczynku (app/core/crypto.py). Klucz tylko w .env.
+    data_encryption_key: str = ""
+    data_encryption_keys_old: str = ""
+
     scope_file: Path = Path("/app/rules/scope.yaml")
     rules_dir: Path = Path("/app/rules")
 
