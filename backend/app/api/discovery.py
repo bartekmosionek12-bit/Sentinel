@@ -35,7 +35,16 @@ from app.discovery.schedule import (
     next_window,
 )
 from app.discovery.schedule import validate as validate_schedule
-from app.discovery.signatures import KINDS, MATCH_TYPES, MAX_PATHS, SignatureError, combine
+from app.discovery.signatures import (
+    KINDS,
+    MATCH_TYPES,
+    MAX_PATHS,
+    Observed,
+    SignatureError,
+    combine,
+    evaluate,
+    parse_signatures,
+)
 from app.iam.deps import require
 from app.iam.redaction import RedactingRoute
 from app.iam.tokens import Principal
@@ -788,6 +797,108 @@ def check_signature(payload: SignatureIn, session: SessionDep, principal: Runner
     definition = _signature_definition(payload.yaml)
     _validate_with(session, definition, replace_id=str(definition.get("id") or ""))
     return {"ok": True, "definition": definition}
+
+
+class SignatureTestIn(BaseModel):
+    """Sygnatura do sprawdzenia: w YAML z edytora albo po id (wbudowana lub zapisana)."""
+
+    yaml: str | None = Field(default=None, max_length=20_000)
+    id: str | None = Field(default=None, max_length=64)
+    run_id: uuid.UUID | None = None
+
+
+# Tych typów nie da się sprawdzić na zapisanych wynikach: treść stron nie jest przechowywana.
+LIVE_ONLY = {"html", "generator"}
+
+
+def _signature_for_test(session: SessionDep, payload: SignatureTestIn) -> dict[str, Any]:
+    if payload.yaml:
+        return _signature_definition(payload.yaml)
+    if payload.id:
+        for item in discovery_config().builtin_signatures:
+            if item.get("id") == payload.id:
+                return dict(item)
+        row = session.scalars(
+            select(CustomSignature).where(CustomSignature.signature_id == payload.id)
+        ).first()
+        if row:
+            return dict(row.definition)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie ma takiej sygnatury")
+    raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Podaj yaml albo id sygnatury")
+
+
+@router.post("/signatures/test")
+def test_signature(
+    payload: SignatureTestIn, session: SessionDep, principal: Reader
+) -> dict[str, Any]:
+    """Sprawdza jedną sygnaturę na zapisanych wynikach przebiegu, bez żadnego ruchu sieciowego.
+
+    Nagłówki, ciasteczka, tytuł, hash favicony i kody ścieżek są w wynikach, więc da się je
+    dopasować od razu. Fragmentu HTML i meta generatora nie przechowujemy (dane minimalne),
+    a wzorzec treści przy ścieżce też wymaga treści: te części sprawdzi dopiero kolejny skan.
+    """
+    definition = _signature_for_test(session, payload)
+    try:
+        (signature,) = parse_signatures({"signatures": [definition]})
+    except SignatureError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    if payload.run_id:
+        run = _get_run(session, payload.run_id)
+    else:
+        run = session.scalars(
+            select(DiscoveryRun)
+            .where(DiscoveryRun.status.in_(("done", "stopped", "paused")))
+            .order_by(DiscoveryRun.created_at.desc())
+        ).first()
+        if run is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Brak zakończonego przebiegu")
+    offline = tuple(m for m in signature.matches if m.type not in LIVE_ONLY)
+    live_only = sorted(
+        {m.type for m in signature.matches if m.type in LIVE_ONLY}
+        | {"path (wzorzec treści)" for m in signature.matches if m.type == "path" and m.pattern}
+    )
+    # Wzorzec treści przy ścieżce: na zapisanych danych sprawdzamy tylko kod odpowiedzi.
+    relaxed = tuple(
+        m if m.type != "path" else type(m)(type=m.type, path=m.path, status=m.status)
+        for m in offline
+    )
+    probe = type(signature)(
+        id=signature.id, name=signature.name, kind=signature.kind, matches=relaxed
+    )
+    hits: list[dict[str, Any]] = []
+    services = 0
+    observations = session.scalars(select(Observation).where(Observation.run_id == run.id))
+    for observation in observations:
+        for item in observation.http or []:
+            services += 1
+            seen = Observed(
+                headers={str(k).lower(): str(v) for k, v in (item.get("headers") or {}).items()},
+                cookies=[str(c.get("name", "")) for c in item.get("cookies") or []],
+                body="",
+                title=str(item.get("title") or ""),
+                generator="",
+                favicon_hash=item.get("favicon_hash"),
+                paths={str(k): int(v) for k, v in (item.get("paths") or {}).items()},
+            )
+            for hit in evaluate((probe,), seen) if relaxed else []:
+                hits.append(
+                    {
+                        "ip": observation.ip,
+                        "port": item.get("port"),
+                        "url": item.get("url"),
+                        "title": item.get("title"),
+                        "evidence": hit["evidence"],
+                        "already_flagged": signature.id
+                        in {s.get("id") for s in item.get("signatures") or []},
+                    }
+                )
+    return {
+        "signature": {"id": signature.id, "name": signature.name, "kind": signature.kind},
+        "run": {"id": str(run.id), "name": run.name, "created_at": run.created_at},
+        "services_checked": services,
+        "hits": hits,
+        "live_only": live_only,
+    }
 
 
 @router.put("/signatures/{signature_id}")

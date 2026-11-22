@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, PencilLine, Send } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
@@ -271,7 +271,8 @@ function HostCard({ host }: { host: DiscoveryHost }) {
 export function DiscoveryRunPage() {
   const { id = "" } = useParams();
   const { can } = useAuth();
-  const [open, setOpen] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState<string | null>(params.get("host"));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const run = useQuery({
     queryKey: ["discovery-run", id],

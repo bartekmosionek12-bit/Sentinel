@@ -112,6 +112,7 @@ export async function stubApi(
       if (request.method() === "DELETE") return route.fulfill({ status: 204 });
       const definition = { id: "moja-aplikacja", kind: "technology", match: [] };
       if (url.pathname.endsWith("/check")) return route.fulfill({ json: { ok: true, definition } });
+      if (url.pathname.endsWith("/test")) return route.fulfill({ json: fixture("signature_test") });
       return route.fulfill({ json: { id: definition.id, definition } });
     }
     if (url.pathname.startsWith("/api/discovery/schedules") && request.method() !== "GET") {

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
@@ -12,7 +13,7 @@ import {
   CardTitle,
 } from "@shared/components/ui/card";
 import { Table, Td, Th } from "@shared/components/ui/table";
-import { api, type SignatureDefinition } from "@shared/lib/api";
+import { api, type SignatureDefinition, type SignatureTestResult } from "@shared/lib/api";
 import { useAuth } from "@shared/lib/auth-context";
 import { formatDateTime } from "@shared/lib/utils";
 
@@ -31,6 +32,106 @@ match:
   - {type: path, path: /version, status: [200], pattern: "\\"version\\""}
 `;
 
+type TestRequest = { yaml?: string; id?: string };
+
+/** Wynik testu: które usługi z wybranego przebiegu pasują do sygnatury i dlaczego. */
+function SignatureTest({ request }: { request: TestRequest }) {
+  const runs = useQuery({ queryKey: ["discovery-runs"], queryFn: api.discoveryRuns });
+  const [runId, setRunId] = useState("");
+  const finished = (runs.data ?? []).filter((r) =>
+    ["done", "stopped", "paused"].includes(r.status),
+  );
+  const test = useQuery<SignatureTestResult, Error>({
+    queryKey: ["signature-test", request, runId],
+    queryFn: () => api.testSignature({ ...request, run_id: runId || undefined }),
+    retry: false,
+  });
+  const data = test.data;
+  return (
+    <Card data-demo="signature-test">
+      <CardHeader>
+        <CardTitle>Test sygnatury{data ? ` „${data.signature.id}”` : ""}</CardTitle>
+        <CardDescription>
+          Dopasowanie do wyników zapisanych w przebiegu, bez żadnego ruchu w sieci. Nagłówki,
+          ciasteczka, tytuł, hash favicony i kody ścieżek są sprawdzane od razu.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <label className="flex items-center gap-2">
+          Przebieg
+          <select
+            aria-label="Przebieg do testu"
+            className="h-9 rounded-md border border-border bg-background px-2"
+            value={runId}
+            onChange={(e) => setRunId(e.target.value)}
+          >
+            <option value="">ostatni zakończony</option>
+            {finished.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name || r.id.slice(0, 8)} · {formatDateTime(r.created_at)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {test.isPending && <p className="text-muted-foreground">Sprawdzam…</p>}
+        {test.error && <p className="text-red-700">{test.error.message}</p>}
+        {data && (
+          <>
+            <p>
+              Sprawdzono {data.services_checked} usług WWW, trafienia: <b>{data.hits.length}</b>.
+            </p>
+            {data.live_only.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Tych dopasowań nie da się sprawdzić na zapisanych danych, bo treść stron nie
+                jest przechowywana: {data.live_only.join(", ")}. Sprawdzi je kolejny przebieg.
+              </p>
+            )}
+            {data.hits.length > 0 && (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Host</Th>
+                    <Th>Usługa</Th>
+                    <Th>Dowód</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.hits.map((hit) => (
+                    <tr key={`${hit.ip}:${hit.port}:${hit.url}`}>
+                      <Td className="font-mono">
+                        <Link
+                          className="text-primary underline"
+                          to={`/discovery/${data.run.id}?host=${hit.ip}`}
+                        >
+                          {hit.ip}
+                        </Link>
+                      </Td>
+                      <Td className="font-mono text-xs">
+                        {hit.url ?? hit.port}
+                        {hit.title && (
+                          <div className="font-sans text-muted-foreground">{hit.title}</div>
+                        )}
+                      </Td>
+                      <Td>
+                        {hit.evidence.join(", ")}
+                        {hit.already_flagged && (
+                          <Badge variant="neutral" className="ml-2">
+                            już w wynikach
+                          </Badge>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Krótki opis dopasowań: typ i to, czego szuka (bez treści żądań, bo ich nie ma). */
 function matchSummary(match: SignatureDefinition["match"]): string {
   return match
@@ -45,10 +146,12 @@ function SignatureRows({
   items,
   onEdit,
   onDelete,
+  onTest,
 }: {
   items: { definition: SignatureDefinition; custom?: { updated_by: string; updated_at: string } }[];
   onEdit?: (definition: SignatureDefinition) => void;
   onDelete?: (id: string) => void;
+  onTest: (id: string) => void;
 }) {
   return (
     <Table>
@@ -58,7 +161,7 @@ function SignatureRows({
           <Th>Nazwa</Th>
           <Th>Rodzaj</Th>
           <Th>Dopasowania</Th>
-          {(onEdit || onDelete) && <Th>Zmiana</Th>}
+          <Th>Akcje</Th>
         </tr>
       </thead>
       <tbody>
@@ -77,13 +180,21 @@ function SignatureRows({
               </Badge>
             </Td>
             <Td className="font-mono text-xs">{matchSummary(definition.match)}</Td>
-            {(onEdit || onDelete) && (
+            {
               <Td className="whitespace-nowrap">
                 {custom && (
                   <div className="mb-1 text-xs text-muted-foreground">
                     {custom.updated_by} · {formatDateTime(custom.updated_at)}
                   </div>
                 )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Testuj ${definition.id}`}
+                  onClick={() => onTest(definition.id)}
+                >
+                  Testuj
+                </Button>{" "}
                 {onEdit && (
                   <Button size="sm" variant="outline" onClick={() => onEdit(definition)}>
                     Edytuj
@@ -95,7 +206,7 @@ function SignatureRows({
                   </Button>
                 )}
               </Td>
-            )}
+            }
           </tr>
         ))}
       </tbody>
@@ -103,7 +214,15 @@ function SignatureRows({
   );
 }
 
-function Editor({ text, setText }: { text: string; setText: (value: string) => void }) {
+function Editor({
+  text,
+  setText,
+  onTest,
+}: {
+  text: string;
+  setText: (value: string) => void;
+  onTest: () => void;
+}) {
   const queryClient = useQueryClient();
   const check = useMutation({ mutationFn: () => api.checkSignature(text) });
   const save = useMutation({
@@ -141,6 +260,9 @@ function Editor({ text, setText }: { text: string; setText: (value: string) => v
           <Button onClick={() => save.mutate()} disabled={!text.trim() || save.isPending}>
             Zapisz
           </Button>
+          <Button variant="ghost" onClick={onTest} disabled={!text.trim()}>
+            Testuj na przebiegu
+          </Button>
         </div>
         {error && <p className="text-sm text-red-700">{error.message}</p>}
         {check.data && !save.data && !error && (
@@ -158,6 +280,7 @@ export function Signatures() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
   const [text, setText] = useState(EXAMPLE);
+  const [testing, setTesting] = useState<TestRequest | null>(null);
   const list = useQuery({ queryKey: ["signatures"], queryFn: api.signatures });
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteSignature(id),
@@ -194,7 +317,11 @@ export function Signatures() {
         </CardContent>
       </Card>
 
-      {editable && <Editor text={text} setText={setText} />}
+      {editable && (
+        <Editor text={text} setText={setText} onTest={() => setTesting({ yaml: text })} />
+      )}
+
+      {testing && <SignatureTest request={testing} />}
 
       <Card>
         <CardHeader>
@@ -213,6 +340,7 @@ export function Signatures() {
               items={list.data.custom.map((row) => ({ definition: row.definition, custom: row }))}
               onEdit={editable ? (d) => setText(JSON.stringify(d, null, 2)) : undefined}
               onDelete={editable ? (id) => remove.mutate(id) : undefined}
+              onTest={(id) => setTesting({ id })}
             />
           )}
         </CardContent>
@@ -225,7 +353,10 @@ export function Signatures() {
         </CardHeader>
         <CardContent>
           {list.data && (
-            <SignatureRows items={list.data.builtin.map((definition) => ({ definition }))} />
+            <SignatureRows
+              items={list.data.builtin.map((definition) => ({ definition }))}
+              onTest={(id) => setTesting({ id })}
+            />
           )}
         </CardContent>
       </Card>

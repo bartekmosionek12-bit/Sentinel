@@ -127,9 +127,9 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
     page.getByRole("heading", { name: "Sygnatury detekcyjne" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "wordpress-login" }),
+    page.getByRole("cell", { name: "wordpress-login", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("cell", { name: "intranet-demo" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "intranet-demo", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sprawdź" }).click();
   await expect(
     page.getByText("Sygnatura „moja-aplikacja” jest poprawna."),
@@ -139,6 +139,19 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
   const put = sent.find((s) => s.method === "PUT");
   expect(put?.path).toBe("/api/discovery/signatures/moja-aplikacja");
   expect((put?.body as { yaml: string }).yaml).toContain("kind: technology");
+});
+
+test("test sygnatury na zapisanym przebiegu, bez ruchu w sieci", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/sygnatury");
+  await page.getByRole("button", { name: "Testuj wordpress-login" }).click();
+  const card = page.locator("[data-demo=signature-test]");
+  await expect(card).toContainText("Sprawdzono 12 usług WWW, trafienia: 1");
+  await expect(card).toContainText("10.20.4.17");
+  await expect(card).toContainText("/wp-login.php → 200");
+  await expect(card).toContainText("Sprawdzi je kolejny przebieg");
+  const post = sent.find((s) => s.path === "/api/discovery/signatures/test");
+  expect(post?.body).toEqual({ id: "wordpress-login" });
 });
 
 test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async ({ page }) => {

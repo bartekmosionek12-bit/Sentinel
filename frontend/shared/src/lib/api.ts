@@ -624,6 +624,22 @@ export interface SignatureList {
   rules: { kinds: string[]; match_types: string[]; max_paths: number };
 }
 
+/** Wynik testu jednej sygnatury na zapisanych wynikach przebiegu (bez ruchu sieciowego). */
+export interface SignatureTestResult {
+  signature: { id: string; name: string; kind: string };
+  run: { id: string; name: string; created_at: string };
+  services_checked: number;
+  hits: {
+    ip: string;
+    port: number | null;
+    url: string | null;
+    title: string | null;
+    evidence: string[];
+    already_flagged: boolean;
+  }[];
+  live_only: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -1277,6 +1293,11 @@ export const api = {
       `/discovery/signatures/${encodeURIComponent(id)}`,
       { method: "PUT", body: JSON.stringify({ yaml }) },
     ),
+  testSignature: (input: { yaml?: string; id?: string; run_id?: string }) =>
+    request<SignatureTestResult>("/discovery/signatures/test", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   deleteSignature: (id: string) =>
     request<void>(`/discovery/signatures/${encodeURIComponent(id)}`, { method: "DELETE" }),
   dojoStatus: () => request<DojoStatus>("/discovery/defectdojo/status"),

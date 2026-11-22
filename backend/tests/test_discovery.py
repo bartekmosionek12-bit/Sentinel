@@ -175,3 +175,40 @@ def test_viewer_cannot_change_signatures(anon_client: TestClient, tokens: Any) -
     assert anon_client.get("/api/discovery/signatures").status_code == 200
     put = anon_client.put("/api/discovery/signatures/x1", json={"yaml": SIGNATURE})
     assert put.status_code == 403
+
+
+def test_signature_test_on_stored_run(
+    client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """Test sygnatury bez ruchu sieciowego: dopasowanie do zapisanych wyników przebiegu."""
+    lab = FakeLab(
+        {"10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http", product="nginx")]}
+    )
+    run_id = _run(client, session_factory, lab)
+    yaml_text = (
+        "id: admin-nginx\nname: Panel za nginx\nkind: panel\nmatch:\n"
+        "  - {type: header, name: server, pattern: nginx}\n"
+        "  - {type: path, path: /admin, status: [200], pattern: Zaloguj}\n"
+        "  - {type: html, pattern: 'login-form'}\n"
+    )
+    response = client.post("/api/discovery/signatures/test", json={"yaml": yaml_text})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["id"] == run_id
+    assert body["services_checked"] >= 1
+    assert body["hits"], body
+    evidence = body["hits"][0]["evidence"]
+    assert "nagłówek server" in evidence and "/admin → 200" in evidence
+    assert body["live_only"] == ["html", "path (wzorzec treści)"]
+
+    miss = client.post(
+        "/api/discovery/signatures/test",
+        json={"id": "gitea", "run_id": run_id},
+    ).json()
+    assert miss["hits"] == [] and miss["signature"]["id"] == "gitea"
+    assert client.post("/api/discovery/signatures/test", json={"id": "brak"}).status_code == 404
+    assert client.post("/api/discovery/signatures/test", json={}).status_code == 422
+    bad = client.post(
+        "/api/discovery/signatures/test", json={"yaml": "id: x1\nkind: zly\nmatch: []"}
+    )
+    assert bad.status_code == 422
