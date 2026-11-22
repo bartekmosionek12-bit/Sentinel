@@ -179,3 +179,16 @@ test("pulpit: wskaźniki na górze, bez zdublowanych kafelków; Sentek z szybkim
     page.getByRole("region", { name: "Asystent Sentek" }).locator("p").nth(1),
   ).toBeVisible();
 });
+
+test("konsola czeka na API po restarcie (502) zamiast pokazywać błąd", async ({ page }) => {
+  await stubApi(page);
+  let calls = 0;
+  await page.route("**/api/console/admin", (route) => {
+    calls += 1;
+    return route.fulfill({ status: calls <= 2 ? 502 : 204 });
+  });
+  await page.goto("/admin/");
+  await expect(page.getByText("API jeszcze się uruchamia, czekam…")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pulpit" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Błąd serwera \(502\)/)).toHaveCount(0);
+});

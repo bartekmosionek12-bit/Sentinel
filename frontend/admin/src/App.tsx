@@ -28,6 +28,10 @@ import { api, ApiError } from "@shared/lib/api";
 import { AccessDenied } from "@shared/lib/auth";
 import { useAuth } from "@shared/lib/auth-context";
 
+function isStarting(error: unknown): boolean {
+  return error instanceof ApiError && [502, 503, 504].includes(error.status);
+}
+
 function RedirectReport() {
   const { id = "" } = useParams();
   return <Navigate to={`/raporty/${id}`} replace />;
@@ -43,11 +47,20 @@ export function App() {
   const access = useQuery({
     queryKey: ["console-access", "admin"],
     queryFn: api.adminConsoleAccess,
-    retry: false,
+    // 502/503/504: API jeszcze startuje albo kontener api był właśnie odtworzony. Czekamy
+    // (co 3 s, do 3 minut) zamiast pokazywać błąd; 403 i inne kody od razu.
+    retry: (count, error) => isStarting(error) && count < 60,
+    retryDelay: 3000,
     staleTime: Infinity,
   });
   if (access.isPending) {
-    return <p className="p-8 text-sm text-muted-foreground">Sprawdzanie uprawnień…</p>;
+    return (
+      <p className="p-8 text-sm text-muted-foreground">
+        {access.failureCount > 0 && isStarting(access.failureReason)
+          ? "API jeszcze się uruchamia, czekam…"
+          : "Sprawdzanie uprawnień…"}
+      </p>
+    );
   }
   if (access.error) {
     if (!(access.error instanceof ApiError) || access.error.status !== 403) {

@@ -17,7 +17,7 @@ import {
 } from "react";
 
 import { Button } from "@shared/components/ui/button";
-import { api, setTokenSource } from "@shared/lib/api";
+import { api, ApiError, setTokenSource } from "@shared/lib/api";
 import { AuthContext, useAuth, type AuthState } from "@shared/lib/auth-context";
 
 export type AppName = "admin";
@@ -52,6 +52,14 @@ function FullScreen({ children }: { children: ReactNode }) {
  *  w trybie deweloperskim uruchamia efekty dwukrotnie. */
 let pendingSignIn: Promise<User | null> | null = null;
 
+const RETRY_KEY = "sentinel-login-retry";
+const RETRYABLE_LOGIN_ERRORS = new Set([
+  "authentication_expired",
+  "login_required",
+  "temporarily_unavailable",
+  "interaction_required",
+]);
+
 function signIn(manager: UserManager, app: AppName): Promise<User | null> {
   pendingSignIn ??= (async () => {
     const params = new URLSearchParams(window.location.search);
@@ -62,8 +70,18 @@ function signIn(manager: UserManager, app: AppName): Promise<User | null> {
       return signedIn;
     }
     if (params.has("error")) {
-      throw new Error(params.get("error_description") ?? params.get("error") ?? "błąd");
+      const code = params.get("error") ?? "";
+      window.history.replaceState({}, "", `/${app}/`);
+      // Strona logowania otwarta za długo albo Keycloak wstał na nowo: to nie błąd osoby,
+      // tylko wygasły formularz. Jedno ponowne przekierowanie (bez pętli) zamiast komunikatu.
+      if (RETRYABLE_LOGIN_ERRORS.has(code) && !sessionStorage.getItem(RETRY_KEY)) {
+        sessionStorage.setItem(RETRY_KEY, "1");
+        await manager.signinRedirect();
+        return null;
+      }
+      throw new Error(params.get("error_description") ?? (code || "błąd"));
     }
+    sessionStorage.removeItem(RETRY_KEY);
     const stored = await manager.getUser();
     if (stored && !stored.expired) return stored;
     await manager.signinRedirect();
@@ -82,6 +100,7 @@ export function AuthProvider({ app, children }: { app: AppName; children: ReactN
     let cancelled = false;
     signIn(manager, app)
       .then((signedIn) => {
+        if (signedIn) sessionStorage.removeItem(RETRY_KEY);
         if (!cancelled && signedIn) setUser(signedIn);
       })
       .catch((reason: unknown) => {
@@ -113,6 +132,10 @@ export function AuthProvider({ app, children }: { app: AppName; children: ReactN
     queryFn: api.me,
     enabled: user !== null,
     staleTime: 60_000,
+    // API po restarcie przez chwilę odpowiada 502 przez nginx: czekamy, zamiast się poddać.
+    retry: (count, failure) =>
+      count < 60 && failure instanceof ApiError && [502, 503, 504].includes(failure.status),
+    retryDelay: 3000,
   });
 
   const logout = useCallback(async () => {

@@ -51,6 +51,20 @@ fi
 
 PUBLIC_URL_VALUE=$(grep -E '^PUBLIC_URL=' .env | tail -n1 | cut -d= -f2- | tr -d '"[:space:]' || true)
 PUBLIC_URL_VALUE=${PUBLIC_URL_VALUE:-http://localhost:8080}
+echo "==> Sprawdzam, czy konsola odpowiada przez nginx (${PUBLIC_URL_VALUE}/api/health)"
+ok=""
+for _ in $(seq 1 60); do
+  code=$(docker compose exec -T frontend wget -q -O /dev/null -S http://127.0.0.1:8080/api/health 2>&1 \
+    | awk '/HTTP\//{print $2}' | tail -n1 || true)
+  [ "$code" = "200" ] && { ok=1; break; }
+  sleep 3
+done
+if [ -z "$ok" ]; then
+  echo "Konsola nie odpowiada (ostatni kod: ${code:-brak}). Stan usług i ostatnie logi api:" >&2
+  docker compose ps api frontend keycloak >&2 || true
+  docker compose logs --tail 40 api >&2 || true
+  exit 1
+fi
 echo
 echo "Gotowe."
 echo "  Konsola zespołu IT:   ${PUBLIC_URL_VALUE}/admin/"
