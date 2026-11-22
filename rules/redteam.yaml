@@ -1,0 +1,66 @@
+# Warstwa 1: deterministyczny skan podatności (docs/WARSTWY.md).
+# Te same cele i ten plik = te same polecenia nmap i te same reguły oceny. Bez modelu językowego.
+# Uruchamia wyłącznie człowiek (administrator albo osoba z delegacją w IAM) przyciskiem w konsoli;
+# nie ma harmonogramu ani automatycznego startu. Każdy cel przechodzi przez scope_guard
+# na poziomie L2 ze zgodą wywołującego. Brak eksploatacji, brute force i DoS.
+
+# Skrypty NSE: tylko z tej listy i tylko te, które kod dopuszcza (app/redteam/engine.py,
+# ALLOWED_SCRIPTS). Każdy wyłącznie czyta konfigurację usługi (handshake, nagłówki, banery).
+scripts:
+  - ssl-cert
+  - ssl-enum-ciphers
+  - sslv2
+  - http-methods
+  - http-security-headers
+  - ssh2-enum-algos
+  - smb2-security-mode
+  - ftp-anon
+
+ports: "21,22,23,25,80,110,143,443,445,993,995,1433,2222,3000,3306,3389,5432,5900,6379,8000,8080,8443,9200,11211,27017"
+timing: 3              # -T3, wyżej nie (jak discovery)
+max_rate: 100          # pakiety/s na proces nmap
+workers: 4             # równoległe hosty
+host_timeout_seconds: 300
+max_addresses: 1024    # największa sieć jednego przebiegu
+
+# Usługi, których sama ekspozycja w sieci jest problemem (port → ocena).
+exposed:
+  23: {check: cleartext_telnet, title: "Telnet bez szyfrowania", severity: high, category: kryptografia}
+  21: {check: cleartext_ftp, title: "FTP bez szyfrowania", severity: medium, category: kryptografia}
+  110: {check: cleartext_mail, title: "POP3 bez szyfrowania", severity: low, category: kryptografia}
+  143: {check: cleartext_mail, title: "IMAP bez szyfrowania", severity: low, category: kryptografia}
+  3306: {check: exposed_database, title: "Baza danych dostępna w sieci", severity: high, category: ekspozycja}
+  5432: {check: exposed_database, title: "Baza danych dostępna w sieci", severity: high, category: ekspozycja}
+  1433: {check: exposed_database, title: "Baza danych dostępna w sieci", severity: high, category: ekspozycja}
+  27017: {check: exposed_database, title: "Baza danych dostępna w sieci", severity: high, category: ekspozycja}
+  6379: {check: exposed_datastore, title: "Magazyn danych (Redis/Memcached/Elasticsearch) dostępny w sieci", severity: high, category: ekspozycja}
+  11211: {check: exposed_datastore, title: "Magazyn danych (Redis/Memcached/Elasticsearch) dostępny w sieci", severity: high, category: ekspozycja}
+  9200: {check: exposed_datastore, title: "Magazyn danych (Redis/Memcached/Elasticsearch) dostępny w sieci", severity: high, category: ekspozycja}
+  3389: {check: exposed_remote_desktop, title: "Pulpit zdalny (RDP/VNC) dostępny w sieci", severity: medium, category: ekspozycja}
+  5900: {check: exposed_remote_desktop, title: "Pulpit zdalny (RDP/VNC) dostępny w sieci", severity: medium, category: ekspozycja}
+
+# Najniższe wersje bez znanych krytycznych błędów (porównanie wersji z -sV).
+# `product` to fragment nazwy produktu z nmap (bez wielkości liter).
+min_versions:
+  - {product: "openssh", min: "8.8", severity: medium}
+  - {product: "apache httpd", min: "2.4.58", severity: medium}
+  - {product: "nginx", min: "1.22.1", severity: low}
+  - {product: "vsftpd", min: "3.0.0", severity: critical}
+  - {product: "proftpd", min: "1.3.8", severity: high}
+  - {product: "openssl", min: "3.0.7", severity: medium}
+
+cert_expiry_warning_days: 30
+
+# Drugie narzędzie: nuclei z szablonami podatności, błędnych konfiguracji i ekspozycji,
+# uruchamiany na portach HTTP/HTTPS wykrytych przez nmap. Tagi eksploatacji (exploit, rce,
+# sqli, xss, lfi, ssrf, brute force, default-login, DoS, fuzzing…) kod wyklucza zawsze
+# (-etags, app/redteam/engine.py NUCLEI_ALWAYS_EXCLUDED) i odrzuca je także w `tags` poniżej.
+# Binarka i szablony: scripts/fetch_nuclei.sh (poza Gitem). Bez binarki krok jest pomijany
+# z jawną adnotacją w logu przebiegu, a wynik nmap zostaje.
+nuclei:
+  enabled: true
+  templates_dir: /opt/nuclei-templates
+  tags: [cve, misconfig, exposure, ssl]
+  severity: [info, low, medium, high, critical]
+  rate_limit: 5
+  timeout_seconds: 300

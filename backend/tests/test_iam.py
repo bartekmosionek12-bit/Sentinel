@@ -200,9 +200,12 @@ def test_matrix_covers_key_expectations() -> None:
     # Modyfikacja: zmienia istniejące dane, ale nie dodaje i niczego nie uruchamia.
     assert {"findings:update", "review:decide"} <= modifier
     assert not modifier & {"inventory:write", "scan:run", "agent:task", "reports:generate"}
-    # Editor: dodaje, uruchamia skany i zatwierdza L2/L3 oraz plany agenta (decyzja 21.11).
+    # Editor: dodaje, uruchamia skany i zatwierdza L2/L3 (decyzja 21.11).
     assert {"inventory:write", "scan:run", "scan:approve:l2", "scan:approve:l3"} <= editor
-    assert "agent:task" in editor
+    # Agent i trzy warstwy red team: tylko administrator; inni wyłącznie przez delegację
+    # z terminem i podsiecią (decyzja 22.11, docs/WARSTWY.md).
+    layers = {"agent:task", "redteam:layer1", "redteam:layer2", "redteam:layer3"}
+    assert not (editor | modifier | viewer) & layers
     # Tylko administrator: tożsamość, zakres, zdolności agenta, integracje, audyt.
     admin_only = {
         "iam:manage",
@@ -213,6 +216,7 @@ def test_matrix_covers_key_expectations() -> None:
         "llm:external:manage",
         "audit:read",
         "audit:export",
+        *layers,
     }
     assert not (editor | modifier | viewer) & admin_only
     assert viewer < modifier < editor < admin

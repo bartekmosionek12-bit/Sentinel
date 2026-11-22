@@ -22,20 +22,25 @@ jak to działa w Sentinel ASI, i zawiera macierz rola × endpoint × akcja wylic
 | Rola w kodzie | Nazwa w UI (brief) | Co może |
 |---|---|---|
 | `administrator` | Administracja | wszystko, w tym użytkownicy i role (edytor ról), zakres skanowania, zdolności agenta, integracje, dziennik audytu |
-| `editor` | Dodawanie, usuwanie, modyfikacja | dodawanie i import zasobów, uruchamianie skanów, zatwierdzanie akcji L2 i L3 oraz planów agenta, zadania dla agenta, kill switch, raporty, decyzje w kolejce weryfikacji |
+| `editor` | Dodawanie, usuwanie, modyfikacja | dodawanie i import zasobów, uruchamianie skanów, zatwierdzanie akcji L2 i L3, kill switch, raporty, decyzje w kolejce weryfikacji |
 | `modifier` | Modyfikacja i odczyt | odczyt wszystkiego (poza dziennikiem audytu) i zmiana istniejących danych: statusy zagrożeń, decyzje w kolejce weryfikacji; bez dodawania, usuwania i uruchamiania |
 | `viewer` | Odczyt | odczyt danych, dashboard, raporty, eksport JSON/CSV/PDF, pytania do Sentka |
 | `agent` | tożsamość techniczna | brak uprawnień do API; działa wyłącznie przez serwer MCP ze zdolnościami nadanymi przez administratora |
 | `system` | tożsamość techniczna | brak uprawnień do API (deterministyczny pipeline) |
 
-Decyzja z 21.11.2026: akcje L2 i L3 oraz plany agenta zatwierdza `administrator` albo `editor`,
-zawsze człowiek i zawsze z wpisem w audycie. Kill switch ma też `editor`: zatrzymanie skanów
+Decyzja z 21.11.2026: akcje L2 i L3 zatwierdza `administrator` albo `editor`,
+zawsze człowiek i zawsze z wpisem w audycie.
+
+Decyzja z 22.11.2026: agent AI i trzy warstwy skanowania podatności (`redteam:layer1`,
+`redteam:layer2`, `redteam:layer3`, `agent:task`) ma z roli wyłącznie `administrator`.
+Innym daje je tylko delegacja w panelu IAM: osoba × warstwa × podsieć × okno czasu.
+Szczegóły: [WARSTWY.md](WARSTWY.md). Kill switch ma też `editor`: zatrzymanie skanów
 jest bezpieczne, więc może je zrobić każdy, kto może je uruchomić.
 
 Granice, które pilnuje test `test_matrix_covers_key_expectations`:
 `viewer` ⊂ `modifier` ⊂ `editor` ⊂ `administrator`, a `iam:manage`, `scope:manage`,
 `agent:configure`, `agent_test:override`, `integrations:manage`, `llm:external:manage`,
-`audit:read` i `audit:export` ma wyłącznie `administrator`.
+`audit:read`, `audit:export`, `agent:task` i `redteam:layer1/2/3` ma wyłącznie `administrator`.
 
 ## Edytor ról
 
@@ -43,7 +48,8 @@ Administrator w konsoli (Administracja → Role i użytkownicy) może:
 
 - utworzyć, zmienić i usunąć **rolę własną** złożoną z uprawnień z listy poniżej
   (`PUT`/`DELETE /api/iam/roles/{nazwa}`); rola własna nie może zawierać `iam:manage`
-  (brak eskalacji przez edytor) i nie nadpisze roli z pliku,
+  (brak eskalacji przez edytor) ani uprawnień agenta i warstw skanowania (te tylko przez
+  delegację z terminem) i nie nadpisze roli z pliku,
 - **nadać i odebrać** użytkownikowi rolę własną albo `editor`, `modifier`, `viewer`
   (`POST`/`DELETE /api/iam/users/{id}/roles`). Rolę `administrator` nadaje wyłącznie Keycloak,
   a role nadaje się tylko ludziom (agent ma zdolności, nie role).
@@ -77,7 +83,7 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | `agent:configure` | tak | ✓ | · | · | · | Nadawanie zdolności agentowi |
 | `agent:kill` | tak | ✓ | ✓ | · | · | Kill switch: zatrzymanie agenta i wszystkich skanów |
 | `agent:read` |  | ✓ | ✓ | ✓ | ✓ | Odczyt zadań, planów, zdolności i poświadczeń JIT agenta (bez sekretów) |
-| `agent:task` | tak | ✓ | ✓ | · | · | Zlecanie zadań agentowi i zatwierdzanie jego planów |
+| `agent:task` | tak | ✓ | · | · | · | Zlecanie zadań agentowi i zatwierdzanie jego planów |
 | `agent_test:override` | tak | ✓ | · | · | · | Wymuszenie konfiguracji agenta mimo niezaliczonego testu (z uzasadnieniem) |
 | `agent_test:read` |  | ✓ | ✓ | ✓ | ✓ | Odczyt wyników testu bezpieczeństwa agenta |
 | `agent_test:run` | tak | ✓ | ✓ | · | · | Uruchomienie testu bezpieczeństwa agenta |
@@ -98,6 +104,9 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | `llm:external:manage` | tak | ✓ | · | · | · | Włączanie zewnętrznego modelu |
 | `llm:external:use` | tak | ✓ | ✓ | · | · | Użycie zewnętrznego modelu (dane zanonimizowane) |
 | `notifications:read` |  | ✓ | ✓ | ✓ | ✓ | Odczyt powiadomień |
+| `redteam:layer1` | tak | ✓ | · | · | · | Warstwa 1: deterministyczny skan podatności narzędziami red team (ręczne wywołanie) |
+| `redteam:layer2` | tak | ✓ | · | · | · | Warstwa 2: analiza logów warstwy 1 przez model językowy i zalecenia (ręczne wywołanie) |
+| `redteam:layer3` | tak | ✓ | · | · | · | Warstwa 3: zlecanie zadań autonomicznemu agentowi AI |
 | `reports:export` |  | ✓ | ✓ | ✓ | ✓ | Eksport raportów (PDF, CSV, JSON) |
 | `reports:generate` | tak | ✓ | ✓ | · | · | Tworzenie raportów i zlecanie warstwy „W skrócie” modelowi |
 | `reports:read` |  | ✓ | ✓ | ✓ | ✓ | Odczyt raportów |
@@ -124,10 +133,10 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/agent/leases` | `agent:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/agent/status` | `agent:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/agent/tasks` | `agent:read` | ✓ | ✓ | ✓ | ✓ |
-| POST | `/api/agent/tasks` | `agent:task` | ✓ | ✓ | · | · |
+| POST | `/api/agent/tasks` | `redteam:layer3` | ✓ | · | · | · |
 | GET | `/api/agent/tasks/{task_id}` | `agent:read` | ✓ | ✓ | ✓ | ✓ |
-| POST | `/api/agent/tasks/{task_id}/approve` | `agent:task` | ✓ | ✓ | · | · |
-| POST | `/api/agent/tasks/{task_id}/reject` | `agent:task` | ✓ | ✓ | · | · |
+| POST | `/api/agent/tasks/{task_id}/approve` | `agent:task` | ✓ | · | · | · |
+| POST | `/api/agent/tasks/{task_id}/reject` | `agent:task` | ✓ | · | · | · |
 | GET | `/api/agent/tests` | `agent_test:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/agent/tests` | `agent_test:run` | ✓ | ✓ | · | · |
 | GET | `/api/agent/tests/{run_id}` | `agent_test:read` | ✓ | ✓ | ✓ | ✓ |
@@ -181,6 +190,10 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/freshness` | `reports:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/glossary` | zalogowany | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/health` | publiczny | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/iam/delegations` | `iam:read` | ✓ | · | · | · |
+| POST | `/api/iam/delegations` | `iam:manage` | ✓ | · | · | · |
+| POST | `/api/iam/delegations/{delegation_id}/revoke` | `iam:manage` | ✓ | · | · | · |
+| GET | `/api/iam/non-human` | `iam:read` | ✓ | · | · | · |
 | GET | `/api/iam/permissions` | `iam:read` | ✓ | · | · | · |
 | GET | `/api/iam/roles` | `iam:read` | ✓ | · | · | · |
 | DELETE | `/api/iam/roles/{name}` | `iam:manage` | ✓ | · | · | · |
@@ -192,6 +205,14 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/llm/status` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/me` | zalogowany | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/notifications` | `notifications:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/redteam/latest` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/redteam/layer1/runs` | `redteam:layer1` | ✓ | · | · | · |
+| GET | `/api/redteam/layers` | zalogowany | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/redteam/runs` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/redteam/runs/{run_id}` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
+| GET | `/api/redteam/runs/{run_id}/analysis` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/redteam/runs/{run_id}/analysis` | `redteam:layer2` | ✓ | · | · | · |
+| POST | `/api/redteam/runs/{run_id}/defectdojo` | `defectdojo:export` | ✓ | ✓ | · | · |
 | GET | `/api/reports` | `reports:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/reports` | `reports:generate` | ✓ | ✓ | · | · |
 | GET | `/api/reports/{report_id}` | `reports:read` | ✓ | ✓ | ✓ | ✓ |

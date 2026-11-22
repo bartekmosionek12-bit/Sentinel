@@ -173,6 +173,12 @@ class RecordingDispatcher:
     def run_discovery(self, run_id: uuid.UUID) -> str:
         return self._record("run_discovery", run_id)
 
+    def run_redteam_layer1(self, run_id: uuid.UUID) -> str:
+        return self._record("run_redteam_layer1", run_id)
+
+    def analyze_redteam(self, analysis_id: uuid.UUID) -> str:
+        return self._record("analyze_redteam", analysis_id)
+
     def run_agent_test(
         self, suite: str, trigger: str, requested_by: str, config_version_id: uuid.UUID | None
     ) -> str:

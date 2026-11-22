@@ -33,6 +33,12 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/discovery\/signatures\/[^/]+\/inspect$/, "signature_inspect"],
   [/^\/api\/discovery\/schedules$/, "discovery_schedules"],
   [/^\/api\/discovery\/targets\/preview/, "discovery_preview"],
+  [/^\/api\/redteam\/layers/, "redteam_layers"],
+  [/^\/api\/redteam\/latest/, "redteam_latest"],
+  [/^\/api\/redteam\/runs\/[^/?]+(\?|$)/, "redteam_run"],
+  [/^\/api\/redteam\/runs/, "redteam_runs"],
+  [/^\/api\/iam\/delegations/, "delegations"],
+  [/^\/api\/iam\/non-human/, "non_human"],
 ];
 
 export interface Sent {
@@ -120,6 +126,27 @@ export async function stubApi(
       if (request.method() === "DELETE") return route.fulfill({ status: 204 });
       const list = fixture("discovery_schedules") as Record<string, unknown>[];
       return route.fulfill({ status: 201, json: { ...list[0], ...(body as object) } });
+    }
+    if (url.pathname.startsWith("/api/iam/delegations") && request.method() !== "GET") {
+      const [row] = fixture("delegations") as Record<string, unknown>[];
+      if (url.pathname.endsWith("/revoke")) {
+        return route.fulfill({ json: { ...row, state: "odwołana", revoked_by: "user:admin" } });
+      }
+      const input = body as { layer: number; scope: string[] };
+      return route.fulfill({
+        status: 201,
+        json: { ...row, ...input, layer_name: `Warstwa ${input.layer}` },
+      });
+    }
+    if (url.pathname.startsWith("/api/redteam/") && request.method() === "POST") {
+      const run = fixture("redteam_run") as Record<string, unknown>;
+      if (url.pathname.endsWith("/analysis")) {
+        return route.fulfill({ status: 202, json: run.analysis });
+      }
+      if (url.pathname.endsWith("/defectdojo")) {
+        return route.fulfill({ json: { sent: 4, groups: 4, test: 7 } });
+      }
+      return route.fulfill({ status: 202, json: { ...run, status: "queued" } });
     }
     const hit = ROUTES.find(([pattern]) => pattern.test(where));
     if (!hit) return route.fulfill({ json: [] });

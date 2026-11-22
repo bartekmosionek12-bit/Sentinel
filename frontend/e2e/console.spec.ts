@@ -8,42 +8,23 @@ import { stubApi } from "./stub";
 const nav = (page: import("@playwright/test").Page) =>
   page.getByRole("navigation", { name: "Nawigacja główna" });
 
-test("administrator widzi macierz ról i tworzy rolę własną bez iam:manage", async ({
-  page,
-}) => {
+test("administrator widzi macierz ról i tworzy rolę własną bez iam:manage", async ({ page }) => {
   const sent = await stubApi(page);
   await page.goto("/admin/role");
-  await expect(
-    page.getByRole("heading", { name: "Role i użytkownicy" }),
-  ).toBeVisible();
-  for (const label of [
-    "Administracja",
-    "Dodawanie, usuwanie, modyfikacja",
-    "Odczyt",
-  ]) {
-    await expect(
-      page.getByRole("columnheader", { name: label, exact: true }),
-    ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Role i użytkownicy" })).toBeVisible();
+  for (const label of ["Administracja", "Dodawanie, usuwanie, modyfikacja", "Odczyt"]) {
+    await expect(page.getByRole("columnheader", { name: label, exact: true })).toBeVisible();
   }
-  await expect(
-    page.getByRole("columnheader", { name: /audytor/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: /audytor/ })).toBeVisible();
 
-  await page
-    .getByLabel("Nazwa (małe litery, cyfry, - i _)")
-    .fill("kierownik-zmiany");
+  await page.getByLabel("Nazwa (małe litery, cyfry, - i _)").fill("kierownik-zmiany");
   await page.getByLabel("Zacznij od roli").selectOption("viewer");
   await expect(
     page.locator("label", { hasText: "iam:manage" }).getByRole("checkbox"),
   ).toBeDisabled();
-  await page
-    .locator("label", { hasText: "findings:update" })
-    .getByRole("checkbox")
-    .check();
+  await page.locator("label", { hasText: "findings:update" }).getByRole("checkbox").check();
   await page.getByRole("button", { name: "Zapisz rolę" }).click();
-  await expect(page.getByRole("status")).toContainText(
-    "Zapisano rolę kierownik-zmiany",
-  );
+  await expect(page.getByRole("status")).toContainText("Zapisano rolę kierownik-zmiany");
 
   const put = sent.find((s) => s.method === "PUT");
   expect(put?.path).toBe("/api/iam/roles/kierownik-zmiany");
@@ -53,23 +34,17 @@ test("administrator widzi macierz ról i tworzy rolę własną bez iam:manage", 
   expect(permissions).not.toContain("iam:manage");
 });
 
-test("administrator nadaje rolę z konsoli; Administracji nie da się nadać", async ({
-  page,
-}) => {
+test("administrator nadaje rolę z konsoli; Administracji nie da się nadać", async ({ page }) => {
   const sent = await stubApi(page);
   await page.goto("/admin/role");
   const select = page.getByLabel("Rola dla viewer");
-  await expect(
-    select.locator("option", { hasText: "Administracja" }),
-  ).toHaveCount(0);
+  await expect(select.locator("option", { hasText: "Administracja" })).toHaveCount(0);
   await select.selectOption("editor");
   await page
     .getByRole("row", { name: /viewer/ })
     .getByRole("button", { name: "Nadaj" })
     .click();
-  await expect
-    .poll(() => sent.find((s) => s.method === "POST")?.body)
-    .toEqual({ role: "editor" });
+  await expect.poll(() => sent.find((s) => s.method === "POST")?.body).toEqual({ role: "editor" });
   await expect(page.getByLabel("Rola dla sentinel-agent")).toHaveCount(0);
 });
 
@@ -77,15 +52,9 @@ test("rola Odczyt: bez ról, audytu i formularzy zapisu", async ({ page }) => {
   await stubApi(page, { role: "viewer" });
   await page.goto("/admin/zasoby");
   await expect(page.getByRole("heading", { name: "Zasoby" })).toBeVisible();
-  await expect(
-    nav(page).getByRole("link", { name: "Role i użytkownicy" }),
-  ).toHaveCount(0);
-  await expect(
-    nav(page).getByRole("link", { name: "Dziennik audytu" }),
-  ).toHaveCount(0);
-  await expect(nav(page).getByRole("link", { name: "Zgodność" })).toHaveCount(
-    0,
-  );
+  await expect(nav(page).getByRole("link", { name: "Role i użytkownicy" })).toHaveCount(0);
+  await expect(nav(page).getByRole("link", { name: "Dziennik audytu" })).toHaveCount(0);
+  await expect(nav(page).getByRole("link", { name: "Zgodność" })).toHaveCount(0);
   await expect(page.getByText("Dodaj zasób ręcznie")).toHaveCount(0);
   await expect(page.getByText("Import z pliku CSV")).toHaveCount(0);
 });
@@ -96,9 +65,7 @@ test("karta hosta: usługi, zagrożenia i historia zmian", async ({ page }) => {
   await page.getByRole("link", { name: "web-01" }).click();
   await expect(page).toHaveURL(/\/admin\/zasoby\/2e017b46/);
   await expect(page.getByRole("heading", { name: "web-01" })).toBeVisible();
-  await expect(
-    page.getByRole("cell", { name: "Apache httpd", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Apache httpd", exact: true })).toBeVisible();
   await expect(page.getByText("CVE-2021-42013").first()).toBeVisible();
   await expect(page.getByText("Historia zmian")).toBeVisible();
   await expect(page.getByText("10.20.0.10")).toBeVisible();
@@ -111,13 +78,9 @@ test("rola Odczyt ma raporty w konsoli; stara Skrzynka przekierowuje do Raportó
   await page.goto("/admin/skrzynka");
   await expect(page).toHaveURL(/\/admin\/raporty$/);
   await expect(page.getByRole("heading", { name: "Raporty" })).toBeVisible();
-  await expect(nav(page).getByRole("link", { name: "Skrzynka" })).toHaveCount(
-    0,
-  );
+  await expect(nav(page).getByRole("link", { name: "Skrzynka" })).toHaveCount(0);
   await expect(nav(page).getByRole("link", { name: /Mapa/ })).toHaveCount(0);
-  await expect(
-    page.getByText("Ocena stanu bezpieczeństwa (2026-11-21)"),
-  ).toBeVisible();
+  await expect(page.getByText("Ocena stanu bezpieczeństwa (2026-11-21)")).toBeVisible();
 });
 
 test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczytu", async ({
@@ -125,17 +88,11 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
 }) => {
   const sent = await stubApi(page);
   await page.goto("/admin/discovery/sygnatury");
-  await expect(
-    page.getByRole("heading", { name: "Sygnatury detekcyjne" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("cell", { name: "wordpress-login", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sygnatury detekcyjne" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "wordpress-login", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "intranet-demo", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sprawdź" }).click();
-  await expect(
-    page.getByText("Sygnatura „moja-aplikacja” jest poprawna."),
-  ).toBeVisible();
+  await expect(page.getByText("Sygnatura „moja-aplikacja” jest poprawna.")).toBeVisible();
   await page.getByRole("button", { name: "Zapisz" }).click();
   await expect(page.getByText("Zapisano „moja-aplikacja”.")).toBeVisible();
   const put = sent.find((s) => s.method === "PUT");
@@ -183,13 +140,15 @@ test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async
   await page.getByLabel("Początek okna").fill("01:00");
   await page.getByLabel("Koniec okna").fill("05:00");
   await page.getByRole("button", { name: "Dodaj harmonogram" }).click();
-  await expect.poll(() => sent.find((s) => s.method === "POST")?.body).toMatchObject({
-    name: "Weekend",
-    text: "10.20.0.0/18",
-    interval_minutes: 10080,
-    window_start: "01:00",
-    window_end: "05:00",
-  });
+  await expect
+    .poll(() => sent.find((s) => s.method === "POST")?.body)
+    .toMatchObject({
+      name: "Weekend",
+      text: "10.20.0.0/18",
+      interval_minutes: 10080,
+      window_start: "01:00",
+      window_end: "05:00",
+    });
 });
 
 test("skan jednorazowy: start i koniec o zadanej godzinie", async ({ page }) => {
@@ -234,9 +193,7 @@ test("przebieg: raport HTML/JSON/CSV i panel wznowienia po końcu okna", async (
   await expect(paused).toContainText("8192 adresów (2 zakresów, 5 hostów bez skanu usług)");
   await expect(page.getByRole("button", { name: "Raport HTML" })).toBeVisible();
   await page.getByRole("button", { name: "Wznów" }).click();
-  await expect
-    .poll(() => sent.find((s) => s.path.endsWith("/resume"))?.method)
-    .toBe("POST");
+  await expect.poll(() => sent.find((s) => s.path.endsWith("/resume"))?.method).toBe("POST");
 });
 
 test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
@@ -251,9 +208,7 @@ test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async (
 test("rola Odczyt widzi sygnatury, ale bez edytora", async ({ page }) => {
   await stubApi(page, { role: "viewer" });
   await page.goto("/admin/discovery/sygnatury");
-  await expect(
-    page.getByRole("cell", { name: "gitea", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("cell", { name: "gitea", exact: true })).toBeVisible();
   await expect(page.getByLabel("Sygnatura w YAML")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Usuń" })).toHaveCount(0);
 });
@@ -279,9 +234,7 @@ test("pulpit: wskaźniki na górze, bez zdublowanych kafelków; Sentek z szybkim
   await sentek.hover();
   await expect(page.getByText(/Pytaj o skany/)).toBeVisible();
   await sentek.click();
-  await page
-    .getByRole("button", { name: "Podsumuj krytyczne zagrożenia" })
-    .click();
+  await page.getByRole("button", { name: "Podsumuj krytyczne zagrożenia" }).click();
   await expect(
     page.getByRole("region", { name: "Asystent Sentek" }).locator("p").nth(1),
   ).toBeVisible();
@@ -298,4 +251,82 @@ test("konsola czeka na API po restarcie (502) zamiast pokazywać błąd", async 
   await expect(page.getByText("API jeszcze się uruchamia, czekam…")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pulpit" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Błąd serwera \(502\)/)).toHaveCount(0);
+});
+
+test("IAM: ludzie i tożsamości nie-ludzkie osobno, delegacja warstwy na podsieć", async ({
+  page,
+}) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/");
+  await nav(page).getByRole("button", { name: "Kontrola" }).click();
+  await nav(page).getByRole("link", { name: "IAM", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "IAM" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Human: ludzie/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const overview = page.getByTestId("layer-overview");
+  for (const name of ["Warstwa 1: Skan deterministyczny", "Warstwa 2: Analiza LLM"]) {
+    await expect(overview.getByText(name)).toBeVisible();
+  }
+  await expect(page.getByTestId("layers-analityk")).toContainText("warstwa 1 (10.20.0.0/28)");
+  await expect(page.getByTestId("layers-admin")).toContainText("z roli Administracja");
+
+  const form = page.getByRole("form", { name: "Nowa delegacja" });
+  // Administratora nie da się delegować (ma warstwy z roli).
+  await expect(form.getByLabel("Osoba").locator("option", { hasText: "(admin)" })).toHaveCount(0);
+  await form.getByLabel("Osoba").selectOption({ label: "Anna Analityk (analityk)" });
+  await form.getByLabel("Warstwa").selectOption("3");
+  await form.getByLabel(/Jednostka \/ podsieć/).fill("10.20.0.0/28, 10.20.1.0/29");
+  await form.getByLabel("Powód (do audytu)").fill("Przegląd serwerowni B");
+  await form.getByRole("button", { name: "Deleguj" }).click();
+  await expect(page.getByRole("status")).toContainText("Delegowano");
+  const created = sent.find((s) => s.path === "/api/iam/delegations");
+  expect(created?.body).toMatchObject({ layer: 3, scope: ["10.20.0.0/28", "10.20.1.0/29"] });
+
+  await page.getByRole("button", { name: "Odwołaj delegację analityk warstwa 1" }).click();
+  await expect.poll(() => sent.some((s) => s.path.endsWith("/revoke"))).toBe(true);
+
+  await page.getByRole("tab", { name: /Non-human/ }).click();
+  await expect(page.getByText("Agent AI (warstwa 3)")).toBeVisible();
+  await expect(page.getByText("aktywny, zdolności v2")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "sentinel-agent" })).toBeVisible();
+  await expect(page.getByRole("form", { name: "Nowe zdolności agenta" })).toBeVisible();
+});
+
+test("trzy warstwy: osobne karty, grupy podatności, warstwa 2 i DefectDojo na żądanie", async ({
+  page,
+}) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/");
+  await expect(page.getByRole("region", { name: "Warstwa 1: skan podatności" })).toContainText(
+    "Anonimowe logowanie FTP",
+  );
+  await nav(page).getByRole("button", { name: "Skanowanie podatności" }).click();
+  await nav(page).getByRole("link", { name: "Trzy warstwy" }).click();
+  for (const id of ["layer-1", "layer-2", "layer-3"]) {
+    await expect(page.getByTestId(id)).toBeVisible();
+  }
+  // Wejście na stronę niczego nie uruchamia.
+  expect(sent.filter((s) => s.path.startsWith("/api/redteam"))).toEqual([]);
+
+  const form = page.getByRole("form", { name: "Uruchom warstwę 1" });
+  await form.getByLabel("Cele (IP albo CIDR)").fill("10.20.0.0/28");
+  await form.getByLabel(/Powód/).fill("Przegląd po zmianie konfiguracji");
+  await form.getByRole("button", { name: "Uruchom warstwę 1" }).click();
+  await expect(page.getByRole("heading", { name: "Przebieg warstwy 1" })).toBeVisible();
+  expect(sent.map((s) => s.path)).toEqual(["/api/redteam/layer1/runs"]);
+
+  await page.getByRole("button", { name: "Przestarzałe protokoły TLS" }).click();
+  await expect(page.getByText("10.20.0.6:443/tcp")).toBeVisible();
+  await expect(page.getByText("Ustaw minimalną wersję protokołu na TLS 1.2")).toBeVisible();
+  await expect(page.getByTestId("analysis")).toContainText("szablon reguł (bez modelu)");
+
+  await page.getByRole("button", { name: "Analizuj (warstwa 2)" }).click();
+  await page.getByRole("button", { name: /Wyślij grupy do DefectDojo/ }).click();
+  await expect(page.getByText("Wysłano 4 zgrupowanych findingów do DefectDojo.")).toBeVisible();
+  expect(sent.map((s) => s.path).slice(1)).toEqual([
+    `/api/redteam/runs/7c1e0d2a-3b4f-4c5d-8e9f-a0b1c2d3e4f5/analysis`,
+    `/api/redteam/runs/7c1e0d2a-3b4f-4c5d-8e9f-a0b1c2d3e4f5/defectdojo`,
+  ]);
 });

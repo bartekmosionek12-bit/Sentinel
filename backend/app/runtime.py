@@ -116,6 +116,16 @@ def external_provider(settings: Settings) -> LLMProvider | None:
     )
 
 
+def redteam_provider(settings: Settings) -> LLMProvider | None:
+    """Model dla warstwy 2. Domyślnie żaden: zalecenia z szablonu."""
+    mode = settings.redteam_llm.strip().lower()
+    if mode == "local":
+        return local_provider(settings)
+    if mode == "external":
+        return external_provider(settings)
+    return None
+
+
 def explainer_service(session: Session) -> ExplainerService:
     settings = get_settings()
     return ExplainerService(

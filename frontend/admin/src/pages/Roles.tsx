@@ -249,7 +249,7 @@ function RoleEditor({
   );
 }
 
-function UserRow({ user, roles, manage }: { user: IamUser; roles: IamRole[]; manage: boolean }) {
+export function UserRow({ user, roles, manage }: { user: IamUser; roles: IamRole[]; manage: boolean }) {
   const queryClient = useQueryClient();
   const [role, setRole] = useState("");
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["iam", "users"] });

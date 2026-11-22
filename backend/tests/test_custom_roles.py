@@ -120,11 +120,18 @@ def test_only_administrator_manages_roles(client: TestClient, tokens: TokenFacto
         assert denied.status_code == 403
 
 
-def test_editor_approves_agent_plans_and_l2_but_modifier_cannot(
+def test_editor_approves_l2_but_agent_needs_delegation(
     client: TestClient, tokens: TokenFactory
 ) -> None:
-    """Decyzja z 21.11.2026: plany agenta i akcje L2/L3 zatwierdza administrator albo editor."""
+    """Akcje L2/L3 skanów zatwierdza administrator albo editor (decyzja z 21.11.2026).
+
+    Agent i warstwy red team (decyzja z 22.11.2026): domyślnie tylko administrator; editor
+    dostaje je wyłącznie przez delegację w IAM (osoba × podsieć × okno czasu).
+    """
     editor = client.get("/api/me", headers=tokens.headers(["editor"], username="ed")).json()
-    assert {"agent:task", "scan:approve:l2", "scan:approve:l3"} <= set(editor["permissions"])
+    assert {"scan:approve:l2", "scan:approve:l3"} <= set(editor["permissions"])
+    assert not {"agent:task", "redteam:layer1", "redteam:layer2", "redteam:layer3"} & set(
+        editor["permissions"]
+    )
     modifier = client.get("/api/me", headers=tokens.headers(["modifier"], username="mo")).json()
     assert not {"agent:task", "scan:approve:l2", "scan:approve:l3"} & set(modifier["permissions"])
