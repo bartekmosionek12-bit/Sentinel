@@ -63,3 +63,4 @@ if [ "${1:-}" = "--bez-demo" ]; then
   exec bash ./scripts/start_live.sh "$@"
 fi
 bash ./scripts/seed_demo.sh
+bash ./scripts/show_accounts.sh

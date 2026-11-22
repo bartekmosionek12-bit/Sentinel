@@ -52,3 +52,4 @@ echo "  DefectDojo:          http://localhost:8081"
 echo "  Hasła i TOTP kont:   data/demo-credentials.env"
 echo "  Discovery → Cele: host.docker.internal (lab mentorów musi działać: ./quickstart.sh up)"
 echo "  Powrót do demo: ./start.sh"
+bash ./scripts/show_accounts.sh
