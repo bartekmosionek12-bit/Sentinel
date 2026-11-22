@@ -85,6 +85,25 @@ def test_discovery_end_to_end(
     assert [h["ip"] for h in diff["new_hosts"]] == ["10.10.0.9"]
     assert [h["ip"] for h in diff["gone_hosts"]] == ["10.10.0.7"]
 
+    # Raport z przebiegu: zmiany od poprzedniego, priorytet i te same dane w JSON/CSV/HTML.
+    report = client.get(f"/api/discovery/runs/{second}/report").json()
+    assert report["changes"]["compared_with"]["id"] == first
+    assert report["changes"]["counts"]["new_hosts"] == 1
+    # Oba hosty WWW mają panel i staging; nowy host dostaje dodatkowe punkty i jest wyżej.
+    top, second_host = report["priority"]["hosts"][:2]
+    assert (top["ip"], second_host["ip"]) == ("10.10.0.9", "10.10.0.5")
+    assert "nowy host (+2)" in top["reasons"]
+    assert top["score"] > second_host["score"]
+    assert report["summary"]["hosts"] == 2
+    csv_body = client.get(f"/api/discovery/runs/{second}/report", params={"format": "csv"})
+    assert csv_body.headers["content-type"].startswith("text/csv")
+    assert "zmiany,10.10.0.9" in csv_body.text
+    page = client.get(f"/api/discovery/runs/{second}/report", params={"format": "html"})
+    assert "<h2>Najważniejsze zmiany</h2>" in page.text
+    assert "10.10.0.9" in page.text
+    first_report = client.get(f"/api/discovery/runs/{first}/report").json()
+    assert first_report["changes"] is None
+
     edit = client.put("/api/discovery/overrides/10.10.0.5", json={"field": "note", "value": "DMZ"})
     assert edit.status_code == 200, edit.text
     tagged = client.put(

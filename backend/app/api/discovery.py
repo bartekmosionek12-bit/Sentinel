@@ -28,6 +28,7 @@ from app.discovery.analysis import (
 from app.discovery.defectdojo import DojoClient, DojoConfig, DojoError, findings_for
 from app.discovery.engine import DiscoveryConfig, parse_targets
 from app.discovery.io import ImportError_, hosts_csv, nmap_xml, parse_import, rows_csv
+from app.discovery.report import build_report, report_csv, report_html
 from app.discovery.schedule import (
     RunError,
     aware,
@@ -597,6 +598,54 @@ def export_run(
     )
     return Response(
         body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.json"'},
+    )
+
+
+@router.get("/runs/{run_id}/report")
+def run_report(
+    run_id: uuid.UUID,
+    session: SessionDep,
+    principal: Exporter,
+    format: Annotated[Literal["json", "csv", "html"], Query()] = "json",
+) -> Response:
+    """Raport z przebiegu: podsumowanie, zmiany od poprzedniego, priorytet, flagi, TLS, stany.
+
+    Te same dane w trzech formatach: JSON i CSV (eksport z briefu) oraz HTML do czytania i
+    druku do PDF.
+    """
+    run = _get_run(session, run_id)
+    report = build_report(session, run, _hosts(session, run), _run_out(run))
+    audit.record(
+        session,
+        audit.AuditEvent(
+            actor=principal.actor,
+            action="discovery_report",
+            reason=f"Raport z przebiegu ({format})",
+            inputs={"hosts": report["summary"]["hosts"]},
+            object_type="discovery_run",
+            object_id=str(run.id),
+        ),
+    )
+    session.commit()
+    name = f"sentinel-raport-{run.id.hex[:8]}"
+    if format == "csv":
+        return Response(
+            report_csv(report),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+        )
+    if format == "html":
+        return Response(
+            report_html(report),
+            media_type="text/html; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.html"'},
+        )
+    import json
+
+    return Response(
+        json.dumps(report, default=str, ensure_ascii=False, indent=2),
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{name}.json"'},
     )

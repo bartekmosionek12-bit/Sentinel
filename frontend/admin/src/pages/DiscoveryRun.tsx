@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, PencilLine, Send } from "lucide-react";
+import { Download, FileText, PencilLine, Send } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -499,6 +499,17 @@ export function DiscoveryRunPage() {
               >
                 <Download className="size-3.5" aria-hidden />
                 {f === "nmap" ? "nmap XML" : f.toUpperCase()}
+              </Button>
+            ))}
+            {(["html", "json", "csv"] as const).map((f) => (
+              <Button
+                key={`report-${f}`}
+                size="sm"
+                variant="outline"
+                onClick={() => void api.discoveryReport(id, f)}
+              >
+                <FileText className="size-3.5" aria-hidden />
+                Raport {f.toUpperCase()}
               </Button>
             ))}
             {can("defectdojo:export") && (

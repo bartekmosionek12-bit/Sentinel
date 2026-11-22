@@ -1270,6 +1270,8 @@ export const api = {
   stopDiscovery: (id: string) =>
     request<DiscoveryRun>(`/discovery/runs/${id}/stop`, { method: "POST" }),
   discoveryHosts: (id: string) => request<DiscoveryHost[]>(`/discovery/runs/${id}/hosts`),
+  discoveryReport: (id: string, format: "html" | "json" | "csv") =>
+    download(`/discovery/runs/${id}/report?format=${format}`, `sentinel-raport.${format}`),
   exportDiscovery: (id: string, format: "json" | "csv" | "nmap") =>
     download(`/discovery/runs/${id}/export?format=${format}`, `sentinel.${format}`),
   compareRuns: (older: string, newer: string) =>

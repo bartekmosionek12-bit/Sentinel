@@ -1,4 +1,6 @@
 /** Konsola zespołu IT: menu zależne od roli, role i użytkownicy, karta hosta (P1, #30). */
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { stubApi } from "./stub";
@@ -194,6 +196,35 @@ test("skan jednorazowy: start i koniec o zadanej godzinie", async ({ page }) => 
       return body && [body.name, Boolean(body.start_at), Boolean(body.end_at)];
     })
     .toEqual(["Audyt sobota", true, true]);
+});
+
+test("przebieg: raport HTML/JSON/CSV i panel wznowienia po końcu okna", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.route("**/api/discovery/runs/44444444-4444-4444-4444-444444444444", (route) =>
+    route.fulfill({
+      json: {
+        ...JSON.parse(
+          readFileSync(new URL("./fixtures/discovery_run.json", import.meta.url), "utf-8"),
+        ),
+        status: "paused",
+        deadline: "2026-11-28T05:00:00Z",
+        summary: { remaining_addresses: 8192 },
+        remaining: { networks: 2, hosts: 5 },
+        resumed_by: null,
+      },
+    }),
+  );
+  await page.route("**/api/discovery/runs/*/report?format=*", (route) =>
+    route.fulfill({ body: "<html></html>", contentType: "text/html" }),
+  );
+  await page.goto("/admin/discovery/44444444-4444-4444-4444-444444444444");
+  const paused = page.locator("[data-demo=run-paused]");
+  await expect(paused).toContainText("8192 adresów (2 zakresów, 5 hostów bez skanu usług)");
+  await expect(page.getByRole("button", { name: "Raport HTML" })).toBeVisible();
+  await page.getByRole("button", { name: "Wznów" }).click();
+  await expect
+    .poll(() => sent.find((s) => s.path.endsWith("/resume"))?.method)
+    .toBe("POST");
 });
 
 test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
