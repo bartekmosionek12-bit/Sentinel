@@ -13,7 +13,12 @@ import {
   CardTitle,
 } from "@shared/components/ui/card";
 import { Table, Td, Th } from "@shared/components/ui/table";
-import { api, type SignatureDefinition, type SignatureTestResult } from "@shared/lib/api";
+import {
+  api,
+  type SignatureDefinition,
+  type SignatureInspection,
+  type SignatureTestResult,
+} from "@shared/lib/api";
 import { useAuth } from "@shared/lib/auth-context";
 import { formatDateTime } from "@shared/lib/utils";
 
@@ -135,6 +140,136 @@ function SignatureTest({ request }: { request: TestRequest }) {
   );
 }
 
+/** Inspekcja jednej sygnatury: co dokładnie sprawdza, gdzie trafiła i jak w czasie. */
+function SignatureInspect({ id, onClose }: { id: string; onClose: () => void }) {
+  const query = useQuery<SignatureInspection, Error>({
+    queryKey: ["signature-inspect", id],
+    queryFn: () => api.inspectSignature(id),
+  });
+  const d = query.data;
+  return (
+    <Card data-demo="signature-inspect">
+      <CardHeader>
+        <CardTitle>Inspekcja sygnatury „{id}”</CardTitle>
+        <CardDescription>
+          {d
+            ? `${d.name} · ${KIND_LABEL[d.kind] ?? d.kind} · ${
+                d.source === "builtin"
+                  ? "wbudowana (rules/signatures.yaml)"
+                  : `własna, ${d.updated_by ?? ""} ${d.updated_at ? formatDateTime(d.updated_at) : ""}`
+              }`
+            : "Reguły, trafienia w historii przebiegów i dowody."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        {query.isPending && <p className="text-muted-foreground">Wczytuję…</p>}
+        {query.error && <p className="text-red-700">{query.error.message}</p>}
+        {d && (
+          <>
+            {d.description && <p>{d.description}</p>}
+            <div>
+              <h3 className="mb-1 font-medium">Reguły (wystarczy jedna)</h3>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Typ</Th>
+                    <Th>Co sprawdza</Th>
+                    <Th>Ruch sieciowy</Th>
+                    <Th>Trafienia w ostatnim przebiegu</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.rules.map((rule, index) => (
+                    <tr key={index}>
+                      <Td className="font-mono">{rule.type}</Td>
+                      <Td>{rule.text}</Td>
+                      <Td>
+                        {rule.sends_request
+                          ? "dodatkowe GET przy skanie"
+                          : "nie (odpowiedź już pobrana)"}
+                      </Td>
+                      <Td>
+                        {rule.latest_run_hits === null
+                          ? "sprawdza tylko skan (treść nie jest przechowywana)"
+                          : `${rule.latest_run_hits} z ${d.services_checked} usług`}
+                        {rule.offline_note && (
+                          <div className="text-xs text-muted-foreground">{rule.offline_note}</div>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+            <div>
+              <h3 className="mb-1 font-medium">Trafienia w historii przebiegów</h3>
+              {d.history.length === 0 ? (
+                <p className="text-muted-foreground">Brak zakończonych przebiegów.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2" data-demo="signature-history">
+                  {d.history.map((h) => (
+                    <Link
+                      key={h.run_id}
+                      to={`/discovery/${h.run_id}`}
+                      className="rounded-sm border border-border px-2 py-1 text-xs hover:border-primary"
+                    >
+                      {formatDateTime(h.created_at)}: <b>{h.hosts}</b> hostów, {h.services} usług
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="mb-1 font-medium">
+                Gdzie trafiła w ostatnim przebiegu
+                {d.latest_run ? ` (${d.latest_run.name})` : ""}
+              </h3>
+              {d.hosts.length === 0 ? (
+                <p className="text-muted-foreground">Nigdzie.</p>
+              ) : (
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>Host</Th>
+                      <Th>Usługa</Th>
+                      <Th>Dowód</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.hosts.map((hit) => (
+                      <tr key={`${hit.ip}:${hit.port}`}>
+                        <Td className="font-mono">
+                          <Link
+                            className="text-primary underline"
+                            to={`/discovery/${d.latest_run?.id}?host=${hit.ip}`}
+                          >
+                            {hit.ip}
+                          </Link>
+                        </Td>
+                        <Td className="font-mono text-xs">{hit.url ?? hit.port}</Td>
+                        <Td>{hit.evidence.join(", ")}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </div>
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground">Definicja</summary>
+              <pre className="mt-1 overflow-x-auto rounded-sm border border-border p-2 font-mono text-xs">
+                {JSON.stringify(d.definition, null, 2)}
+              </pre>
+            </details>
+          </>
+        )}
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          Zamknij
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Krótki opis dopasowań: typ i to, czego szuka (bez treści żądań, bo ich nie ma). */
 function matchSummary(match: SignatureDefinition["match"]): string {
   return match
@@ -150,6 +285,7 @@ function SignatureRows({
   onEdit,
   onDelete,
   onTest,
+  onInspect,
 }: {
   items: {
     definition: SignatureDefinition;
@@ -158,6 +294,7 @@ function SignatureRows({
   onEdit?: (definition: SignatureDefinition) => void;
   onDelete?: (id: string) => void;
   onTest: (id: string) => void;
+  onInspect: (id: string) => void;
 }) {
   return (
     <Table>
@@ -200,6 +337,14 @@ function SignatureRows({
                   onClick={() => onTest(definition.id)}
                 >
                   Testuj
+                </Button>{" "}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Inspekcja ${definition.id}`}
+                  onClick={() => onInspect(definition.id)}
+                >
+                  Inspekcja
                 </Button>{" "}
                 {onEdit && (
                   <Button size="sm" variant="outline" onClick={() => onEdit(definition)}>
@@ -287,6 +432,7 @@ export function Signatures() {
   const queryClient = useQueryClient();
   const [text, setText] = useState(EXAMPLE);
   const [testing, setTesting] = useState<TestRequest | null>(null);
+  const [inspecting, setInspecting] = useState<string | null>(null);
   const list = useQuery({ queryKey: ["signatures"], queryFn: api.signatures });
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteSignature(id),
@@ -327,6 +473,7 @@ export function Signatures() {
         <Editor text={text} setText={setText} onTest={() => setTesting({ yaml: text })} />
       )}
 
+      {inspecting && <SignatureInspect id={inspecting} onClose={() => setInspecting(null)} />}
       {testing && <SignatureTest request={testing} />}
 
       <Card>
@@ -350,6 +497,7 @@ export function Signatures() {
               onEdit={editable ? (d) => setText(JSON.stringify(d, null, 2)) : undefined}
               onDelete={editable ? (id) => remove.mutate(id) : undefined}
               onTest={(id) => setTesting({ id })}
+              onInspect={setInspecting}
             />
           )}
         </CardContent>
@@ -365,6 +513,7 @@ export function Signatures() {
             <SignatureRows
               items={list.data.builtin.map((definition) => ({ definition }))}
               onTest={(id) => setTesting({ id })}
+              onInspect={setInspecting}
             />
           )}
         </CardContent>

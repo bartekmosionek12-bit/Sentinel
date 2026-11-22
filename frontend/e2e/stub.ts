@@ -30,6 +30,7 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/discovery\/defectdojo\/status/, "dojo_status"],
   [/^\/api\/discovery\/settings/, "discovery_config"],
   [/^\/api\/discovery\/signatures$/, "signatures"],
+  [/^\/api\/discovery\/signatures\/[^/]+\/inspect$/, "signature_inspect"],
   [/^\/api\/discovery\/schedules$/, "discovery_schedules"],
   [/^\/api\/discovery\/targets\/preview/, "discovery_preview"],
 ];

@@ -233,3 +233,36 @@ def test_signature_test_on_stored_run(
         "/api/discovery/signatures/test", json={"yaml": "id: x1\nkind: zly\nmatch: []"}
     )
     assert bad.status_code == 422
+
+
+def test_signature_inspection(client: TestClient, session_factory: sessionmaker[Session]) -> None:
+    """Inspekcja: reguły po ludzku, trafienia w historii przebiegów i reguła po regule."""
+    yaml_text = (
+        "id: admin-nginx\nname: Panel za nginx\nkind: panel\nmatch:\n"
+        "  - {type: header, name: server, pattern: nginx}\n"
+        "  - {type: path, path: /admin, status: [200], pattern: Zaloguj}\n"
+        "  - {type: html, pattern: 'login-form'}\n"
+    )
+    assert client.put("/api/discovery/signatures/admin-nginx", json={"yaml": yaml_text}).is_success
+    lab = FakeLab(
+        {"10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http", product="nginx")]}
+    )
+    _run(client, session_factory, lab)
+    body = client.get("/api/discovery/signatures/admin-nginx/inspect").json()
+    assert body["source"] == "custom"
+    assert [r["text"] for r in body["rules"]] == [
+        "nagłówek server pasujący do „nginx”",
+        "GET /admin zwraca 200, treść pasująca do „Zaloguj”",
+        "fragment HTML pasujący do „login-form”",
+    ]
+    header, path, html_rule = body["rules"]
+    assert header["latest_run_hits"] >= 1
+    assert path["sends_request"] is True
+    assert path["offline_note"]
+    assert html_rule["offline"] is False
+    assert html_rule["latest_run_hits"] is None
+    assert len(body["history"]) == 1
+    builtin = client.get("/api/discovery/signatures/gitea/inspect").json()
+    assert builtin["source"] == "builtin"
+    assert builtin["history"][0]["hosts"] == 0
+    assert client.get("/api/discovery/signatures/brak/inspect").status_code == 404

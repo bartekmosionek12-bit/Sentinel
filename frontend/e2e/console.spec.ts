@@ -156,6 +156,18 @@ test("test sygnatury na zapisanym przebiegu, bez ruchu w sieci", async ({ page }
   expect(post?.body).toEqual({ id: "wordpress-login" });
 });
 
+test("inspekcja sygnatury: reguły, historia trafień i dowody", async ({ page }) => {
+  await stubApi(page);
+  await page.goto("/admin/discovery/sygnatury");
+  await page.getByRole("button", { name: "Inspekcja wordpress-login" }).click();
+  const card = page.locator("[data-demo=signature-inspect]");
+  await expect(card).toContainText("GET /wp-login.php zwraca 200");
+  await expect(card).toContainText("dodatkowe GET przy skanie");
+  await expect(card).toContainText("1 z 12 usług");
+  await expect(card.locator("[data-demo=signature-history] a")).toHaveCount(2);
+  await expect(card).toContainText("10.20.4.17");
+});
+
 test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async ({ page }) => {
   const sent = await stubApi(page);
   await page.goto("/admin/discovery/harmonogram");

@@ -351,9 +351,9 @@ def answer(
         [
             "Stan hosta liczę z ostatnich przebiegów obejmujących jego adres:",
             "• aktywny: odpowiedział w ostatnim przebiegu,",
-            "• niestabilny: w ostatnich przebiegach raz odpowiada, raz nie,",
-            "• niepotwierdzony: widziany tylko raz albo milczy od niedawna,",
-            "• nieaktywny: brak odpowiedzi w kilku kolejnych przebiegach.",
+            "• niestabilny: w ostatnich 5 przebiegach odpowiedzi przeplatają się z ich brakiem,",
+            "• niepotwierdzony: nie odpowiedział ostatnio, ale braków jest mniej niż 3,",
+            "• nieaktywny: 3 kolejne przebiegi bez odpowiedzi.",
             "Przebieg wstrzymany na końcu okna nie liczy się jako brak odpowiedzi.",
         ],
         [{"label": "Discovery", "to": "/discovery"}],

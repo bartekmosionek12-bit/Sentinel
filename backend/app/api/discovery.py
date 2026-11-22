@@ -1008,15 +1008,7 @@ def test_signature(
     for observation in observations:
         for item in observation.http or []:
             services += 1
-            seen = Observed(
-                headers={str(k).lower(): str(v) for k, v in (item.get("headers") or {}).items()},
-                cookies=[str(c.get("name", "")) for c in item.get("cookies") or []],
-                body="",
-                title=str(item.get("title") or ""),
-                generator="",
-                favicon_hash=item.get("favicon_hash"),
-                paths={str(k): int(v) for k, v in (item.get("paths") or {}).items()},
-            )
+            seen = _observed(item)
             for hit in evaluate((probe,), seen) if relaxed else []:
                 hits.append(
                     {
@@ -1035,6 +1027,155 @@ def test_signature(
         "services_checked": services,
         "hits": hits,
         "live_only": live_only,
+    }
+
+
+def _observed(item: dict[str, Any]) -> Observed:
+    """Zapisany wynik HTTP jako wejście do dopasowania (bez treści stron, których nie mamy)."""
+    return Observed(
+        headers={str(k).lower(): str(v) for k, v in (item.get("headers") or {}).items()},
+        cookies=[str(c.get("name", "")) for c in item.get("cookies") or []],
+        body="",
+        title=str(item.get("title") or ""),
+        generator="",
+        favicon_hash=item.get("favicon_hash"),
+        paths={str(k): int(v) for k, v in (item.get("paths") or {}).items()},
+    )
+
+
+def _rule_text(match: Any) -> str:
+    """Reguła sygnatury po ludzku: czego szuka i w czym."""
+    pattern = f"„{match.pattern.pattern}”" if match.pattern is not None else ""
+    if match.type == "header":
+        return f"nagłówek {match.name}" + (f" pasujący do {pattern}" if pattern else " (obecność)")
+    if match.type == "cookie":
+        return f"ciasteczko o nazwie pasującej do {pattern}"
+    if match.type == "favicon_hash":
+        return f"hash favicony równy {match.value}"
+    if match.type == "path":
+        codes = ", ".join(map(str, match.status))
+        body = f", treść pasująca do {pattern}" if pattern else ""
+        return f"GET {match.path} zwraca {codes}{body}"
+    where = {"html": "fragment HTML", "title": "tytuł strony", "generator": "meta generator"}
+    return f"{where[match.type]} pasujący do {pattern}"
+
+
+@router.get("/signatures/{signature_id}/inspect")
+def inspect_signature(signature_id: str, session: SessionDep, principal: Reader) -> dict[str, Any]:
+    """Inspekcja jednej sygnatury: reguły po ludzku, trafienia w historii, dowody i
+    dopasowanie każdej reguły osobno do ostatniego przebiegu (bez ruchu w sieci).
+    """
+    builtin = next(
+        (dict(i) for i in discovery_config().builtin_signatures if i.get("id") == signature_id),
+        None,
+    )
+    row = None
+    if builtin is None:
+        row = session.scalars(
+            select(CustomSignature).where(CustomSignature.signature_id == signature_id)
+        ).first()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Nie ma takiej sygnatury")
+    definition = builtin if builtin is not None else dict(row.definition)  # type: ignore[union-attr]
+    try:
+        (signature,) = parse_signatures({"signatures": [definition]})
+    except SignatureError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+
+    runs = list(
+        session.scalars(
+            select(DiscoveryRun)
+            .where(DiscoveryRun.status.in_(("done", "stopped", "paused")))
+            .order_by(DiscoveryRun.created_at.desc())
+            .limit(10)
+        )
+    )
+    history: list[dict[str, Any]] = []
+    hosts: list[dict[str, Any]] = []
+    rule_hits = [0] * len(signature.matches)
+    services_checked = 0
+    for index, run in enumerate(runs):
+        hit_services, hit_hosts = 0, set()
+        for observation in session.scalars(select(Observation).where(Observation.run_id == run.id)):
+            for item in observation.http or []:
+                found = next(
+                    (h for h in item.get("signatures") or [] if h.get("id") == signature.id),
+                    None,
+                )
+                if found:
+                    hit_services += 1
+                    hit_hosts.add(observation.ip)
+                    if index == 0:
+                        hosts.append(
+                            {
+                                "ip": observation.ip,
+                                "port": item.get("port"),
+                                "url": item.get("url"),
+                                "title": item.get("title"),
+                                "evidence": found.get("evidence") or [],
+                            }
+                        )
+                if index == 0:
+                    services_checked += 1
+                    seen = _observed(item)
+                    for position, match in enumerate(signature.matches):
+                        if match.type in LIVE_ONLY:
+                            continue
+                        probe = (
+                            match
+                            if match.type != "path"
+                            else type(match)(type=match.type, path=match.path, status=match.status)
+                        )
+                        single = type(signature)(
+                            id=signature.id,
+                            name=signature.name,
+                            kind=signature.kind,
+                            matches=(probe,),
+                        )
+                        if evaluate((single,), seen):
+                            rule_hits[position] += 1
+        history.append(
+            {
+                "run_id": str(run.id),
+                "name": run.name,
+                "created_at": run.created_at,
+                "services": hit_services,
+                "hosts": len(hit_hosts),
+            }
+        )
+    latest = runs[0] if runs else None
+    return {
+        "id": signature.id,
+        "name": signature.name,
+        "kind": signature.kind,
+        "description": signature.description,
+        "source": "builtin" if builtin is not None else "custom",
+        "updated_by": row.updated_by if row else None,
+        "updated_at": row.updated_at if row else None,
+        "definition": definition,
+        "rules": [
+            {
+                "type": match.type,
+                "text": _rule_text(match),
+                "sends_request": match.type == "path",
+                "offline": match.type not in LIVE_ONLY,
+                "offline_note": (
+                    "tylko kod odpowiedzi; treść sprawdza skan"
+                    if match.type == "path" and match.pattern is not None
+                    else None
+                ),
+                "latest_run_hits": rule_hits[i] if latest and match.type not in LIVE_ONLY else None,
+            }
+            for i, match in enumerate(signature.matches)
+        ],
+        "latest_run": (
+            {"id": str(latest.id), "name": latest.name, "created_at": latest.created_at}
+            if latest
+            else None
+        ),
+        "services_checked": services_checked,
+        "hosts": hosts,
+        "history": history,
     }
 
 

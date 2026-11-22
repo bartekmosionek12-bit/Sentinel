@@ -167,6 +167,7 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | POST | `/api/discovery/signatures/test` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | DELETE | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
 | PUT | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
+| GET | `/api/discovery/signatures/{signature_id}/inspect` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/states` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/targets/preview` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/explanations/jobs/{job_id}/events` | `findings:read` | ✓ | ✓ | ✓ | ✓ |
