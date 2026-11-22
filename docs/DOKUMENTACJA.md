@@ -4,7 +4,7 @@ Dokumentacja techniczna prototypu na zadanie HackNation **„Attack Surface Inte
 Centrum Bezpieczeństwa Informacji AGH (brief: [BRIEF.md](BRIEF.md), wymaganie formalne
 sekcji 4, pkt 2). Stan na 22.11.2026, gałąź `sprint-final` i `main`.
 
-Ten plik jest punktem wejścia: opisuje cały system od problemu po uruchomienie i testy, a
+Ten dokument jest punktem wejścia: opisuje cały system od problemu po uruchomienie i testy, a
 przy każdym temacie wskazuje dokument szczegółowy.
 
 | Dokument | Kiedy po niego sięgnąć |
