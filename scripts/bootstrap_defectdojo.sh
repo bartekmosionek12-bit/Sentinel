@@ -1,48 +1,49 @@
 #!/usr/bin/env bash
 # Tworzy lokalny product/engagement/test i token API; zapisuje je wyłącznie w ignorowanym .env.
+# Bez Pythona na hoście i bez plików tymczasowych: na Windowsie (Git Bash + Python z Windowsa)
+# ścieżka /tmp z mktemp nie istnieje dla Pythona, stąd wcześniejszy FileNotFoundError.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 umask 077
-result_file=$(mktemp)
-trap 'rm -f "$result_file"' EXIT
 code=$(cat <<'PY'
-import json
-from datetime import date
+from django.utils import timezone
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from dojo.models import Product_Type, Product, Engagement, Test_Type, Test
+now = timezone.now()
 admin = User.objects.get(username="admin")
 token, _ = Token.objects.get_or_create(user=admin)
 ptype, _ = Product_Type.objects.get_or_create(name="Sentinel ASI")
 product, _ = Product.objects.get_or_create(name="Sentinel ASI Demo", defaults={"description": "Lokalne obserwacje Sentinel ASI", "prod_type": ptype})
-engagement, _ = Engagement.objects.get_or_create(product=product, name="Sprint final", defaults={"target_start": date.today(), "target_end": date.today()})
+engagement, _ = Engagement.objects.get_or_create(product=product, name="Sprint final", defaults={"target_start": now.date(), "target_end": now.date()})
 test_type, _ = Test_Type.objects.get_or_create(name="Sentinel ASI Discovery")
-test, _ = Test.objects.get_or_create(engagement=engagement, test_type=test_type, title="Discovery", defaults={"target_start": date.today(), "target_end": date.today()})
-print(json.dumps({"token": token.key, "product": product.id, "engagement": engagement.id, "test": test.id}))
+test, _ = Test.objects.get_or_create(engagement=engagement, test_type=test_type, title="Discovery", defaults={"target_start": now, "target_end": now})
+print("SENTINEL_DD_VALUES", token.key, product.id, engagement.id, test.id)
 PY
 )
-docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml exec -T dd-uwsgi python manage.py shell -c "$code" > "$result_file"
-"$(command -v python3 || command -v python)" - "$result_file" <<'PY'
-import json
-import sys
-from pathlib import Path
-data = json.loads(Path(sys.argv[1]).read_text().strip().splitlines()[-1])
-path = Path(".env")
-values = {
-    "DEFECTDOJO_URL": "http://dd-nginx:8080",
-    "DEFECTDOJO_API_TOKEN": str(data["token"]),
-    "DEFECTDOJO_TOKEN": str(data["token"]),
-    "DEFECTDOJO_PRODUCT_ID": str(data["product"]),
-    "DEFECTDOJO_ENGAGEMENT_ID": str(data["engagement"]),
-    "DEFECTDOJO_TEST_ID": str(data["test"]),
-}
-lines = path.read_text().splitlines()
-lines = [line for line in lines if line.partition("=")[0] not in values]
-lines.extend(f"{key}={value}" for key, value in values.items())
-path.write_text("\n".join(lines) + "\n")
-path.chmod(0o600)
-print("Lokalny profil DefectDojo skonfigurowany")
-PY
+output=$(docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml exec -T dd-uwsgi \
+  python manage.py shell -c "$code" | tr -d '\r')
+read -r _ token product engagement test < <(printf '%s\n' "$output" | grep '^SENTINEL_DD_VALUES ' | tail -n 1) || true
+if [ -z "${token:-}" ] || [ -z "${test:-}" ]; then
+  echo "Nie udało się odczytać tokenu DefectDojo. Wyjście:" >&2
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+
+keys="DEFECTDOJO_URL DEFECTDOJO_API_TOKEN DEFECTDOJO_TOKEN DEFECTDOJO_PRODUCT_ID DEFECTDOJO_ENGAGEMENT_ID DEFECTDOJO_TEST_ID"
+touch .env
+new_env=$(awk -v keys="$keys" 'BEGIN { n = split(keys, k, " "); for (i = 1; i <= n; i++) drop[k[i]] = 1 }
+  { sub(/\r$/, ""); split($0, kv, "="); if (!(kv[1] in drop)) print }' .env)
+{
+  [ -n "$new_env" ] && printf '%s\n' "$new_env"
+  printf 'DEFECTDOJO_URL=http://dd-nginx:8080\n'
+  printf 'DEFECTDOJO_API_TOKEN=%s\nDEFECTDOJO_TOKEN=%s\n' "$token" "$token"
+  printf 'DEFECTDOJO_PRODUCT_ID=%s\nDEFECTDOJO_ENGAGEMENT_ID=%s\nDEFECTDOJO_TEST_ID=%s\n' "$product" "$engagement" "$test"
+} > .env.tmp
+mv .env.tmp .env
+chmod 600 .env 2>/dev/null || true
+echo "Lokalny profil DefectDojo skonfigurowany"
+
 # Nowe zmienne z .env trafiają do kontenerów dopiero po ich odtworzeniu (sam restart nie wystarczy).
 # DD_NO_RESTART=1: wywołanie ze start.sh przed startem aplikacji, więc nie ma czego odtwarzać.
 if [ -z "${DD_NO_RESTART:-}" ]; then
