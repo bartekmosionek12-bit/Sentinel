@@ -165,6 +165,15 @@ test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async
   });
 });
 
+test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
+  await stubApi(page);
+  await page.goto("/admin/discovery/porownanie");
+  const trend = page.locator("[data-demo=trend]");
+  await expect(trend.getByRole("figure", { name: "Aktywne hosty" })).toBeVisible();
+  await expect(trend.getByRole("figure", { name: "Usługi" }).getByRole("button")).toHaveCount(3);
+  await trend.screenshot({ path: "test-results/trend.png" });
+});
+
 test("rola Odczyt widzi sygnatury, ale bez edytora", async ({ page }) => {
   await stubApi(page, { role: "viewer" });
   await page.goto("/admin/discovery/sygnatury");

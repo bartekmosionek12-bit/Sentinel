@@ -34,6 +34,11 @@ echo "==> Start aplikacji bez demo (zakres: ${SCOPE_FILE})"
 # Kontenery demo-lab z wcześniejszego uruchomienia demo nie są tu potrzebne.
 docker compose --profile demo rm -sf mailpit lab-web lab-proxy lab-legacy lab-shop lab-cache \
   lab-poisoned lab-ssh >/dev/null 2>&1 || true
+# Lokalny model językowy (ok. 6 GB RAM) tylko na życzenie albo gdy modele są już pobrane.
+if [ "${SENTINEL_LLM:-0}" = "1" ] || compgen -G "data/models/*.gguf" >/dev/null; then
+  profiles+=(--profile llm)
+  echo "==> Lokalny model językowy włączony (profil llm)"
+fi
 docker compose "${profiles[@]}" up -d --build
 
 echo "==> Konta w Keycloaku (admin, editor, modifier, viewer; każde z TOTP)"

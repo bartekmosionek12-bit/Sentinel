@@ -19,6 +19,82 @@ import { formatDateTime } from "@shared/lib/utils";
 
 import { HOST_STATE } from "@/labels";
 
+/** Słupki jednej miary na przebieg (najstarszy po lewej). Jedna oś, jedna seria. */
+function TrendBars({
+  title,
+  runs,
+  value,
+}: {
+  title: string;
+  runs: DiscoveryRun[];
+  value: (run: DiscoveryRun) => number;
+}) {
+  const max = Math.max(1, ...runs.map(value));
+  const [hover, setHover] = useState<DiscoveryRun | null>(null);
+  const shown = hover ?? runs[runs.length - 1];
+  return (
+    <figure className="min-w-0" aria-label={title}>
+      <figcaption className="mb-1 flex items-baseline justify-between text-sm">
+        <span className="font-medium">{title}</span>
+        {shown && (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatDateTime(shown.created_at)}: <b className="text-foreground">{value(shown)}</b>
+          </span>
+        )}
+      </figcaption>
+      <div
+        className="flex h-24 items-end gap-[2px] border-b border-border"
+        onMouseLeave={() => setHover(null)}
+      >
+        {runs.map((run) => (
+          <button
+            key={run.id}
+            type="button"
+            className="flex h-full min-w-0 max-w-12 flex-1 cursor-default items-end"
+            title={`${formatDateTime(run.created_at)}: ${value(run)}`}
+            aria-label={`${run.name}: ${value(run)}`}
+            onMouseEnter={() => setHover(run)}
+            onFocus={() => setHover(run)}
+          >
+            <span
+              className="w-full rounded-t-[4px]"
+              style={{
+                height: `${Math.max(2, (value(run) / max) * 100)}%`,
+                background: "var(--color-primary)",
+                opacity: hover && hover.id !== run.id ? 0.45 : 1,
+              }}
+            />
+          </button>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
+function ChangesOverTime({ runs }: { runs: DiscoveryRun[] }) {
+  const chronological = [...runs].reverse().slice(-30);
+  if (chronological.length < 2) return null;
+  return (
+    <Card className="mb-6" data-demo="trend">
+      <CardHeader>
+        <CardTitle>Zmiany w czasie</CardTitle>
+        <CardDescription>
+          Ostatnie {chronological.length} przebiegów, od najstarszego. Najedź na słupek, żeby
+          zobaczyć datę i wartość.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6 md:grid-cols-2">
+        <TrendBars title="Aktywne hosty" runs={chronological} value={(r) => r.hosts_up} />
+        <TrendBars
+          title="Usługi"
+          runs={chronological}
+          value={(r) => Number(r.summary?.services ?? 0)}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 function RunSelect({
   label,
   runs,
@@ -121,6 +197,8 @@ export function DiscoveryCompare() {
           </Card>
         ))}
       </div>
+
+      <ChangesOverTime runs={done} />
 
       <Card className="mb-6">
         <CardContent className="grid gap-4 pt-5 md:grid-cols-[1fr_1fr_auto]">
