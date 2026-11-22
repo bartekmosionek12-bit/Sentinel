@@ -561,6 +561,11 @@ każde wywołanie przechodzi przez politykę i scope_guard. Poświadczenia SSH w
 dane. Test bezpieczeństwa agenta (wstrzyknięcia poleceń w banerach, tytułach, opisach CVE)
 jest bramką zmian konfiguracji; wyniki są podpisane Ed25519 (`ai-tests/RESULTS.md`).
 
+Na górze strony Agent AI jest karta „Model LLM agenta” z przyciskiem „Sprawdź model LLM”
+(`GET /api/llm/status`: czy `LLM_MODEL` jest ustawiony i czy Ollama ma ten model). Bez
+działającego modelu agent ma w konsoli stan „nieaktywny: brak modelu LLM”, a pole „Zleć
+zadanie” jest zablokowane z podpowiedzią, co ustawić.
+
 ### 13.3 Moduł podatności
 
 Inwentarz zasobów, dopasowanie oprogramowania do CVE z feedów NVD, CISA KEV i EPSS (w trybie

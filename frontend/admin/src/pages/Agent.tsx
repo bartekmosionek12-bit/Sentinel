@@ -8,7 +8,13 @@ import { Button } from "@shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@shared/components/ui/card";
 import { Input } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
-import { api, type AgentStatus, type AgentStep, type AgentTask } from "@shared/lib/api";
+import {
+  api,
+  type AgentStatus,
+  type AgentStep,
+  type AgentTask,
+  type LlmStatus,
+} from "@shared/lib/api";
 import { useAuth } from "@shared/lib/auth-context";
 import { SignedBy } from "@shared/lib/auth";
 import { formatDateTime } from "@shared/lib/utils";
@@ -60,8 +66,58 @@ function refreshSoon(queryClient: ReturnType<typeof useQueryClient>) {
   window.setTimeout(() => void queryClient.invalidateQueries(), 8000);
 }
 
+/** Model LLM agenta: jeden przycisk sprawdza, czy model jest ustawiony i pobrany. Bez modelu
+ *  agent (warstwa 3) jest w konsoli nieaktywny i nie przyjmuje zadań. */
+function LlmCard({
+  status,
+  failed,
+  checking,
+  onCheck,
+}: {
+  status: LlmStatus | undefined;
+  failed: boolean;
+  checking: boolean;
+  onCheck: () => void;
+}) {
+  const ready = status?.available === true;
+  return (
+    <Card className={ready ? "mb-6" : "mb-6 border-amber-300"} data-demo="agent-llm">
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Model LLM agenta</CardTitle>
+          {status === undefined ? (
+            <Badge variant={failed ? "danger" : "neutral"}>
+              {failed ? "nie udało się sprawdzić" : "sprawdzam…"}
+            </Badge>
+          ) : ready ? (
+            <Badge variant="ok">gotowy: {status.model}</Badge>
+          ) : (
+            <Badge variant="warn">brak modelu: agent nieaktywny</Badge>
+          )}
+          {status?.external_enabled === false && (
+            <Badge variant="neutral">zewnętrzny LLM wyłączony</Badge>
+          )}
+        </div>
+        <CardDescription>
+          {ready
+            ? "Model lokalny odpowiada, więc agent może układać plany. Dane nie opuszczają serwera."
+            : "Agent AI działa tylko z modelem LLM. Ustaw LLM_MODEL w .env i pobierz model (scripts/fetch_models.sh), potem sprawdź ponownie."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" disabled={checking} onClick={onCheck}>
+            {checking ? "Sprawdzam model…" : "Sprawdź model LLM"}
+          </Button>
+          {status && <span className="text-sm text-muted-foreground">{status.detail}</span>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Stan agenta i kill switch. Wyłączenie działa od razu: MCP odrzuca wywołania, zadania stają. */
-function StatusCard({ status }: { status: AgentStatus }) {
+function StatusCard({ status, llmReady }: { status: AgentStatus; llmReady: boolean }) {
   const queryClient = useQueryClient();
   const [reason, setReason] = useState("");
   const kill = useMutation({
@@ -79,6 +135,8 @@ function StatusCard({ status }: { status: AgentStatus }) {
           <CardTitle>Stan agenta</CardTitle>
           {status.killed ? (
             <Badge variant="danger">wyłączony kill switchem</Badge>
+          ) : !llmReady ? (
+            <Badge variant="warn">nieaktywny: brak modelu LLM</Badge>
           ) : capability ? (
             <Badge variant="ok">aktywny, zdolności v{capability.version}</Badge>
           ) : (
@@ -207,7 +265,7 @@ function KillEffects({ status }: { status: AgentStatus }) {
   );
 }
 
-function NewTask({ disabled }: { disabled: boolean }) {
+function NewTask({ disabled, noModel }: { disabled: boolean; noModel: boolean }) {
   const queryClient = useQueryClient();
   const layer3 = useAuth().can("redteam:layer3");
   const [command, setCommand] = useState("");
@@ -246,7 +304,9 @@ function NewTask({ disabled }: { disabled: boolean }) {
         </div>
         {disabled && (
           <p className="mt-2 text-sm text-muted-foreground">
-            Agent nie przyjmuje zadań: brak aktywnych zdolności albo włączony kill switch.
+            {noModel
+              ? "Agent nie przyjmuje zadań: nie ma działającego modelu LLM (sprawdź go wyżej)."
+              : "Agent nie przyjmuje zadań: brak aktywnych zdolności albo włączony kill switch."}
           </p>
         )}
         {!layer3 && (
@@ -487,7 +547,9 @@ export function Agent() {
     queryFn: api.agentTasks,
     refetchInterval: 5_000,
   });
-  const ready = Boolean(status.data && !status.data.killed && status.data.capability);
+  const llm = useQuery({ queryKey: ["llm-status"], queryFn: api.llmStatus, staleTime: 30_000 });
+  const llmReady = llm.data?.available === true;
+  const ready = Boolean(status.data && !status.data.killed && status.data.capability && llmReady);
 
   return (
     <>
@@ -501,8 +563,14 @@ export function Agent() {
         empty={false}
         emptyText=""
       />
-      {status.data && <StatusCard status={status.data} />}
-      <NewTask disabled={!ready} />
+      <LlmCard
+        status={llm.data}
+        failed={llm.isError}
+        checking={llm.isFetching}
+        onCheck={() => void llm.refetch()}
+      />
+      {status.data && <StatusCard status={status.data} llmReady={llmReady} />}
+      <NewTask disabled={!ready} noModel={!llmReady} />
       <h2 className="mb-3 text-base font-semibold">Zadania</h2>
       <QueryState
         isPending={tasks.isPending}
