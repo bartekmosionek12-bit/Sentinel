@@ -128,6 +128,30 @@ for attempt in 1 2 3 4 5 6; do
   sleep 10
 done
 
+# Konta od razu widoczne w panelu IAM (bez tego pojawiają się dopiero po pierwszym logowaniu).
+KC_USERS=$(docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh get users -r sentinel \
+  -q max=500 --fields id,username,firstName,lastName,email 2>/dev/null || echo '[]')
+REGISTER=$(USERS="$USERS" KC_USERS="$KC_USERS" "$PY" - <<'PY'
+import json, os
+wanted = {u["username"]: u for u in json.loads(os.environ["USERS"])["users"]}
+out = []
+for kc in json.loads(os.environ["KC_USERS"] or "[]"):
+    demo = wanted.get(kc.get("username"))
+    if demo:
+        out.append({
+            "subject": kc["id"], "username": kc["username"],
+            "display_name": f'{kc.get("firstName", "")} {kc.get("lastName", "")}'.strip(),
+            "email": kc.get("email", ""), "roles": demo["realmRoles"],
+        })
+print(json.dumps(out))
+PY
+)
+if printf '%s' "$REGISTER" | docker compose exec -T api python -m app.cli register-users >/dev/null; then
+  echo "Konta demo zapisane w panelu IAM."
+else
+  echo "Uwaga: nie udało się zapisać kont w panelu IAM; pojawią się po pierwszym logowaniu." >&2
+fi
+
 echo "Konta demo gotowe (hasła w ${CREDS}):"
 echo "  admin     Administracja (wszystko, edytor ról)"
 echo "  editor    Dodawanie, usuwanie, modyfikacja (skany, zatwierdzanie akcji L2+)"

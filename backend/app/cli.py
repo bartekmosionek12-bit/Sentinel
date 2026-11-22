@@ -27,7 +27,7 @@ from app.feeds.service import FEEDS, sync_all
 from app.iam.rbac import RoleCatalog
 from app.iam.sync import sync_catalog
 from app.inventory.service import import_assets, parse_assets_csv
-from app.models import Report
+from app.models import Report, User
 from app.pipeline import analyze
 from app.reports.delivery import create_digest, email_report
 from app.reports.service import create_report
@@ -293,6 +293,55 @@ def cmd_email_report(session: Session, report_id: str) -> dict[str, Any]:
     return {"status": email_report(session, report, channel_sender(), actor="cli:email-report")}
 
 
+def cmd_register_users(session: Session, settings: Settings, raw: str) -> dict[str, Any]:
+    """Konta demo z Keycloaka od razu widoczne w panelu IAM, jeszcze przed pierwszym logowaniem.
+
+    Wejście (stdin): lista {subject, username, display_name, email, roles}. Role są tylko
+    podglądem; o dostępie decyduje zawsze bieżący token. Tylko w trybie demo.
+    """
+    if not settings.demo_mode:
+        raise CliError("register-users działa tylko przy DEMO_MODE=true (konta demo).")
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise CliError(f"Niepoprawny JSON: {error}") from error
+    if not isinstance(items, list):
+        raise CliError("Oczekiwano listy kont.")
+    added, updated = [], []
+    for item in items:
+        if not isinstance(item, dict) or not item.get("subject") or not item.get("username"):
+            raise CliError("Każde konto musi mieć subject i username.")
+        user = session.scalar(select(User).where(User.subject == item["subject"]))
+        roles = sorted(str(r) for r in item.get("roles", []))
+        if user is None:
+            session.add(
+                User(
+                    subject=item["subject"],
+                    username=item["username"],
+                    display_name=item.get("display_name", ""),
+                    email=item.get("email", ""),
+                    kind="human",
+                    roles=roles,
+                )
+            )
+            added.append(item["username"])
+        else:
+            user.username = item["username"]
+            user.display_name = item.get("display_name", user.display_name)
+            user.roles = roles
+            updated.append(item["username"])
+    audit.record(
+        session,
+        audit.AuditEvent(
+            actor="demo_users",
+            action="demo_users_registered",
+            reason="Konta demo z Keycloaka zapisane w IAM przed pierwszym logowaniem",
+            inputs={"added": added, "updated": updated},
+        ),
+    )
+    return {"added": added, "updated": updated}
+
+
 def cmd_inject_kev(session: Session, settings: Settings, cve_id: str) -> dict[str, Any]:
     """Scenariusz zero-day: syntetyczny wpis KEV. Tylko w trybie demo."""
     if not settings.demo_mode:
@@ -346,6 +395,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "agent-bootstrap", help="zdolności agenta dla demo-lab i test agenta (tylko DEMO_MODE)"
     )
     commands.add_parser("sync-roles", help="kopia rules/roles.yaml w bazie (po migracjach)")
+    commands.add_parser(
+        "register-users", help="konta demo z Keycloaka w panelu IAM (JSON na stdin, DEMO_MODE)"
+    )
     commands.add_parser("report", help="raport o otwartych zagrożeniach")
     commands.add_parser("digest", help="digest z powiadomień czekających")
     commands.add_parser("email-report", help="e-mail z raportem i PDF").add_argument("report_id")
@@ -378,6 +430,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = cmd_email_report(session, args.report_id)
             elif args.command == "inject-kev":
                 result = cmd_inject_kev(session, settings, args.cve_id)
+            elif args.command == "register-users":
+                result = cmd_register_users(session, settings, sys.stdin.read())
             elif args.command == "agent-bootstrap":
                 result = cmd_agent_bootstrap(session, settings)
             elif args.command == "sync-roles":
