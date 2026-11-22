@@ -68,6 +68,19 @@ def run_discovery(run_id: str) -> dict[str, Any]:
         return {"run_id": run_id, "status": run.status, "hosts_up": run.hosts_up}
 
 
+@celery_app.task(name="app.workers.tasks.discovery_schedules")
+def discovery_schedules() -> dict[str, Any]:
+    """Co minutę: start przebiegów z harmonogramu i wznowienia w kolejnym oknie."""
+    from app.api.deps import CeleryDispatcher
+    from app.discovery.engine import DiscoveryConfig
+    from app.discovery.schedule import tick
+
+    config = DiscoveryConfig.from_file(get_settings().rules_dir / "discovery.yaml")
+    with get_sessionmaker()() as session:
+        started = tick(session, config, CeleryDispatcher())
+        return {"started": [str(run.id) for run in started]}
+
+
 @celery_app.task(name="app.workers.tasks.scans.approve_action")
 def approve_action(action_id: str, approved_by: str, reason: str) -> dict[str, Any]:
     with get_sessionmaker()() as session:

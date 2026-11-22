@@ -405,8 +405,11 @@ services:
 
   # Lokalny model językowy. Bez portów na hoście i bez dostępu do internetu: pliki modeli
   # pobiera na hoście scripts/fetch_models.sh, a kontener tylko je wczytuje.
+  # Opcjonalny (profil llm): bez niego Sentek i objaśnienia działają na słowach kluczowych
+  # i szablonach. start.sh włącza go sam, gdy w data/models są pliki modelu albo SENTINEL_LLM=1.
   ollama:
     image: ollama/ollama:0.40.16
+    profiles: ["llm"]
     environment:
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
       OLLAMA_NUM_PARALLEL: "1"

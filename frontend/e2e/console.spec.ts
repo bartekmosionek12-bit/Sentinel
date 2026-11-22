@@ -141,6 +141,39 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
   expect((put?.body as { yaml: string }).yaml).toContain("kind: technology");
 });
 
+test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/harmonogram");
+  await expect(page.getByRole("heading", { name: "Harmonogram discovery" })).toBeVisible();
+  const row = page.locator("[data-demo=schedule-row]");
+  await expect(row).toContainText("Nocny skan labu");
+  await expect(row).toContainText("codziennie, 22:00–06:00");
+  await expect(row).toContainText("pon–pt");
+  await expect(row).toContainText("wznowienie");
+  await page.getByPlaceholder("np. Nocny skan kampusu").fill("Weekend");
+  await page.getByLabel("Cele harmonogramu").fill("10.20.0.0/18");
+  await page.getByLabel("Częstotliwość").selectOption("10080");
+  await page.getByLabel("Początek okna").fill("01:00");
+  await page.getByLabel("Koniec okna").fill("05:00");
+  await page.getByRole("button", { name: "Dodaj harmonogram" }).click();
+  await expect.poll(() => sent.find((s) => s.method === "POST")?.body).toMatchObject({
+    name: "Weekend",
+    text: "10.20.0.0/18",
+    interval_minutes: 10080,
+    window_start: "01:00",
+    window_end: "05:00",
+  });
+});
+
+test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
+  await stubApi(page);
+  await page.goto("/admin/discovery/porownanie");
+  const trend = page.locator("[data-demo=trend]");
+  await expect(trend.getByRole("figure", { name: "Aktywne hosty" })).toBeVisible();
+  await expect(trend.getByRole("figure", { name: "Usługi" }).getByRole("button")).toHaveCount(3);
+  await trend.screenshot({ path: "test-results/trend.png" });
+});
+
 test("rola Odczyt widzi sygnatury, ale bez edytora", async ({ page }) => {
   await stubApi(page, { role: "viewer" });
   await page.goto("/admin/discovery/sygnatury");

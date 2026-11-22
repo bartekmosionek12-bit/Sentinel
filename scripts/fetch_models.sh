@@ -39,8 +39,8 @@ download() {
 register() {
   local name=$1 modelfile=$2
   echo "==> Rejestruję $name w Ollamie"
-  docker compose up -d ollama >/dev/null
-  docker compose exec -T ollama ollama create "$name" -f "/modelfiles/$modelfile"
+  docker compose --profile llm up -d ollama >/dev/null
+  docker compose --profile llm exec -T ollama ollama create "$name" -f "/modelfiles/$modelfile"
 }
 
 fetch() {
@@ -80,4 +80,4 @@ else
 fi
 for entry in $wanted; do fetch "$entry"; done
 echo "Gotowe. Modele w Ollamie:"
-docker compose exec -T ollama ollama list
+docker compose --profile llm exec -T ollama ollama list

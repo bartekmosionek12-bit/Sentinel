@@ -170,7 +170,10 @@ def unstable_hosts(session: Session, intent: Intent) -> Answer:
         if state["state"] in groups:
             history = "".join("✓" if seen else "✗" for seen in reversed(state["history"]))
             label = f"{names[ip]} ({ip})" if ip in names else ip
-            groups[state["state"]].append(f"{label}, historia {history}")
+            when = (state.get("time_profile") or {}).get("label")
+            groups[state["state"]].append(
+                f"{label}, historia {history}" + (f", {when}" if when else "")
+            )
     active = sum(1 for s in states.values() if s["state"] == "active")
     if not any(groups.values()):
         return Answer(

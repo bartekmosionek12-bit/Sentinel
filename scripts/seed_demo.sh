@@ -35,6 +35,11 @@ else
 fi
 
 echo "==> Start stosu z profilem demo (zgoda seed_demo do ${DEMO_APPROVAL_EXPIRES_AT})"
+# Lokalny model językowy (ok. 6 GB RAM) tylko na życzenie albo gdy modele są już pobrane.
+if [ "${SENTINEL_LLM:-0}" = "1" ] || compgen -G "data/models/*.gguf" >/dev/null; then
+  profiles+=(--profile llm)
+  echo "==> Lokalny model językowy włączony (profil llm)"
+fi
 docker compose "${profiles[@]}" up -d --build
 
 echo "==> Czekam 25 s, aż usługi demo-lab zaczną nasłuchiwać"

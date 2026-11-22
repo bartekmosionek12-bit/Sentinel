@@ -1,137 +1,115 @@
 # Macierz zgodności z briefem AGH
 
-Stan na 21.11.2026 (po P1: role z briefu i jedna konsola). Źródło wymagań: [BRIEF.md](BRIEF.md).
-Ta tabela jest też slajdem prezentacji; aktualizujemy ją po każdym etapie.
+Stan na 22.11.2026 (po sprincie końcowym). Źródło wymagań: [BRIEF.md](BRIEF.md). Jak to
+sprawdzić krok po kroku: [TESTOWANIE.md](TESTOWANIE.md).
 
-**Status:** ✅ jest · 🟡 częściowo · ❌ brak. „Częściowo” znaczy, że jest działający kod, który
-da się rozbudować, ale nie spełnia wymagania w całości.
+**Status:** ✅ jest · 🟡 częściowo · ❌ brak.
 
-**Kryteria oceny (sekcja 8 briefu):**
-
-| Kod | Kryterium | Waga |
-|---|---|---|
-| K1 | Skuteczność discovery i poprawność identyfikacji usług w dużej infrastrukturze | 30% |
-| K2 | Jakość techniczna, dokumentacja, prezentacja, uruchomienie, import/eksport, DefectDojo | 20% |
-| K3 | Zmiany w czasie, niestabilne hosty, użyteczność raportowania | 15% |
-| K4 | Bezpieczeństwo działania, kontrola intensywności, przejrzystość dashboardu | 15% |
-| K5 | Fingerprinting, technologie, CMS-y, nagłówki, ciasteczka, sygnatury | 10% |
-| K6 | Role i zabezpieczenie danych | 10% |
-
-**Etapy:** P1 role i porządki · P2 wejście danych, nadpisania, eksport · P3 discovery na skalę ·
-P4 fingerprinting HTTP i technologie · P5 zmiany w czasie i niestabilne hosty · P6 DefectDojo ·
-P7 własne sygnatury · P8 harmonogram i okna · P9 szyfrowanie w spoczynku · P10 dashboard,
-raporty, Sentek · P11 testy AI w konsoli i test endpointu · P12 walidacja, dokumentacja,
-prezentacja. Plan i linia cięcia: [ROADMAP.md](ROADMAP.md).
+**Kryteria oceny (sekcja 8 briefu):** K1 discovery 30% · K2 jakość, dokumentacja, import i
+eksport, DefectDojo 20% · K3 zmiany w czasie i hosty niestabilne 15% · K4 bezpieczeństwo i
+dashboard 15% · K5 fingerprinting i sygnatury 10% · K6 role i ochrona danych 10%.
 
 ## Podsumowanie
 
 | Grupa | ✅ | 🟡 | ❌ |
 |---|---|---|---|
-| Sekcja 2, pkt 1–16 | 3 | 8 | 5 |
-| Sygnatury i harmonogram (akapity sekcji 2) | 0 | 1 | 1 |
-| Minimalny zakres (sekcja 3) | 3 | 4 | 7 |
-| Mile widziany zakres (sekcja 3) | 0 | 5 | 6 |
-| Wymagania formalne i techniczne (sekcje 4–5) | 1 | 3 | 1 |
-| Walidacja (sekcja 6, pkt 1–12) | 2 | 5 | 5 |
-| **Razem (60 pozycji)** | **9** | **26** | **25** |
+| Sekcja 2, pkt 1–16 | 16 | 0 | 0 |
+| Sygnatury i harmonogram (akapity sekcji 2) | 2 | 0 | 0 |
+| Minimalny zakres (sekcja 3) | 14 | 0 | 0 |
+| Mile widziany zakres (sekcja 3) | 10 | 1 | 0 |
+| Walidacja (sekcja 6, pkt 1–12) | 12 | 0 | 0 |
 
-Wniosek: mamy solidne fundamenty bezpieczeństwa (scope_guard, audyt, RBAC deny-by-default,
-Keycloak z MFA, OpenBao, agent z zatwierdzaniem i testem bezpieczeństwa), ale rdzeń briefu
-(discovery na skalę, fingerprinting HTTP, sygnatury, porównanie przebiegów, DefectDojo,
-szyfrowanie pól) trzeba zbudować. Największe ryzyko punktowe: K1 (30%) i K2 (20%, DefectDojo
-obowiązkowe).
+Częściowo zostaje tylko N11 (źródła pasywne): podłączymy je, gdy organizator je udostępni.
 
 ## A. Sekcja 2, pkt 1–16
 
-| ID | Wymaganie | Status | Gdzie dziś w kodzie | Co trzeba zrobić | Etap | Kryt. |
-|---|---|---|---|---|---|---|
-| R1 | Wczytanie listy IP, zakresów CIDR lub domen | 🟡 | `POST /api/assets`, `POST /api/assets/import` (CSV, `inventory/service.py:parse_assets_csv`); zakres skanu tylko z pliku `rules/scope.yaml` | Obiekt „cel” (IP, CIDR, domena) z formularza i z pliku CSV/JSON; walidacja, deduplikacja, podgląd; cele zasilają allowlistę scope_guard (tylko rola z uprawnieniem) | P2 | K2 |
-| R2 | Bezpieczny skan discovery: wielowątkowy, pomiar czasu, podział na optymalne podgrupy | 🟡 | `scanners/nmap.py` (nmap `-sn`, `-sV`, `-T4`), `scans/service.py` (jeden przebieg na sieć, sekwencyjnie), `ScanRun.started_at/finished_at`, limit per cel w `core/scope_guard.py` | Podział na paczki o rozmiarze dobieranym z zmierzonej szybkości, równoległe workery, czas paczki i przebiegu, ETA, zapis przyrostowy, limity globalne i per podsieć, timing nie agresywniejszy niż T3 | P3 | K1, K4 |
-| R3 | Wykrycie aktywnych hostów | 🟡 | `nmap -sn -PS` na 9 portach TCP (`DISCOVERY_PORTS`), `inventory/service.py:record_discovery` (nowy / widziany / missing po jednym braku) | Kombinacja technik (ICMP echo i timestamp, TCP SYN/ACK, ARP lokalnie, wybrane UDP), tylko porty dozwolone przez organizatora; stan hosta według reguł (P5) | P3 | K1 |
-| R4 | Identyfikacja podstawowych usług | ✅ | `nmap -sV` na „top 1000” + porty dodatkowe (`rules/scan_rules.yaml`), `record_host_scan`, tabela `software` z CPE | Przenieść na paczki i równoległość (P3), zapisać banery, intensywność `-sV` w konfiguracji | P3 | K1 |
-| R5 | HTTP/HTTPS: tytuł, kod, nagłówki, ciasteczka, certyfikat TLS, przekierowania | 🟡 | `scanners/http_probe.py`: tylko kod, nagłówek `Server` i tytuł; tylko jako narzędzie agenta `probe_http` | Moduł fingerprintingu w zwykłym przebiegu: wszystkie nagłówki, ciasteczka z atrybutami, TLS (wystawca, podmiot, SAN, ważność, algorytmy), łańcuch przekierowań, hash favicony (mmh3), fragmenty HTML; httpx (Go) + własny moduł | P4 | K5, K1 |
-| R6 | Proste wykrywanie technologii: CMS, framework, serwer aplikacyjny, IoT | ❌ | Tylko produkt i wersja z `nmap -sV` | Fingerprinty (baza Wappalyzer/webanalyze, sygnatury nmap, własne), poziom pewności z dowodami | P4 | K5 |
-| R7 | Staging/środowisko testowe, panel administracyjny | ❌ | brak | Reguły na nazwach hostów, tytułach, nagłówkach, ciasteczkach, certyfikatach; ścieżki `/admin`, `/login`, `/manager` tylko GET/HEAD | P4 | K5 |
-| R8 | Porównanie wyników między przebiegami | 🟡 | `AssetHistory` (discovered, missing, reappeared, zmiany usług z `ServiceDiff`) | Porównanie dowolnych dwóch przebiegów: hosty, usługi, technologie, nagłówki, ciasteczka, certyfikaty; widok różnic i eksport | P5 | K3 |
-| R9 | Oznaczenie nowych, znikających i zmienionych usług | 🟡 | `ServiceDiff` (dodane i usunięte), bez „zmienionych” | Stany nowy / zmieniony / niepotwierdzony / znikający / nieaktywny według reguł; zmiana wersji, banera, TLS jako „zmieniona” | P5 | K3 |
-| R10 | Własne sygnatury detekcyjne | ❌ | (nuclei tylko jako `verify_cve` agenta, poziom L2) | Format YAML, typy dopasowań z briefu, walidator bezpieczeństwa (tylko GET/HEAD), UI: dodaj, edytuj, testuj, import/eksport | P7 | K5 |
-| R11 | Formularz: ręcznie oraz plik CSV i/lub JSON, przetwarzane tak samo | 🟡 | Formularz i import CSV zasobów w `/admin/zasoby`; brak JSON; zasoby nie wyznaczają celów skanu | Jedna ścieżka przetwarzania dla formularza, CSV i JSON (cele i wyniki skanów); podgląd przed zapisem | P2 | K2 |
-| R12 | RBAC z możliwością tworzenia i obsługi różnych ról | ✅ | `rules/roles.yaml`, `require()` na każdym endpoincie (deny-by-default); edytor ról własnych i nadawanie ról w konsoli (`/admin/role`, `iam_custom_role`, `iam_role_grant`, audyt); macierz rola × endpoint × akcja w `docs/ROLES.md` z testem | – | P1 | K6 |
-| R13 | Role: Administracja; Dodawanie, usuwanie, modyfikacja; Modyfikacja i odczyt; Odczyt | ✅ | `administrator`, `editor`, `modifier`, `viewer` + tożsamości `agent` i `system`; polskie nazwy w UI; Keycloak i konta demo; `docs/ROLES.md` | – | P1 | K6 |
-| R14 | Edycja wartości niezależnie od stanu skanu, zachowana przy kolejnych skanach | ❌ | Tylko status findingu (`PATCH /api/findings/{id}`); dane hosta nadpisuje kolejny skan | Warstwa nadpisań użytkownika oddzielna od obserwacji; skan nigdy jej nie nadpisuje; widok scalony z oznaczeniem kto i kiedy; historia | P2 | K2, K6 |
-| R15 | Czytelny interfejs dla każdej roli, dashboard najważniejszych znalezisk | 🟡 | Jedna konsola `/admin/` dla czterech ról, menu i formularze według uprawnień, karta hosta (P1); Pulpit nadal pod CVE i ryzyko | Dashboard discovery: znaleziska, zmiany, panele i staging, niestabilne hosty, skany z ETA, status DefectDojo; elementy ukryte według roli | P10 | K4 |
-| R16 | Szyfrowanie w spoczynku pól z danymi wrażliwymi | ❌ | brak (OpenBao jest, ale tylko do poświadczeń JIT) | Szyfrowanie pól (OpenBao Transit), HMAC do wyszukiwania, rotacja kluczy, test `pg_dump`, `docs/DATA_PROTECTION.md` | P9 | K6 |
+| ID | Wymaganie | Status | Gdzie |
+|---|---|---|---|
+| R1 | Lista IP, zakresów CIDR, domen | ✅ | Discovery → Przebiegi: formularz, plik CSV/JSON/TXT, podgląd z decyzją zakresu (`/api/discovery/targets/preview`) |
+| R2 | Skan wielowątkowy, pomiar czasu, podgrupy dobierane do szybkości | ✅ | `discovery/engine.py`: paczki o rozmiarze z mierzonej szybkości (16–1024 adresów), równoległe workery nmap, czas paczki i przebiegu, ETA, zapis przyrostowy |
+| R3 | Wykrycie aktywnych hostów | ✅ | `nmap -sn -PE -PS<40 portów>`, ponowna próba /32 dla hostów, które odpowiadały poprzednio |
+| R4 | Identyfikacja usług | ✅ | `nmap -sV` tylko na aktywnych hostach, lab mentorów 5/5 usług |
+| R5 | HTTP/HTTPS: tytuł, kod, nagłówki, ciasteczka, TLS, przekierowania | ✅ | `discovery/fingerprint.py` (też hash favicony mmh3, sprawdzone ścieżki GET) |
+| R6 | Technologie, CMS-y | ✅ | Sygnatury wbudowane (`rules/signatures.yaml`) i własne, dowody przy każdej |
+| R7 | Panel administracyjny, staging | ✅ | Flagi z dowodami i pewnością (nazwa, tytuł, ścieżki, przekierowania do logowania) |
+| R8 | Porównanie przebiegów | ✅ | Discovery → Porównanie: dowolne dwa przebiegi, eksport JSON/CSV |
+| R9 | Nowe, znikające, zmienione usługi | ✅ | `analysis.compare`: hosty, usługi, technologie, nagłówki, tytuły, flagi |
+| R10 | Własne sygnatury | ✅ | Discovery → Sygnatury detekcyjne: YAML, walidator (tylko GET, bez treści i poświadczeń) |
+| R11 | Formularz, CSV, JSON przetwarzane tak samo | ✅ | Jedna ścieżka `parse_targets` dla celów; import wyników JSON/CSV/nmap XML jak skan |
+| R12 | RBAC z tworzeniem ról | ✅ | `rules/roles.yaml`, `require()` na każdym endpoincie, edytor ról, [ROLES.md](ROLES.md) |
+| R13 | Cztery role z briefu | ✅ | `administrator`, `editor`, `modifier`, `viewer`, MFA w Keycloak |
+| R14 | Edycja niezależna od skanu, zachowana w kolejnych | ✅ | Warstwa nadpisań (nazwa, krytyczność, status, notatka, tagi), audyt kto i kiedy |
+| R15 | Czytelny interfejs, dashboard | ✅ | Pulpit z kluczowymi wskaźnikami, discovery, zmianami i stanem DefectDojo |
+| R16 | Szyfrowanie w spoczynku pól wrażliwych | ✅ | [DATA_PROTECTION.md](DATA_PROTECTION.md), migracja 0017, rotacja kluczy |
 
 ## B. Akapity sekcji 2: sygnatury i harmonogram
 
-| ID | Wymaganie | Status | Gdzie dziś w kodzie | Co trzeba zrobić | Etap | Kryt. |
-|---|---|---|---|---|---|---|
-| S1 | Sygnatury bezpieczne: nagłówek, ciasteczko, hash favicony, fragment HTML, ścieżka bez logowania, wersja w stopce, fingerprint CMS; bez eksploatacji | ❌ | brak | Jak R10; walidator odrzuca metody inne niż GET/HEAD, treść żądania, poświadczenia, parametry ataku, nadmiar żądań; `docs/SIGNATURES.md` | P7 | K5, K4 |
-| S2 | Harmonogram: okna czasowe i częstotliwość; po przekroczeniu okna zatrzymanie i wznowienie w kolejnym | 🟡 | Celery beat: skan raz na dobę (`workers/celery_app.py`), bez okien | Okna (np. pon–pt 22:00–06:00), częstotliwość, punkt kontrolny (skończone paczki), wznowienie, statusy przebiegu, widok harmonogramu | P8 | K1, K3 |
+| ID | Wymaganie | Status | Gdzie |
+|---|---|---|---|
+| S1 | Sygnatury bezpieczne (nagłówek, ciasteczko, favicon, HTML, ścieżka bez logowania, wersja, CMS) | ✅ | Typy `header`, `cookie`, `favicon_hash`, `html`, `title`, `generator`, `path`; najwyżej 10 ścieżek GET na usługę |
+| S2 | Przedziały czasowe i częstotliwość; po przekroczeniu okna zatrzymanie i wznowienie w kolejnym | ✅ | Discovery → Harmonogram; `discovery/schedule.py`: okno (też przez północ), dni tygodnia, częstotliwość; na końcu okna stan „wstrzymany”, reszta celów zapisana (szyfrowana) i wznowiona w następnym oknie |
 
 ## C. Minimalny oczekiwany zakres (sekcja 3)
 
-| ID | Wymaganie | Status | Uwagi / odwołanie | Etap | Kryt. |
-|---|---|---|---|---|---|
-| M1 | Import listy hostów lub zakresów | 🟡 | Jak R1, R11 | P2 | K2 |
-| M2 | Import wyników skanów w JSON lub CSV | ❌ | Do zbudowania; nmap XML jako bonus (parser już jest: `parse_nmap_xml`) | P2 | K2 |
-| M3 | Obsługa dużych zakresów, ponad 10 000 IP | ❌ | Niezweryfikowane; demo-lab ma kilka hostów. Test /18 lub /16 i `docs/PERFORMANCE.md` | P3 | K1 |
-| M4 | Konfiguracja skanu: okno czasowe i częstotliwość | ❌ | Jak S2 | P8 | K1 |
-| M5 | Ograniczanie tempa zapytań | 🟡 | Limit akcji na cel na minutę w scope_guard; brak limitu pakietów (`--max-rate`), równoległości i per podsieć | P3 | K4 |
-| M6 | Wykrywanie aktywnych hostów | 🟡 | Jak R3 | P3 | K1 |
-| M7 | Podstawowa identyfikacja usług | ✅ | Jak R4 | P3 | K1 |
-| M8 | Zapis wyników do bazy lub pliku | ✅ | PostgreSQL (`asset`, `software`, `scan_run`, `scan_action`, `asset_history`) | P3 (zapis przyrostowy) | K1 |
-| M9 | Porównanie dwóch skanów | ❌ | Brak widoku przebieg × przebieg (jest tylko historia zasobu) | P5 | K3 |
-| M10 | Dashboard lub raport najważniejszych zmian | ❌ | Raporty są o CVE, nie o zmianach discovery | P5, P10 | K3, K4 |
-| M11 | Eksport wyników do JSON lub CSV | ❌ | Jest tylko PDF raportu | P2 | K2 |
-| M12 | Rozgraniczenie funkcjonalności na role | ✅ | RBAC na każdym endpoincie, cztery role z briefu, macierz testów (P1) | P1 | K6 |
-| M13 | Edycja danych istniejących skanów, wyników i konfiguracji | 🟡 | Tylko status findingu i decyzje kolejki weryfikacji | P2, P8 | K2 |
-| M14 | Ochrona danych ze skanów (szyfrowanie) | ❌ | Jak R16 | P9 | K6 |
+| ID | Wymaganie | Status | Gdzie |
+|---|---|---|---|
+| M1 | Import listy hostów lub zakresów | ✅ | R1 |
+| M2 | Import wyników JSON lub CSV | ✅ | Discovery → Import wyników (JSON, CSV, nmap XML) |
+| M3 | Ponad 10 000 IP | ✅ | Pomiar na prawdziwym nmapie, zakres /18: [PERFORMANCE.md](PERFORMANCE.md) |
+| M4 | Okno czasowe i częstotliwość | ✅ | S2 |
+| M5 | Ograniczanie tempa | ✅ | `--max-rate` na worker, liczba workerów, T3 jako maksimum, limit akcji na cel w scope_guard |
+| M6 | Aktywne hosty | ✅ | R3 |
+| M7 | Identyfikacja usług | ✅ | R4 |
+| M8 | Zapis do bazy | ✅ | PostgreSQL, zapis po każdej paczce |
+| M9 | Porównanie dwóch skanów | ✅ | R8 |
+| M10 | Dashboard najważniejszych zmian | ✅ | Pulpit, Porównanie i stany, wykres zmian w czasie |
+| M11 | Eksport JSON lub CSV | ✅ | Przebieg → JSON, CSV, nmap XML; różnice → JSON, CSV |
+| M12 | Role | ✅ | R12, R13 |
+| M13 | Edycja skanów, wyników i konfiguracji | ✅ | R14, edycja harmonogramów, sygnatur i ról |
+| M14 | Szyfrowanie danych ze skanów | ✅ | R16 |
 
 ## D. Mile widziany zakres (sekcja 3)
 
-| ID | Wymaganie | Status | Uwagi / odwołanie | Etap | Kryt. |
-|---|---|---|---|---|---|
-| N1 | Harmonogram cyklicznych skanów | 🟡 | Stały beat raz na dobę | P8 | K3 |
-| N2 | Różnice zależne od pory dnia | ❌ | Profil dostępności 24 h × 7 dni | P5 | K3 |
-| N3 | Ocena „ciekawości” / priorytetu analitycznego | 🟡 | Jest jawny scoring ryzyka CVE (`rules/scoring.yaml`), trzeba nowej formuły dla obserwacji | P5 | K3 |
-| N4 | Powtarzanie pomiarów hostów niestabilnych | ❌ | Dodatkowe próby w przebiegu i w kolejnych oknach | P5 | K3 |
-| N5 | Moduł HTTP/HTTPS fingerprinting | 🟡 | Jak R5 | P4 | K5 |
-| N6 | Proste wykrywanie CMS-ów lub technologii | ❌ | Jak R6 | P4 | K5 |
-| N7 | Grupowanie podobnych usług | ❌ | Technologia + wersja + favicon | P4 | K5 |
-| N8 | Obsługa tagów | 🟡 | Pole `asset.tags` (formularz, CSV); brak tagów na usługach i obserwacjach, brak filtrów | P2 | K2 |
-| N9 | Eksport obserwacji do DefectDojo (finding informacyjny lub evidence) | ❌ | **Traktujemy jako obowiązkowe** (kryterium K2, nmap „integrujący się z DefectDojo”) | P6 | K2 |
-| N10 | Wizualizacja zmian w czasie | ❌ | Wykres trendu pokrycia usunięty z konsolą menedżera (P1); historia zmian na karcie hosta; trzeba wykresów zmian discovery | P5, P10 | K3 |
-| N11 | Integracja z pasywnymi źródłami danych, jeśli zostaną udostępnione | 🟡 | Feedy NVD, KEV, EPSS (offline i online) to źródła pasywne o podatnościach; pasywny DNS itp. dopiero po udostępnieniu | po P12 | K1 |
+| ID | Wymaganie | Status | Gdzie |
+|---|---|---|---|
+| N1 | Harmonogram cyklicznych skanów | ✅ | S2 |
+| N2 | Różnice zależne od pory dnia | ✅ | Profil dzień (7–19) / noc na stan hosta: „odpowiada tylko w dzień / w nocy” |
+| N3 | Ocena „ciekawości” | ✅ | Flagi z pewnością (wysoka, średnia, niska) i dowodami; sortowanie hostów po flagach |
+| N4 | Powtarzanie pomiarów hostów niestabilnych | ✅ | Druga próba /32 w tym samym przebiegu; stany aktywny, niestabilny, niepotwierdzony, nieaktywny |
+| N5 | Fingerprinting HTTP/HTTPS | ✅ | R5 |
+| N6 | Wykrywanie CMS-ów i technologii | ✅ | R6 |
+| N7 | Grupowanie podobnych usług | ✅ | Przebieg → „Grupy podobnych usług” (port, usługa, wersja, technologia) |
+| N8 | Tagi | ✅ | Edycja na karcie hosta, filtr po tagu w przebiegu |
+| N9 | Eksport do DefectDojo (finding Info) | ✅ | Przebieg → „Wyślij do DefectDojo”, lokalne DefectDojo przy każdym starcie, deduplikacja |
+| N10 | Wizualizacja zmian w czasie | ✅ | Porównanie i stany → „Zmiany w czasie” (hosty, usługi na przebieg) |
+| N11 | Źródła pasywne | 🟡 | Feedy NVD, KEV, EPSS; inne źródła po udostępnieniu przez organizatora |
 
 ## E. Wymagania formalne i techniczne (sekcje 4–5)
 
-| ID | Wymaganie | Status | Uwagi | Etap |
-|---|---|---|---|---|
-| F1 | Repozytorium kodu | ✅ | GitHub, CI (backend, frontend z Playwright, migracje, e2e na demo-lab, Trivy, promptfoo) | – |
-| F2 | Dokumentacja techniczna | 🟡 | ARCHITECTURE, DEMO, PRIVACY itd. opisują stary kierunek; potrzebne: REQUIREMENTS, ROLES, SIGNATURES, DATA_PROTECTION, SAFE_SCANNING, PERFORMANCE, VALIDATION, DEMO_GUIDE | P0–P12 |
-| F3 | Prezentacja do 10 slajdów z działającym demo | ❌ | `docs/PRESENTATION_OUTLINE.md` | P12 |
-| F4 | Demo lokalnie lub w środowisku testowym | 🟡 | `seed_demo.sh` + demo-lab działa offline; scenariusz do przepisania (dwa przebiegi ze zmianami, import, edycja, role, DefectDojo) | P12 |
-| T1 | Technologie bezpłatne i open source; sugerowane Go, Rust, C++ | 🟡 | Wszystko open source. Orkiestracja w Pythonie, ciężka praca w narzędziach natywnych (nmap w C, httpx/naabu w Go). Uzasadnienie pomiarami w `docs/PERFORMANCE.md`; wąskie gardło w Pythonie → osobny moduł w Go | P3, P12 |
+| ID | Wymaganie | Status | Uwagi |
+|---|---|---|---|
+| F1 | Repozytorium | ✅ | GitHub, CI |
+| F2 | Dokumentacja techniczna | ✅ | ARCHITECTURE, ROLES, DATA_PROTECTION, PERFORMANCE, TESTOWANIE, LAB_TEST |
+| F3 | Prezentacja do 10 slajdów | 🟡 | Do przygotowania przez zespół |
+| F4 | Demo lokalnie | ✅ | `./start.sh` (demo) i `./start.sh --bez-demo` (lab mentorów) |
+| T1 | Technologie open source | ✅ | Orkiestracja w Pythonie, praca sieciowa w nmapie (C); pomiar w PERFORMANCE.md |
 
 ## F. Walidacja (sekcja 6): co sprawdzą organizatorzy
 
-Test: co najmniej dwa przebiegi skanu, edycja znalezisk, import, rozgraniczenie ról.
-
-| ID | Punkt walidacji | Status | Na czym polegamy / co brakuje | Etap |
-|---|---|---|---|---|
-| V1 | Poprawność wykrycia aktywnych hostów | 🟡 | R3; brak ICMP/ARP/UDP i testu skali | P3 |
-| V2 | Poprawność identyfikacji usług | ✅ | R4 (`nmap -sV`); do potwierdzenia na wynikach referencyjnych | P3, P12 |
-| V3 | Trafność fingerprintingu HTTP/HTTPS | ❌ | R5 | P4 |
-| V4 | Wykrywanie CMS-ów lub technologii | ❌ | R6 | P4 |
-| V5 | Ciekawe nagłówki i ciasteczka | ❌ | Reguły z uzasadnieniem „dlaczego ciekawe” | P4 |
-| V6 | Działanie customowych sygnatur | ❌ | R10, S1; testy na sygnaturach od organizatora | P7 |
-| V7 | Porównanie wyników między skanami | 🟡 | R8, M9 | P5 |
-| V8 | Hosty niestabilne lub zmieniające odpowiedź | ❌ | Model stanu, powtórzenia, profil pory dnia | P5 |
-| V9 | Bezpieczeństwo i ostrożność skanera | 🟡 | scope_guard, poziomy L1–L3 ze zgodą, audyt z łańcuchem skrótów, kill switch agenta; do zrobienia: T3 zamiast T4, limity pakietów, User-Agent z kontaktem, kill switch dla wszystkich skanów, `docs/SAFE_SCANNING.md` | P3, P12 |
-| V10 | Czytelność dashboardu lub raportu | 🟡 | R15 | P10 |
-| V11 | Import oraz eksport danych | 🟡 | Import CSV zasobów jest; brak JSON, importu wyników i eksportu | P2 |
-| V12 | Rozgraniczenie funkcjonalności między role | ✅ | Cztery role z briefu, `docs/ROLES.md`, e2e menu według roli (P1) | P1 |
+| ID | Punkt walidacji | Status | Na czym polegamy |
+|---|---|---|---|
+| V1 | Wykrycie aktywnych hostów | ✅ | R3, test skali |
+| V2 | Identyfikacja usług | ✅ | R4, lab mentorów 5/5 |
+| V3 | Fingerprinting HTTP/HTTPS | ✅ | R5 |
+| V4 | CMS-y i technologie | ✅ | R6 |
+| V5 | Ciekawe nagłówki i ciasteczka | ✅ | Flagi „Ciekawe nagłówki”, „Ciekawe ciasteczka”, braki nagłówków bezpieczeństwa |
+| V6 | Własne sygnatury | ✅ | R10, S1 |
+| V7 | Porównanie między skanami | ✅ | R8, R9, lab mentorów 7/7 zmian |
+| V8 | Hosty niestabilne | ✅ | N2, N4 |
+| V9 | Bezpieczeństwo skanera | ✅ | scope_guard na każdej ścieżce (też agent i MCP), T3 maksimum, limity, tylko GET, audyt z łańcuchem skrótów |
+| V10 | Czytelność dashboardu | ✅ | R15 |
+| V11 | Import i eksport | ✅ | M2, M11 |
+| V12 | Role | ✅ | R12, R13, odmowy w audycie |
 
 ## G. Pytania z briefu i nasze odpowiedzi (do opisania w dokumentacji)
 

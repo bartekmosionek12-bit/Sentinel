@@ -1,5 +1,6 @@
 import {
   Bot,
+  CalendarClock,
   Crosshair,
   GitCompareArrows,
   FileText,
@@ -48,6 +49,12 @@ export const NAV_GROUPS: NavGroup[] = [
         permission: "scan:read",
       },
       {
+        path: "/discovery/harmonogram",
+        label: "Harmonogram",
+        icon: CalendarClock,
+        permission: "scan:read",
+      },
+      {
         path: "/discovery/sygnatury",
         label: "Sygnatury detekcyjne",
         icon: Fingerprint,
@@ -56,7 +63,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: "Inwentarz i ryzyko",
+    title: "Podatności (moduł dodatkowy)",
     items: [
       { path: "/zasoby", label: "Zasoby", icon: Server },
       {
@@ -85,7 +92,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Kontrola",
     items: [
-      { path: "/skany", label: "Skany", icon: Radar },
+      {
+        path: "/skany",
+        label: "Skany podatności",
+        icon: Radar,
+        summary:
+          "Moduł dodatkowy: skany L1–L3 do dopasowania CVE. Discovery dużych sieci jest w sekcji Discovery.",
+      },
       { path: "/zakres", label: "Zakres skanowania", icon: Crosshair },
       { path: "/agent", label: "Agent AI", icon: Bot, end: true },
       { path: "/agent/test", label: "Test agenta", icon: FlaskConical },

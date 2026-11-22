@@ -16,7 +16,7 @@ from sqlalchemy import Float, ForeignKey, Integer, String, Text, UniqueConstrain
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.crypto import EncryptedJSON, EncryptedText
-from app.models.base import Base, CreatedAt, UuidPk, utcnow
+from app.models.base import Base, CreatedAt, JsonType, UuidPk, utcnow
 
 
 class DiscoveryRun(Base):
@@ -40,6 +40,39 @@ class DiscoveryRun(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     error: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    # Harmonogram: przebieg z harmonogramu ma termin końca okna. Po jego przekroczeniu
+    # silnik kończy bieżące paczki, zapisuje niezeskanowaną resztę (`remaining`, szyfrowane)
+    # i ustawia stan „paused”; w kolejnym oknie harmonogram startuje przebieg `resume_of`.
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("discovery_schedule.id", ondelete="SET NULL"), index=True
+    )
+    resume_of: Mapped[uuid.UUID | None]
+    deadline: Mapped[datetime | None]
+    remaining: Mapped[dict[str, Any] | None] = mapped_column(EncryptedJSON, nullable=True)
+
+
+class DiscoverySchedule(Base):
+    """Cykliczny przebieg discovery: cele, częstotliwość i okno czasowe (brief, sekcja 2)."""
+
+    __tablename__ = "discovery_schedule"
+
+    id: Mapped[UuidPk]
+    name: Mapped[str] = mapped_column(String(200))
+    targets: Mapped[list[str]] = mapped_column(EncryptedJSON, default=list)
+    settings: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    interval_minutes: Mapped[int] = mapped_column(Integer, default=1440)
+    # Okno „HH:MM”–„HH:MM” w strefie `timezone`; koniec ≤ początek = okno przez północ.
+    window_start: Mapped[str] = mapped_column(String(5), default="00:00")
+    window_end: Mapped[str] = mapped_column(String(5), default="23:59")
+    # Dni tygodnia rozpoczęcia okna: 0 = poniedziałek … 6 = niedziela.
+    days: Mapped[list[int]] = mapped_column(JsonType, default=lambda: list(range(7)))
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Warsaw")
+    enabled: Mapped[bool] = mapped_column(default=True)
+    created_by: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[CreatedAt]
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow)
+    last_started_at: Mapped[datetime | None]
+    resume_run_id: Mapped[uuid.UUID | None]
 
 
 class DiscoveryBatch(Base):
