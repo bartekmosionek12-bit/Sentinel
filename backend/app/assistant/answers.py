@@ -16,8 +16,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.assistant import live, recon
+from app.assistant import knowledge, live, recon
 from app.assistant.classify import Intent
+from app.core.config import get_settings
+from app.discovery.engine import DiscoveryConfig
 from app.explainer.service import KIND as EXPLANATION_KIND
 from app.iam.tokens import Principal
 from app.matching.engine import ACTIVE_STATUSES
@@ -44,6 +46,16 @@ SUGGESTIONS = (
     "Czy jakieś certyfikaty wygasają?",
     "Jakie technologie wykryto?",
 )
+TECH_SUGGESTIONS = (
+    "Jak ustawić skan sieci /16 w nocy?",
+    "Jakie flagi nmap uruchamia Sentinel?",
+    "Do czego służy port 5672?",
+    "Dlaczego host nie pojawia się w wynikach?",
+    "Jak napisać własną sygnaturę?",
+    "Co zrobić, gdy skan trwa za długo?",
+    "Jak działa skan jednorazowy i wznowienie?",
+    "W jakich formatach pobiorę wyniki?",
+)
 # Uprawnienie potrzebne do odpowiedzi (poza samym `assistant:use`).
 NEEDS: dict[str, str | None] = {
     "top_risks": "findings:read",
@@ -65,6 +77,7 @@ NEEDS: dict[str, str | None] = {
     "technologies": "scan:read",
     "defectdojo_status": "scan:read",
     "my_access": None,
+    "tech_howto": None,
     "out_of_scope": None,
 }
 TYPE_LABELS = {
@@ -150,11 +163,19 @@ def out_of_scope(intent: Intent) -> Answer:
         ]
     else:
         text = [
-            "Nie umiem jeszcze odpowiedzieć na to pytanie.",
-            "Znam się na zagrożeniach i katalogu KEV, hostach i otwartych portach, stanie "
-            "skanów i feedów, logowaniach z dziennika audytu, terminach naprawy, znaczeniu "
-            "skrótów i prośbach o nowe skanowanie. Spróbuj na przykład:",
+            "Odpowiadam tylko na pytania techniczne o skanowaniu i wynikach.",
+            "Znam się na: konfiguracji skanów (workery, tempo, okna, harmonogram), flagach "
+            "nmap, portach i usługach, sygnaturach, zakresie i scope_guard, stanach hostów, "
+            "zmianach między przebiegami, panelach i certyfikatach, zagrożeniach i KEV oraz "
+            "eksporcie wyników. Spróbuj na przykład:",
         ]
+        return Answer(
+            intent.name,
+            intent.source,
+            text,
+            suggestions=list(TECH_SUGGESTIONS[:4]),
+            pose="surprised",
+        )
     return Answer(
         intent.name, intent.source, text, suggestions=list(SUGGESTIONS[:4]), pose="surprised"
     )
@@ -631,4 +652,21 @@ def build(
         return recon.defectdojo_status(session, intent)
     if intent.name == "my_access":
         return recon.my_access(intent, principal)
+    if intent.name == "tech_howto" and intent.topic:
+        return tech_howto(intent)
     return out_of_scope(intent)
+
+
+def tech_howto(intent: Intent) -> Answer:
+    """Wiedza techniczna: przykładowe skany, flagi nmap, porty, sygnatury, harmonogram."""
+    config = DiscoveryConfig.from_file(get_settings().rules_dir / "discovery.yaml")
+    topic = intent.topic or ""
+    text, links = knowledge.answer(topic, config, port=intent.port)
+    return Answer(
+        intent.name,
+        intent.source,
+        [f"**{knowledge.title(topic)}**", *text],
+        links=links,
+        suggestions=[s for s in TECH_SUGGESTIONS if knowledge.find_topic(s) != topic][:3],
+        pose="talk",
+    )

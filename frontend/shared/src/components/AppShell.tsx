@@ -211,7 +211,7 @@ export function AppShell({
       </nav>
       {banner}
       <DemoDataNotice />
-      <main className="min-w-0 flex-1 px-4 pt-4 pb-44 md:px-5">{children}</main>
+      <main className="min-w-0 flex-1 px-4 pt-4 pb-52 md:px-5">{children}</main>
       {footer && <p className="px-5 pb-4 text-xs text-slate-500">{footer}</p>}
     </div>
   );

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.assistant import get_assistant_classifier
-from app.assistant.classify import ModelClassifier, classify_keywords
+from app.assistant.classify import Catalog, ModelClassifier, classify_keywords
 from app.assistant.evaluate import load_cases, run_case
 from app.assistant.service import ask, catalog
 from app.assistant.text import Named, best_match, find_cve, normalize
@@ -526,3 +526,52 @@ def test_defectdojo_and_access_answers(world: Session) -> None:
     assert "uruchamiać skany" in viewer
     admin = " ".join(_ask(world, "jakie mam uprawnienia?", role="administrator").text)
     assert "Nie możesz:" not in admin
+
+
+@pytest.mark.parametrize(
+    ("question", "topic"),
+    [
+        ("Jak ustawić skan sieci /16 w nocy?", "typical_scans"),
+        ("Jakie flagi nmap uruchamia Sentinel?", "nmap_flags"),
+        ("Do czego służy port 5672?", "port_info"),
+        ("Dlaczego host nie pojawia się w wynikach? Nie wykrywa go", "troubleshooting"),
+        ("Jak napisać własną sygnaturę?", "signature_howto"),
+        ("Co zrobić, gdy skan trwa za długo?", "tuning"),
+        ("Jak działa skan jednorazowy i wznowienie?", "schedule_howto"),
+        ("W jakich formatach pobiorę wyniki? csv, json?", "export_formats"),
+        ("Dlaczego cel jest poza zakresem?", "scope_howto"),
+    ],
+)
+def test_technical_knowledge_intents(question: str, topic: str) -> None:
+    intent = classify_keywords(question, Catalog())
+    assert intent.name == "tech_howto", intent
+    assert intent.topic == topic
+
+
+def test_technical_answers_follow_config(world: Session) -> None:
+    flags = " ".join(_ask(world, "Jakie flagi nmap uruchamia Sentinel?").text)
+    assert "nmap -sn -n -PE" in flags
+    assert "-sV -Pn" in flags
+    assert "T4 i T5 zablokowane" in flags
+    port = " ".join(_ask(world, "Do czego służy port 5672?").text)
+    assert "AMQP (RabbitMQ)" in port
+    scans = _ask(world, "Jak ustawić skan sieci /16 w nocy?")
+    assert any("/16" in line for line in scans.text)
+    assert {"label": "Harmonogram", "to": "/discovery/harmonogram"} in scans.links
+    yaml_line = next(
+        line for line in _ask(world, "Jak napisać własną sygnaturę?").text if "```" in line
+    )
+    assert "kind: panel" in yaml_line
+
+
+def test_off_topic_questions_get_technical_only_refusal(world: Session) -> None:
+    for question in (
+        "Jaka będzie jutro pogoda?",
+        "Jaki film obejrzeć wieczorem?",
+        "Przepis na pierogi",
+    ):
+        answer = _ask(world, question)
+        assert answer.intent == "out_of_scope"
+        assert answer.text[0].startswith("Odpowiadam tylko na pytania techniczne")
+    # Prośba o skan w trybie rozkazującym zostaje prośbą, nie wykładem.
+    assert classify_keywords("Przeskanuj 10.0.0.0/24 w nocy", Catalog()).name == "scan_request"

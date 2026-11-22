@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from app.assistant.knowledge import find_topic
 from app.assistant.text import Named, best_match, find_cve, has_stem, normalize, words
 from app.explainer.prompts import Prompt, load_template
 from app.explainer.providers import LLMProvider, ProviderError
@@ -36,6 +37,7 @@ INTENTS = (
     "technologies",
     "defectdojo_status",
     "my_access",
+    "tech_howto",
     "out_of_scope",
 )
 # Intencje rozpoznawane tylko słowami kluczowymi (pytania o konkretne dane z bazy):
@@ -53,6 +55,7 @@ KEYWORD_ONLY = frozenset(
         "technologies",
         "defectdojo_status",
         "my_access",
+        "tech_howto",
     }
 )
 SOURCE_MODEL = "model"
@@ -94,6 +97,8 @@ class Intent:
     critical: bool = False
     # Dla web_flags: rodzaj flagi z pytania (panel, staging, security_headers, cookie).
     flag_kind: str | None = None
+    # Dla tech_howto: temat wiedzy technicznej (klucz z knowledge.TOPICS).
+    topic: str | None = None
     # Dla out_of_scope: "action" (prośba o zmianę albo skan poza zakresem) lub "unknown".
     reason: str = ""
     # Czas pracy modelu, gdy go pytaliśmy (także gdy ostatecznie wygrały słowa kluczowe).
@@ -117,6 +122,8 @@ class Intent:
             out["critical"] = True
         if self.flag_kind:
             out["flag_kind"] = self.flag_kind
+        if self.topic:
+            out["topic"] = self.topic
         if self.reason:
             out["reason"] = self.reason
         return out
@@ -327,6 +334,31 @@ _VERBS = {
 ACTION_WORDS = frozenset(
     word for imp, inf in _VERBS.items() for word in (imp, f"{imp}cie", inf) if word
 )
+QUESTION_WORDS = frozenset(
+    {
+        "jak",
+        "jaki",
+        "jaka",
+        "jakie",
+        "jakich",
+        "co",
+        "czym",
+        "dlaczego",
+        "czemu",
+        "czy",
+        "ile",
+        "kiedy",
+        "gdzie",
+        "ktore",
+        "ktory",
+        "ktora",
+        "wyjasnij",
+        "opisz",
+        "podaj",
+        "pokaz",
+    }
+)
+SCAN_ORDERS = frozenset({"przeskanuj", "zeskanuj", "skanuj", "przeskanujcie", "zeskanujcie"})
 # „Uruchom” jest w porządku tylko przy skanie (wtedy i tak tylko prośba) i samouczku.
 SOFT_ACTION_WORDS = frozenset({"uruchom", "uruchomcie", "uruchomic", "odpal", "odpalcie"})
 _PORT_RE = re.compile(r"\bport\w*\s*(?:nr\.?\s*)?(\d{1,5})\b|\b(\d{1,5})\s*/\s*(?:tcp|udp)\b")
@@ -416,6 +448,14 @@ def classify_keywords(text: str, catalog: Catalog) -> Intent:
     if scores["kev_list"] and scores["explain"] and has_stem(tokens, ("co to", "co znaczy")):
         scores["kev_list"] = 0
     best = max(scores, key=lambda name: scores[name])
+    topic = find_topic(text)
+    # Pytanie „jak…/co znaczy…” o technikę skanowania: wiedza, nie dane z bazy. „Jak ustawić
+    # skan?” to pytanie, nie polecenie, więc wygrywa z odmową zmiany. Wyjątek to prośba o skan
+    # w trybie rozkazującym („przeskanuj 10.0.0.0/24 w nocy”).
+    asks = "?" in text or bool(set(tokens) & QUESTION_WORDS)
+    how = "jak" in tokens or not ACTION_WORDS & set(tokens)
+    if topic is not None and asks and how and not set(tokens) & SCAN_ORDERS:
+        return _resolve(Intent("tech_howto", SOURCE_KEYWORDS, topic=topic), params)
     if ACTION_WORDS & set(tokens) or (
         SOFT_ACTION_WORDS & set(tokens) and not scores["scan_request"] and not scores["tour"]
     ):

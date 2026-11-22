@@ -234,7 +234,7 @@ test("pulpit: wskaźniki na górze, bez zdublowanych kafelków; Sentek z szybkim
 
   const sentek = page.getByRole("button", { name: "Zapytaj Sentka" });
   await sentek.hover();
-  await expect(page.getByText(/Mogę Ci pomóc/)).toBeVisible();
+  await expect(page.getByText(/Pytaj o skany/)).toBeVisible();
   await sentek.click();
   await page
     .getByRole("button", { name: "Podsumuj krytyczne zagrożenia" })
