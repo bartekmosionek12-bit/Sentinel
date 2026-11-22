@@ -335,3 +335,67 @@ test("trzy warstwy: osobne karty, grupy podatności, warstwa 2 i DefectDojo na �
     `/api/redteam/runs/7c1e0d2a-3b4f-4c5d-8e9f-a0b1c2d3e4f5/defectdojo`,
   ]);
 });
+
+test("agent AI: przycisk sprawdza model LLM, bez modelu agent nie przyjmuje zadań", async ({
+  page,
+}) => {
+  await stubApi(page);
+  let available = false;
+  await page.route("**/api/llm/status", (route) =>
+    route.fulfill({
+      json: {
+        enabled: available,
+        available,
+        model: available ? "qwen3-4b-q4km" : "",
+        detail: available
+          ? "Model lokalny gotowy"
+          : "Model nie jest skonfigurowany (LLM_MODEL jest pusty)",
+        external_enabled: false,
+      },
+    }),
+  );
+  await page.route("**/api/agent/status", (route) =>
+    route.fulfill({
+      json: {
+        killed: false,
+        killed_by: null,
+        killed_reason: null,
+        killed_at: null,
+        last_killed_at: null,
+        effects: [],
+        scanner_stopped_at: null,
+        scanner_stopped: null,
+        certificate_gap: "certyfikaty SSH działają do końca TTL",
+        capability: {
+          id: "c",
+          version: 1,
+          tools: ["discover_hosts"],
+          targets: ["172.30.99.0/24"],
+          max_level: 2,
+          windows: [],
+          max_calls_per_task: 20,
+          max_calls_per_target: 5,
+          active: true,
+          reserved: false,
+        },
+        config: null,
+        pending: [],
+        last_test: null,
+      },
+    }),
+  );
+  await page.goto("/admin/agent");
+  const card = page.locator("[data-demo=agent-llm]");
+  await expect(card).toContainText("brak modelu: agent nieaktywny");
+  await expect(page.getByText("nieaktywny: brak modelu LLM")).toBeVisible();
+  await page.getByPlaceholder("Polecenie dla agenta").fill("Sprawdź sieć demo");
+  await expect(
+    page.getByRole("button", { name: "Zleć zadanie" }),
+  ).toBeDisabled();
+  available = true;
+  await page.getByRole("button", { name: "Sprawdź model LLM" }).click();
+  await expect(card).toContainText("gotowy: qwen3-4b-q4km");
+  await expect(
+    page.getByRole("button", { name: "Zleć zadanie" }),
+  ).toBeEnabled();
+});

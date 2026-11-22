@@ -39,6 +39,7 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/redteam\/runs/, "redteam_runs"],
   [/^\/api\/iam\/delegations/, "delegations"],
   [/^\/api\/iam\/non-human/, "non_human"],
+  [/^\/api\/llm\/status/, "llm_status"],
 ];
 
 export interface Sent {
