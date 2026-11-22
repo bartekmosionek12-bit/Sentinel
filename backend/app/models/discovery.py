@@ -73,6 +73,13 @@ class DiscoverySchedule(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow)
     last_started_at: Mapped[datetime | None]
     resume_run_id: Mapped[uuid.UUID | None]
+    # Harmonogram jednorazowy: jeden przebieg od `start_at` do `end_at` (okno i dni nieużywane).
+    start_at: Mapped[datetime | None]
+    end_at: Mapped[datetime | None]
+
+    @property
+    def once(self) -> bool:
+        return self.start_at is not None
 
 
 class DiscoveryBatch(Base):

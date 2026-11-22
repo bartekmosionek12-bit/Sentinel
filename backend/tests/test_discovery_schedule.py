@@ -240,3 +240,78 @@ def test_time_of_day_pattern() -> None:
     assert profile["pattern"] == "day_only"
     assert profile["label"] == "odpowiada tylko w dzień"
     assert time_profile(samples[:3])["pattern"] is None  # za mało pomiarów nocą
+
+
+def test_once_schedule_starts_at_start_pauses_at_end_and_resumes_by_hand(
+    client: TestClient, session_factory: sessionmaker[Session], dispatcher: Any
+) -> None:
+    """Skan jednorazowy: start i koniec o zadanej godzinie, zapis stanu i ręczne „Wznów”."""
+    lab = FakeLab({"10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http")]})
+    guard, nmap = _engine(session_factory, lab)
+    start = SUNDAY_23 + timedelta(days=1)
+    with session_factory() as session:
+        schedule = _schedule(name="Jednorazowy", start_at=start, end_at=start + timedelta(hours=2))
+        session.add(schedule)
+        session.commit()
+        assert next_start(schedule, SUNDAY_23) == start
+        assert tick(session, CONFIG, RecordingDispatcher(), start - timedelta(minutes=1)) == []
+        [run] = tick(session, CONFIG, RecordingDispatcher(), start + timedelta(minutes=1))
+        assert run.deadline is not None
+        assert run.name == "Jednorazowy"
+        # Jednorazowy: drugi raz nie startuje, nawet w tym samym oknie.
+        run.status = "done"
+        session.commit()
+        assert tick(session, CONFIG, RecordingDispatcher(), start + timedelta(minutes=30)) == []
+        assert next_start(schedule, start + timedelta(minutes=30)) is None
+        run.status = "queued"
+        run.deadline = datetime.now(UTC) - timedelta(seconds=1)
+        session.commit()
+        run_id = run.id
+    with session_factory() as session:
+        paused = DiscoveryEngine(session, guard, CONFIG, nmap=nmap).run(run_id)
+        assert paused.status == "paused"
+    # Po końcu okna tick nie wznawia jednorazowego: robi to człowiek przyciskiem „Wznów”.
+    with session_factory() as session:
+        assert tick(session, CONFIG, RecordingDispatcher(), start + timedelta(hours=3)) == []
+    detail = client.get(f"/api/discovery/runs/{run_id}").json()
+    assert detail["remaining"] == {"networks": 1, "hosts": 0}
+    assert detail["resumed_by"] is None
+    resumed = client.post(f"/api/discovery/runs/{run_id}/resume", json={})
+    assert resumed.status_code == 202, resumed.text
+    assert resumed.json()["resume_of"] == str(run_id)
+    assert any(c[0] == "run_discovery" for c in dispatcher.calls)
+    again = client.post(f"/api/discovery/runs/{run_id}/resume", json={})
+    assert again.status_code == 409
+    assert client.get(f"/api/discovery/runs/{run_id}").json()["resumed_by"] is not None
+
+
+def test_once_schedule_and_run_end_time_validation(client: TestClient) -> None:
+    now = datetime.now(UTC)
+    body = {
+        "name": "Raz",
+        "items": ["10.10.0.0/24"],
+        "start_at": (now + timedelta(hours=1)).isoformat(),
+        "end_at": (now + timedelta(hours=3)).isoformat(),
+    }
+    created = client.post("/api/discovery/schedules", json=body)
+    assert created.status_code == 201, created.text
+    out = created.json()
+    assert out["once"] is True
+    assert out["next_start_at"] is not None
+    reversed_ = {**body, "end_at": (now + timedelta(minutes=30)).isoformat()}
+    assert client.post("/api/discovery/schedules", json=reversed_).status_code == 422
+    half = {k: v for k, v in body.items() if k != "end_at"}
+    assert client.post("/api/discovery/schedules", json=half).status_code == 422
+    past = client.post(
+        "/api/discovery/runs",
+        json={"items": ["10.10.0.0/24"], "end_at": (now - timedelta(minutes=1)).isoformat()},
+    )
+    assert past.status_code == 422
+    timed = client.post(
+        "/api/discovery/runs",
+        json={"items": ["10.10.0.0/24"], "end_at": (now + timedelta(hours=1)).isoformat()},
+    )
+    assert timed.status_code == 202
+    assert timed.json()["deadline"] is not None
+    not_paused = client.post(f"/api/discovery/runs/{timed.json()['id']}/resume", json={})
+    assert not_paused.status_code == 409

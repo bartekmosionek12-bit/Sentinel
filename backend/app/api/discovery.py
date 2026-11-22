@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import uuid
+from datetime import datetime
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -29,10 +30,12 @@ from app.discovery.engine import DiscoveryConfig, parse_targets
 from app.discovery.io import ImportError_, hosts_csv, nmap_xml, parse_import, rows_csv
 from app.discovery.schedule import (
     RunError,
+    aware,
     current_window,
     new_run,
     next_start,
     next_window,
+    validate_once,
 )
 from app.discovery.schedule import validate as validate_schedule
 from app.discovery.signatures import (
@@ -86,6 +89,12 @@ class TargetsIn(BaseModel):
 class RunIn(TargetsIn):
     name: str = Field(default="", max_length=200)
     settings: dict[str, Any] = Field(default_factory=dict)
+    # Opcjonalny koniec: po nim przebieg kończy rozpoczęte paczki i zapisuje resztę celów.
+    end_at: datetime | None = None
+
+
+class ResumeIn(BaseModel):
+    end_at: datetime | None = None
 
 
 class OverrideIn(BaseModel):
@@ -229,6 +238,8 @@ def create_run(
     payload: RunIn, session: SessionDep, dispatcher: DispatcherDep, principal: Runner
 ) -> dict[str, Any]:
     try:
+        if payload.end_at is not None:
+            validate_once(utcnow(), payload.end_at, utcnow())
         run = new_run(
             session,
             discovery_config(),
@@ -236,6 +247,7 @@ def create_run(
             name=payload.name,
             settings=payload.settings,
             actor=principal.actor,
+            deadline=payload.end_at,
         )
     except RunError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
@@ -256,6 +268,9 @@ class ScheduleIn(TargetsIn):
     days: list[int] = Field(default_factory=lambda: list(range(7)), max_length=7)
     timezone: str = Field(default="Europe/Warsaw", max_length=64)
     enabled: bool = True
+    # Skan jednorazowy: oba pola razem; wtedy okno, dni i częstotliwość są pomijane.
+    start_at: datetime | None = None
+    end_at: datetime | None = None
 
 
 def _schedule_out(session: SessionDep, schedule: DiscoverySchedule) -> dict[str, Any]:
@@ -288,6 +303,10 @@ def _schedule_out(session: SessionDep, schedule: DiscoverySchedule) -> dict[str,
         "next_window_at": upcoming.start if upcoming and window is None else None,
         "next_start_at": next_start(schedule, now),
         "resume_pending": schedule.resume_run_id is not None,
+        "resume_run_id": str(schedule.resume_run_id) if schedule.resume_run_id else None,
+        "once": schedule.once,
+        "start_at": aware(schedule.start_at),
+        "end_at": aware(schedule.end_at),
         "last_run": _run_out(last) if last else None,
     }
 
@@ -305,7 +324,13 @@ def _apply_schedule(schedule: DiscoverySchedule, payload: ScheduleIn) -> None:
             f"Za dużo adresów ({parsed.addresses}, limit {limit})",
         )
     days = sorted(set(payload.days))
+    if (payload.start_at is None) != (payload.end_at is None):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Skan jednorazowy wymaga początku i końca"
+        )
     try:
+        if payload.start_at is not None and payload.end_at is not None:
+            validate_once(payload.start_at, payload.end_at, utcnow())
         validate_schedule(
             payload.window_start,
             payload.window_end,
@@ -325,6 +350,10 @@ def _apply_schedule(schedule: DiscoverySchedule, payload: ScheduleIn) -> None:
     schedule.days = days
     schedule.timezone = payload.timezone
     schedule.enabled = payload.enabled
+    if payload.start_at != aware(schedule.start_at):
+        schedule.last_started_at = None  # nowy termin jednorazowego skanu: może ruszyć znowu
+    schedule.start_at = payload.start_at
+    schedule.end_at = payload.end_at
     schedule.updated_at = utcnow()
 
 
@@ -417,8 +446,17 @@ def get_run(run_id: uuid.UUID, session: SessionDep, principal: Reader) -> dict[s
         .order_by(DiscoveryBatch.finished_at.desc())
         .limit(200)
     )
+    resumed_by = session.scalar(
+        select(DiscoveryRun.id).where(DiscoveryRun.resume_of == run.id).limit(1)
+    )
+    remaining = run.remaining or {}
     return {
         **_run_out(run),
+        "remaining": {
+            "networks": len(remaining.get("networks", [])),
+            "hosts": len(remaining.get("hosts", [])),
+        },
+        "resumed_by": str(resumed_by) if resumed_by else None,
         "batches": [
             {
                 "target": b.target,
@@ -453,6 +491,56 @@ def stop_run(run_id: uuid.UUID, session: SessionDep, principal: Runner) -> dict[
         )
         session.commit()
     return _run_out(run)
+
+
+@router.post("/runs/{run_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+def resume_run(
+    run_id: uuid.UUID,
+    session: SessionDep,
+    dispatcher: DispatcherDep,
+    principal: Runner,
+    payload: ResumeIn | None = None,
+) -> dict[str, Any]:
+    """Wznawia przebieg wstrzymany na końcu okna: nowy przebieg z zapisaną resztą celów.
+
+    Reszta to niezeskanowane sieci i aktywne hosty bez skanu usług. Każdy cel znowu przechodzi
+    przez walidację, limity i scope_guard w silniku, tak jak przy zwykłym przebiegu.
+    """
+    run = _get_run(session, run_id)
+    if run.status != "paused" or not run.remaining:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Wznowić można tylko przebieg wstrzymany z zapisaną resztą"
+        )
+    already = session.scalar(
+        select(DiscoveryRun.id).where(DiscoveryRun.resume_of == run.id).limit(1)
+    )
+    if already is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ten przebieg został już wznowiony")
+    end_at = payload.end_at if payload else None
+    schedule = session.get(DiscoverySchedule, run.schedule_id) if run.schedule_id else None
+    rest = [*run.remaining.get("networks", []), *run.remaining.get("hosts", [])]
+    try:
+        if end_at is not None:
+            validate_once(utcnow(), end_at, utcnow())
+        resumed = new_run(
+            session,
+            discovery_config(),
+            rest,
+            name=f"{run.name.split(' (wznowienie')[0]} (wznowienie {utcnow():%d.%m %H:%M})",
+            settings=run.settings,
+            actor=principal.actor,
+            reason="Ręczne wznowienie wstrzymanego przebiegu",
+            schedule=schedule,
+            deadline=end_at,
+            resume_of=run,
+        )
+    except RunError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    if schedule is not None and schedule.resume_run_id == run.id:
+        schedule.resume_run_id = None
+    session.commit()
+    dispatcher.run_discovery(resumed.id)
+    return _run_out(resumed)
 
 
 def _hosts(session: SessionDep, run: DiscoveryRun) -> list[dict[str, Any]]:

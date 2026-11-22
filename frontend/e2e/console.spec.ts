@@ -178,6 +178,24 @@ test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async
   });
 });
 
+test("skan jednorazowy: start i koniec o zadanej godzinie", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/harmonogram");
+  await page.getByLabel("jednorazowo: start i koniec o zadanej godzinie").check();
+  await expect(page.getByLabel("Częstotliwość")).toHaveCount(0);
+  await page.getByPlaceholder("np. Nocny skan kampusu").fill("Audyt sobota");
+  await page.getByLabel("Cele harmonogramu").fill("10.20.0.0/18");
+  await page.getByLabel("Start skanu").fill("2026-11-28T01:00");
+  await page.getByLabel("Koniec skanu").fill("2026-11-28T05:00");
+  await page.getByRole("button", { name: "Dodaj harmonogram" }).click();
+  await expect
+    .poll(() => {
+      const body = sent.find((s) => s.method === "POST")?.body as Record<string, string>;
+      return body && [body.name, Boolean(body.start_at), Boolean(body.end_at)];
+    })
+    .toEqual(["Audyt sobota", true, true]);
+});
+
 test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
   await stubApi(page);
   await page.goto("/admin/discovery/porownanie");

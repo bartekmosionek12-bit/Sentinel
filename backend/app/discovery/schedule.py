@@ -8,6 +8,10 @@ Co minutę beat woła `tick`. Dla każdego włączonego harmonogramu:
    przebieg z niezeskanowaną resztą celów i terminem końca bieżącego okna,
 4. minęła częstotliwość od ostatniego startu → startuje nowy przebieg z terminem końca okna.
 
+Harmonogram jednorazowy (`start_at`, `end_at`) ma jedno okno: od startu do końca. Przebieg
+rusza o `start_at`; jeśli nie skończy przed `end_at`, kończy rozpoczęte paczki, zapisuje
+niezeskanowaną resztę (status „paused”) i czeka na „Wznów” w konsoli.
+
 Przebieg tworzy ta sama funkcja co w konsoli (`new_run`): ta sama walidacja celów, limity
 i audyt; każdy cel i tak przechodzi przez scope_guard w silniku.
 """
@@ -121,6 +125,15 @@ def validate(window_start: str, window_end: str, days: list[int], tz: str, inter
         raise RunError(f"Częstotliwość co najmniej co {MIN_INTERVAL} minut")
 
 
+def validate_once(start_at: datetime, end_at: datetime, now: datetime) -> None:
+    start = start_at if start_at.tzinfo else start_at.replace(tzinfo=UTC)
+    end = end_at if end_at.tzinfo else end_at.replace(tzinfo=UTC)
+    if end <= start:
+        raise RunError("Koniec skanu musi być później niż jego początek")
+    if end <= now:
+        raise RunError("Koniec skanu już minął")
+
+
 def _hhmm(value: str) -> time:
     hour, minute = value.split(":")
     return time(int(hour), int(minute))
@@ -141,8 +154,18 @@ def _window_from(day: datetime, schedule: DiscoverySchedule, zone: ZoneInfo) -> 
     return Window(start.astimezone(UTC), end.astimezone(UTC))
 
 
+def _once_bounds(schedule: DiscoverySchedule) -> tuple[datetime, datetime]:
+    start, end = aware(schedule.start_at), aware(schedule.end_at)
+    if start is None or end is None:
+        raise RunError("Skan jednorazowy wymaga początku i końca")
+    return start, end
+
+
 def current_window(schedule: DiscoverySchedule, now: datetime) -> Window | None:
     """Okno, w którym jest `now` (okno zaczęte wczoraj też się liczy, gdy trwa przez północ)."""
+    if schedule.once:
+        start, end = _once_bounds(schedule)
+        return Window(start, end) if start <= now < end else None
     zone = ZoneInfo(schedule.timezone)
     local = now.astimezone(zone)
     for back in (0, 1):
@@ -159,6 +182,9 @@ def next_window(schedule: DiscoverySchedule, now: datetime) -> Window | None:
     current = current_window(schedule, now)
     if current is not None:
         return current
+    if schedule.once:
+        start, end = _once_bounds(schedule)
+        return Window(start, end) if now < start else None
     zone = ZoneInfo(schedule.timezone)
     local = now.astimezone(zone)
     for ahead in range(8):
@@ -175,6 +201,11 @@ def next_start(schedule: DiscoverySchedule, now: datetime) -> datetime | None:
     """Najbliższa chwila, w której `tick` wystartuje przebieg (do pokazania w konsoli)."""
     if not schedule.enabled:
         return None
+    if schedule.once:
+        if schedule.last_started_at is not None:
+            return None
+        window = next_window(schedule, now)
+        return max(now, window.start) if window else None
     due = aware(schedule.last_started_at)
     due = now if due is None else max(now, due + timedelta(minutes=schedule.interval_minutes))
     if schedule.resume_run_id is not None:
@@ -240,16 +271,20 @@ def tick(
             else:
                 schedule.resume_run_id = None
                 last = aware(schedule.last_started_at)
+                if schedule.once and last is not None:
+                    continue
                 if last is not None and now < last + timedelta(minutes=schedule.interval_minutes):
                     continue
                 run = new_run(
                     session,
                     config,
                     list(schedule.targets),
-                    name=f"{schedule.name} {now:%Y-%m-%d %H:%M}",
+                    name=schedule.name
+                    if schedule.once
+                    else f"{schedule.name} {now:%Y-%m-%d %H:%M}",
                     settings=schedule.settings,
                     actor=f"system:schedule:{schedule.name}"[:255],
-                    reason="Przebieg z harmonogramu",
+                    reason="Skan jednorazowy" if schedule.once else "Przebieg z harmonogramu",
                     schedule=schedule,
                     deadline=window.end,
                 )

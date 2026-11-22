@@ -198,14 +198,16 @@ def test_signature_test_on_stored_run(
     assert body["services_checked"] >= 1
     assert body["hits"], body
     evidence = body["hits"][0]["evidence"]
-    assert "nagłówek server" in evidence and "/admin → 200" in evidence
+    assert "nagłówek server" in evidence
+    assert "/admin → 200" in evidence
     assert body["live_only"] == ["html", "path (wzorzec treści)"]
 
     miss = client.post(
         "/api/discovery/signatures/test",
         json={"id": "gitea", "run_id": run_id},
     ).json()
-    assert miss["hits"] == [] and miss["signature"]["id"] == "gitea"
+    assert miss["hits"] == []
+    assert miss["signature"]["id"] == "gitea"
     assert client.post("/api/discovery/signatures/test", json={"id": "brak"}).status_code == 404
     assert client.post("/api/discovery/signatures/test", json={}).status_code == 422
     bad = client.post(

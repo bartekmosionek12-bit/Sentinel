@@ -36,7 +36,10 @@ type TestRequest = { yaml?: string; id?: string };
 
 /** Wynik testu: które usługi z wybranego przebiegu pasują do sygnatury i dlaczego. */
 function SignatureTest({ request }: { request: TestRequest }) {
-  const runs = useQuery({ queryKey: ["discovery-runs"], queryFn: api.discoveryRuns });
+  const runs = useQuery({
+    queryKey: ["discovery-runs"],
+    queryFn: api.discoveryRuns,
+  });
   const [runId, setRunId] = useState("");
   const finished = (runs.data ?? []).filter((r) =>
     ["done", "stopped", "paused"].includes(r.status),
@@ -82,8 +85,8 @@ function SignatureTest({ request }: { request: TestRequest }) {
             </p>
             {data.live_only.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                Tych dopasowań nie da się sprawdzić na zapisanych danych, bo treść stron nie
-                jest przechowywana: {data.live_only.join(", ")}. Sprawdzi je kolejny przebieg.
+                Tych dopasowań nie da się sprawdzić na zapisanych danych, bo treść stron nie jest
+                przechowywana: {data.live_only.join(", ")}. Sprawdzi je kolejny przebieg.
               </p>
             )}
             {data.hits.length > 0 && (
@@ -148,7 +151,10 @@ function SignatureRows({
   onDelete,
   onTest,
 }: {
-  items: { definition: SignatureDefinition; custom?: { updated_by: string; updated_at: string } }[];
+  items: {
+    definition: SignatureDefinition;
+    custom?: { updated_by: string; updated_at: string };
+  }[];
   onEdit?: (definition: SignatureDefinition) => void;
   onDelete?: (id: string) => void;
   onTest: (id: string) => void;
@@ -337,7 +343,10 @@ export function Signatures() {
           {remove.error && <p className="text-sm text-red-700">{remove.error.message}</p>}
           {list.data && list.data.custom.length > 0 && (
             <SignatureRows
-              items={list.data.custom.map((row) => ({ definition: row.definition, custom: row }))}
+              items={list.data.custom.map((row) => ({
+                definition: row.definition,
+                custom: row,
+              }))}
               onEdit={editable ? (d) => setText(JSON.stringify(d, null, 2)) : undefined}
               onDelete={editable ? (id) => remove.mutate(id) : undefined}
               onTest={(id) => setTesting({ id })}

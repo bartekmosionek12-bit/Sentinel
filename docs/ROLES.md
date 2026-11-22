@@ -154,6 +154,7 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/discovery/runs/{run_id}` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/runs/{run_id}/export` | `reports:export` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/runs/{run_id}/hosts` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
+| POST | `/api/discovery/runs/{run_id}/resume` | `scan:run` | ✓ | ✓ | · | · |
 | POST | `/api/discovery/runs/{run_id}/stop` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/discovery/schedules` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/schedules` | `scan:run` | ✓ | ✓ | · | · |
@@ -162,6 +163,7 @@ Część decyzji zależy od danych, więc poza uprawnieniem z tabeli endpoint sp
 | GET | `/api/discovery/settings` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | GET | `/api/discovery/signatures` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | POST | `/api/discovery/signatures/check` | `scan:run` | ✓ | ✓ | · | · |
+| POST | `/api/discovery/signatures/test` | `scan:read` | ✓ | ✓ | ✓ | ✓ |
 | DELETE | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
 | PUT | `/api/discovery/signatures/{signature_id}` | `scan:run` | ✓ | ✓ | · | · |
 | GET | `/api/discovery/states` | `scan:read` | ✓ | ✓ | ✓ | ✓ |

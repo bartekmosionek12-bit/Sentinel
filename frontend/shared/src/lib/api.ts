@@ -448,6 +448,9 @@ export interface DiscoveryRun {
   schedule_id?: string | null;
   resume_of?: string | null;
   deadline?: string | null;
+  /** Tylko w szczegółach przebiegu: ile celów czeka na wznowienie i kto je wznowił. */
+  remaining?: { networks: number; hosts: number };
+  resumed_by?: string | null;
 }
 
 export interface DiscoveryScheduleInput {
@@ -460,6 +463,9 @@ export interface DiscoveryScheduleInput {
   timezone: string;
   enabled: boolean;
   settings?: Partial<DiscoverySettings>;
+  /** Skan jednorazowy: początek i koniec (ISO). Bez nich harmonogram jest cykliczny. */
+  start_at?: string | null;
+  end_at?: string | null;
 }
 
 export interface DiscoverySchedule {
@@ -482,6 +488,10 @@ export interface DiscoverySchedule {
   next_window_at: string | null;
   next_start_at: string | null;
   resume_pending: boolean;
+  resume_run_id?: string | null;
+  once?: boolean;
+  start_at?: string | null;
+  end_at?: string | null;
   last_run: DiscoveryRun | null;
 }
 
@@ -1239,7 +1249,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
-  startDiscovery: (input: { text: string; name: string; settings: Partial<DiscoverySettings> }) =>
+  startDiscovery: (input: {
+    text: string;
+    name: string;
+    settings: Partial<DiscoverySettings>;
+    end_at?: string | null;
+  }) =>
     request<DiscoveryRun>("/discovery/runs", {
       method: "POST",
       body: JSON.stringify(input),
@@ -1247,6 +1262,11 @@ export const api = {
   discoveryRuns: () => request<DiscoveryRun[]>("/discovery/runs?limit=50"),
   discoveryRun: (id: string) =>
     request<DiscoveryRun & { batches: DiscoveryBatch[] }>(`/discovery/runs/${id}`),
+  resumeDiscovery: (id: string, endAt?: string | null) =>
+    request<DiscoveryRun>(`/discovery/runs/${id}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ end_at: endAt ?? null }),
+    }),
   stopDiscovery: (id: string) =>
     request<DiscoveryRun>(`/discovery/runs/${id}/stop`, { method: "POST" }),
   discoveryHosts: (id: string) => request<DiscoveryHost[]>(`/discovery/runs/${id}/hosts`),
