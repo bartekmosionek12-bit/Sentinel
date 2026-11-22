@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from collections.abc import Sequence
@@ -299,7 +300,8 @@ def cmd_register_users(session: Session, settings: Settings, raw: str) -> dict[s
     Wejście (stdin): lista {subject, username, display_name, email, roles}. Role są tylko
     podglądem; o dostępie decyduje zawsze bieżący token. Tylko w trybie demo.
     """
-    if not settings.demo_mode:
+    # SENTINEL_ACCOUNTS=1: te same konta w trybie bez demo (scripts/demo_users.sh).
+    if not settings.demo_mode and os.environ.get("SENTINEL_ACCOUNTS") != "1":
         raise CliError("register-users działa tylko przy DEMO_MODE=true (konta demo).")
     try:
         items = json.loads(raw)

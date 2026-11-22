@@ -13,6 +13,22 @@ set -euo pipefail
 # Git Bash na Windowsie zamienia argumenty i zmienne typu /opt/... na ścieżki Windows; wyłączamy to.
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
+# Windows (konta.ps1, start.ps1): katalog docker.exe, gdyby Git Bash nie miał go w PATH.
+if [ -n "${SENTINEL_DOCKER_DIR:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  PATH="$(cygpath -u "$SENTINEL_DOCKER_DIR"):$PATH"
+fi
+# Git Bash wybiera skrypt „docker” dla WSL zamiast docker.exe (jak w start.sh): własny zamiennik.
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*)
+    if command -v docker.exe >/dev/null 2>&1; then
+      mkdir -p .bin
+      printf '#!/bin/sh\nexec docker.exe "$@"\n' > .bin/docker
+      chmod +x .bin/docker
+      PATH="$PWD/.bin:$PATH"
+    fi
+    ;;
+esac
+export PATH
 
 # SENTINEL_ACCOUNTS=1: te same cztery konta w trybie bez demo (./start.sh --bez-demo).
 if [ "${SENTINEL_ACCOUNTS:-}" != "1" ] && ! grep -Eq '^DEMO_MODE=true[[:space:]]*$' .env; then
@@ -146,7 +162,7 @@ for kc in json.loads(os.environ["KC_USERS"] or "[]"):
 print(json.dumps(out))
 PY
 )
-if printf '%s' "$REGISTER" | docker compose exec -T api python -m app.cli register-users >/dev/null; then
+if printf '%s' "$REGISTER" | docker compose exec -T -e SENTINEL_ACCOUNTS="${SENTINEL_ACCOUNTS:-}" api python -m app.cli register-users >/dev/null; then
   echo "Konta demo zapisane w panelu IAM."
 else
   echo "Uwaga: nie udało się zapisać kont w panelu IAM; pojawią się po pierwszym logowaniu." >&2

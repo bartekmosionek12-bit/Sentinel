@@ -36,6 +36,9 @@ Adresy:
 | Konsola | <http://localhost:8080/admin/> | `admin` / hasło z `data/demo-credentials.env` + TOTP |
 | DefectDojo | <http://localhost:8081> | `DD_ADMIN_USER` / `DD_ADMIN_PASSWORD` z `.env` |
 
+Konta, hasła i kod TOTP w każdej chwili (też po dodaniu nowych kont): `.\konta.cmd` na Windowsie,
+`bash scripts/demo_users.sh` w Git Bash albo na Linuksie.
+
 TOTP: sekret jest w `data/demo-credentials.env` (link `otpauth://` wypisuje też skrypt);
 dodaj go do aplikacji typu Google Authenticator albo Aegis. Konta: `admin`, `editor`,
 `modifier`, `viewer` (cztery role z briefu, tabela w [ROLES.md](ROLES.md)).
