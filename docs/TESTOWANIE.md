@@ -1,6 +1,6 @@
 # Jak przetestować Sentinel ASI
 
-Stan na 2026-11-22. Wszystkie komendy wpisuj w folderze repozytorium. Windows: `.\start.cmd`
+Stan na 2026-11-22 (wieczór). Wszystkie komendy wpisuj w folderze repozytorium. Windows: `.\start.cmd`
 (PowerShell albo dwuklik), Linux/macOS/Git Bash: `./start.sh`.
 
 ## 0. Aktualizacja kodu
@@ -22,7 +22,8 @@ przebudowy zobaczysz starą wersję. Potem w przeglądarce Ctrl+F5.
 
 Skrypt sam:
 
-1. tworzy `.env` i hasła, ustawia `DEMO_MODE=true`,
+1. tworzy `.env`, hasła i klucz szyfrowania danych (`DATA_ENCRYPTION_KEY`), ustawia
+   `DEMO_MODE=true`,
 2. uruchamia lokalne DefectDojo (pierwszy raz kilka minut), zakłada product/engagement/test
    i token, zapisuje je w `.env`,
 3. buduje i uruchamia aplikację z izolowaną siecią demo-lab (`172.30.99.0/24`),
@@ -38,6 +39,14 @@ Adresy:
 TOTP: sekret jest w `data/demo-credentials.env` (link `otpauth://` wypisuje też skrypt);
 dodaj go do aplikacji typu Google Authenticator albo Aegis. Konta: `admin`, `editor`,
 `modifier`, `viewer` (cztery role z briefu, tabela w [ROLES.md](ROLES.md)).
+
+Lokalny model językowy (Ollama, ok. 6 GB RAM) jest opcjonalny: włącza się sam, gdy w
+`data/models` są pliki modelu, albo na życzenie `SENTINEL_LLM=1 ./start.sh`. Bez niego Sentek
+i objaśnienia działają na słowach kluczowych i szablonach.
+
+**Klucz szyfrowania.** Wyniki skanów, cele, notatki i dowody są w bazie zaszyfrowane kluczem
+z `.env` ([DATA_PROTECTION.md](DATA_PROTECTION.md)). Nie usuwaj tej linii z `.env`: bez klucza
+zapisanych wyników nie da się odczytać.
 
 Jeśli DefectDojo się nie uruchomi (np. Docker Hub zwróci 429), aplikacja działa dalej, a
 skrypt mówi, co zrobić (`docker login`). Eksport awaryjny: Skany → „Pobierz nmap XML”.
@@ -101,13 +110,17 @@ Formularz celów (Discovery → Cele) przyjmuje listę ręczną, CSV i JSON.
 
 | Funkcja | Gdzie |
 |---|---|
-| Edycja wyniku (nazwa hosta, krytyczność, status obsługi, notatka), zachowana w kolejnych skanach | przebieg → karta hosta → pola edycji → „Zapisz zmiany” |
+| Edycja wyniku (nazwa hosta, krytyczność, status obsługi, notatka, tagi), zachowana w kolejnych skanach | przebieg → karta hosta → pola edycji → „Zapisz zmiany”; filtr po tagu nad listą hostów |
+| Harmonogram: okno czasowe, częstotliwość, wznowienie | Discovery → **Harmonogram** → cele, np. codziennie 22:00–06:00; przebieg, który nie zdąży, ma stan „Wstrzymany (koniec okna)” i wraca w kolejnym oknie |
+| Hosty niestabilne | Porównanie i stany: stany hostów z historią; host, który odpowiadał poprzednio, a teraz milczy, dostaje drugą próbę (opis pod statystykami przebiegu); wzorzec „odpowiada tylko w dzień / w nocy” |
+| Grupy podobnych usług | przebieg → karta „Grupy podobnych usług” |
+| Zmiany w czasie | Porównanie i stany → wykres hostów i usług na przebieg |
 | Eksport wyników (JSON, CSV, nmap XML) i różnic (JSON, CSV) | przebieg → „Hosty” → przyciski formatu; Porównanie → przyciski eksportu |
 | Eksport do DefectDojo (finding Info) | przebieg → zaznacz hosty → „Wyślij do DefectDojo”, potem <http://localhost:8081> |
 | Własne sygnatury | Discovery → **Sygnatury detekcyjne** → YAML → Sprawdź → Zapisz → nowy skan |
 | Role | zaloguj się jako `viewer`: brak przycisków zapisu, API zwraca 403 i zapisuje odmowę w audycie |
 | Dziennik audytu | Kontrola → Dziennik audytu (wejścia do konsoli, skany, eksporty, sygnatury) |
-| Sentek | postać w prawym dolnym rogu: najedź, kliknij, użyj szybkich akcji |
+| Sentek | postać w prawym dolnym rogu: najedź, kliknij, użyj szybkich akcji; pytania z danych: „Co się zmieniło od ostatniego skanu?”, „Które hosty są niestabilne?”, „Gdzie są panele administracyjne?”, „Czy jakieś certyfikaty wygasają?”, „Jakie technologie wykryto?”, „Czy DefectDojo działa?”, „Jakie mam uprawnienia?” |
 
 ## 4. Testy automatyczne
 
@@ -132,5 +145,6 @@ Silnik discovery bez stawiania aplikacji (na komputerze z labem, wymaga `nmap` i
 | „Nie udało się sprawdzić uprawnień: 502” | konsola sama czeka do 3 min; jeśli nie przejdzie: `docker compose ps api` i `docker compose logs --tail 50 api` |
 | „Nie udało się zalogować: authentication_expired” | konsola ponawia logowanie sama; jeśli nie, „Spróbuj ponownie” |
 | Stary wygląd po aktualizacji | `git log -1` (czy pull przeszedł), `./start.sh`, Ctrl+F5 |
+| „Poza zakresem: Adres fdc4:…” przy `host.docker.internal` | wpisz `192.168.65.254` albo zaktualizuj kod (zakres labu obejmuje już adres IPv6 Docker Desktop) |
 | „Pool overlaps” przy starcie | `start.sh` sprząta starą kopię projektu sam; inną sieć usuń: `docker network rm <nazwa>` |
 | DefectDojo: 429 Too Many Requests | `docker login`, potem `./start.sh` |
