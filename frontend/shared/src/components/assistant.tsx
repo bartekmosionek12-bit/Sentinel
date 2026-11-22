@@ -4,8 +4,8 @@
  * Przywrócony z historii (usunięty w 7851222) i dopasowany do obecnego wyglądu konsoli.
  */
 import { useMutation } from "@tanstack/react-query";
-import { MessageCircle, Send, X } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { MessageCircle, Send, X, Zap } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Sentek, type SentekPose } from "@shared/components/Sentek";
@@ -18,12 +18,52 @@ import { asPose, setSentekEnabled, useSentekEnabled } from "@shared/lib/sentek";
 import { cn } from "@shared/lib/utils";
 
 const DISCLAIMER = "Odpowiada z danych w systemie. Nie skanuje sieci i nie zmienia ustawień.";
-const START = [
-  "Co jest teraz najgroźniejsze?",
-  "Ile mamy nowych hostów?",
-  "Do kiedy trzeba naprawić zagrożenia?",
-  "Co to jest KEV?",
+/** Szybkie akcje: zawsze pod ręką nad polem pytania. */
+const QUICK = [
+  "Podsumuj krytyczne zagrożenia",
+  "Wskaż hosty Shadow IT",
+  "Sprawdź stan feedów i systemu",
+  "Zaproponuj bezpieczny skan L1",
 ];
+
+/** Linki w Markdownie z odpowiedzi ([etykieta](/ścieżka)) jako linki do widoków konsoli.
+ *  Tylko ścieżki wewnętrzne (zaczynające się od „/”); reszta zostaje zwykłym tekstem. */
+function RichLine({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  const pattern = /\[([^\]]+)\]\((\/[^)\s]*)\)/g;
+  let last = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > last) parts.push(text.slice(last, index));
+    parts.push(
+      <Link key={index} className="font-medium text-primary underline" to={match[2] ?? "/"}>
+        {match[1]}
+      </Link>,
+    );
+    last = index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <p>{parts}</p>;
+}
+
+function Typing() {
+  return (
+    <div
+      className="mr-4 inline-flex items-center gap-2 rounded-sm border border-border bg-muted px-3 py-2"
+      role="status"
+      aria-label="Sentek sprawdza dane"
+    >
+      {[0, 1, 2].map((dot) => (
+        <span
+          key={dot}
+          className="sentek-dot size-1.5 rounded-full bg-primary"
+          style={{ animationDelay: `${dot * 0.15}s` }}
+        />
+      ))}
+      <span className="text-xs text-muted-foreground">Sentek sprawdza dane…</span>
+    </div>
+  );
+}
 
 type Message =
   | { id: number; from: "user"; text: string }
@@ -33,7 +73,7 @@ function AnswerBubble({ answer }: { answer: AssistantAnswer }) {
   return (
     <div className="space-y-2 rounded-sm border border-border bg-muted px-3 py-2 text-sm">
       {answer.text.map((line, index) => (
-        <p key={index}>{line}</p>
+        <RichLine key={index} text={line} />
       ))}
       {answer.freshness && <p className="text-xs text-muted-foreground">{answer.freshness}</p>}
       {answer.links.length > 0 && (
@@ -88,20 +128,31 @@ export function SentekAssistant() {
     : last && last.from === "sentek"
       ? asPose(last.answer.pose)
       : "wave";
-  const suggestions = last && last.from === "sentek" ? last.answer.suggestions : START;
+  const suggestions = (last && last.from === "sentek" ? last.answer.suggestions : []).filter(
+    (text) => !QUICK.includes(text),
+  );
 
   if (!open)
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-4 z-40 flex items-center gap-2 rounded-sm border border-border bg-card py-1 pr-3 pl-1 hover:border-primary"
-        aria-label="Zapytaj Sentka"
-        data-demo="sentek-button"
-      >
-        <Sentek pose="wave" size={96} className="shrink-0" />
-        <span className="text-sm font-medium">Zapytaj Sentka</span>
-      </button>
+      <div className="group fixed right-4 bottom-4 z-40 flex items-end">
+        {/* Biała chmurka pojawia się po najechaniu (albo fokusie) na Sentka. */}
+        <div
+          aria-hidden
+          className="pointer-events-none relative mr-1 mb-16 max-w-56 translate-x-3 scale-90 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 opacity-0 shadow-lg transition-all duration-300 ease-out group-focus-within:translate-x-0 group-focus-within:scale-100 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100"
+        >
+          Cześć! Mogę Ci pomóc. Kliknij i zapytaj o zagrożenia, hosty albo stan systemu.
+          <span className="absolute -right-1.5 bottom-3 size-3 rotate-45 bg-white" />
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="sentek-float rounded-full transition-transform duration-300 hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary"
+          aria-label="Zapytaj Sentka"
+          data-demo="sentek-button"
+        >
+          <Sentek pose="wave" size={120} className="shrink-0 drop-shadow-lg" />
+        </button>
+      </div>
     );
 
   return (
@@ -128,7 +179,8 @@ export function SentekAssistant() {
       <div className="flex-1 space-y-3 overflow-y-auto p-3" aria-live="polite">
         {messages.length === 0 && (
           <p className="text-sm">
-            Cześć! Pytaj o zagrożenia, hosty, terminy napraw albo znaczenie skrótów.
+            Cześć! Pytaj o zagrożenia i katalog KEV, hosty i otwarte porty, stan skanów i
+            feedów albo terminy napraw. Szybkie akcje masz pod spodem.
           </p>
         )}
         {messages.map((message) =>
@@ -145,7 +197,7 @@ export function SentekAssistant() {
             </div>
           ),
         )}
-        {ask.isPending && <p className="text-sm text-muted-foreground">Sentek sprawdza dane…</p>}
+        {ask.isPending && <Typing />}
         {ask.error && (
           <p role="alert" className="text-sm text-red-700">
             {ask.error.message}
@@ -154,6 +206,18 @@ export function SentekAssistant() {
         <div ref={end} />
       </div>
       <div className="flex flex-wrap gap-1.5 border-t border-border px-3 pt-2">
+        {QUICK.map((text) => (
+          <button
+            key={text}
+            type="button"
+            onClick={() => submit(text)}
+            disabled={ask.isPending}
+            className="inline-flex items-center gap-1 rounded-sm border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs hover:border-primary disabled:opacity-50"
+          >
+            <Zap className="size-3 text-amber-400" aria-hidden />
+            {text}
+          </button>
+        ))}
         {suggestions.map((text) => (
           <button
             key={text}

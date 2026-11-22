@@ -22,13 +22,17 @@ class DefectDojoClient:
         url = os.getenv("DEFECTDOJO_URL", LOCAL_URL).rstrip("/")
         if url not in LOCAL_URLS:
             raise DefectDojoError("Dozwolony jest wyłącznie lokalny DefectDojo z profilu Compose")
-        token = os.getenv("DEFECTDOJO_API_TOKEN", "")
+        # Jeden token dla obu ścieżek eksportu (konsola /skany i discovery).
+        token = os.getenv("DEFECTDOJO_API_TOKEN") or os.getenv("DEFECTDOJO_TOKEN", "")
         self.product_id = os.getenv("DEFECTDOJO_PRODUCT_ID", "")
         self.engagement_id = os.getenv("DEFECTDOJO_ENGAGEMENT_ID", "")
         self.test_id = os.getenv("DEFECTDOJO_TEST_ID", "")
         self.test_type_id: int | None = None
         if not all((token, self.product_id, self.engagement_id, self.test_id)):
-            raise DefectDojoError("Brak lokalnego tokenu API albo ID product/engagement/test")
+            raise DefectDojoError(
+                "Brak lokalnego tokenu API albo ID product/engagement/test: "
+                "uruchom scripts/defectdojo_local.sh"
+            )
         self.client = httpx.Client(
             base_url=url,
             timeout=10,

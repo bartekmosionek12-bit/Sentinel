@@ -22,14 +22,16 @@ print(json.dumps({"token": token.key, "product": product.id, "engagement": engag
 PY
 )
 docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml exec -T dd-uwsgi python manage.py shell -c "$code" > "$result_file"
-python - "$result_file" <<'PY'
+"$(command -v python3 || command -v python)" - "$result_file" <<'PY'
 import json
 import sys
 from pathlib import Path
 data = json.loads(Path(sys.argv[1]).read_text().strip().splitlines()[-1])
 path = Path(".env")
 values = {
+    "DEFECTDOJO_URL": "http://dd-nginx:8080",
     "DEFECTDOJO_API_TOKEN": str(data["token"]),
+    "DEFECTDOJO_TOKEN": str(data["token"]),
     "DEFECTDOJO_PRODUCT_ID": str(data["product"]),
     "DEFECTDOJO_ENGAGEMENT_ID": str(data["engagement"]),
     "DEFECTDOJO_TEST_ID": str(data["test"]),
@@ -41,4 +43,6 @@ path.write_text("\n".join(lines) + "\n")
 path.chmod(0o600)
 print("Lokalny profil DefectDojo skonfigurowany")
 PY
-docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml up -d --no-build api >/dev/null
+# Nowe zmienne z .env trafiają do kontenerów dopiero po ich odtworzeniu (sam restart nie wystarczy).
+docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml up -d --no-deps --no-build \
+  api worker-core worker-scans >/dev/null

@@ -9,6 +9,8 @@ import { Button } from "@shared/components/ui/button";
 import { Card } from "@shared/components/ui/card";
 import { api } from "@shared/lib/api";
 
+/** Jedyny widok listy raportów: wszystkie raporty ze światłem i znacznikiem nieprzeczytanych
+ *  (dawna „Skrzynka” jest tu połączona z „Raportami”). */
 export function ReportsPage({
   basePath,
   actions,
@@ -16,7 +18,13 @@ export function ReportsPage({
   basePath: string;
   actions?: ReactNode;
 }) {
-  const reports = useQuery({ queryKey: ["reports"], queryFn: api.reports });
+  const reports = useQuery({
+    queryKey: ["reports"],
+    queryFn: api.reports,
+    refetchInterval: 5_000,
+  });
+  const unread = reports.data?.filter((item) => !item.read).length ?? 0;
+  const red = reports.data?.filter((item) => item.light === "red").length ?? 0;
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -26,7 +34,14 @@ export function ReportsPage({
         />
         {actions}
       </div>
-      <Card>
+      {reports.data && reports.data.length > 0 && (
+        <p className="mb-2 text-sm text-muted-foreground" data-demo="reports-summary">
+          {unread
+            ? `Nieprzeczytane: ${unread}. Czerwone światło: ${red}. Zacznij od czerwonych.`
+            : `Wszystkie przeczytane. Czerwone światło: ${red}.`}
+        </p>
+      )}
+      <Card data-demo="inbox">
         <QueryState
           isPending={reports.isPending}
           error={reports.error}
@@ -38,42 +53,6 @@ export function ReportsPage({
             items={reports.data}
             basePath={basePath}
             emptyText="Nie ma jeszcze raportów. Powstają po ocenie stanu i przy zagrożeniach typu zero-day."
-          />
-        )}
-      </Card>
-    </>
-  );
-}
-
-export function InboxPage({ basePath }: { basePath: string }) {
-  const inbox = useQuery({
-    queryKey: ["inbox"],
-    queryFn: api.inbox,
-    refetchInterval: 5_000,
-  });
-  const unread = inbox.data?.unread ?? 0;
-  return (
-    <>
-      <PageHeader
-        title="Skrzynka"
-        description={
-          unread
-            ? `Nieprzeczytane raporty: ${unread}. Zacznij od czerwonych.`
-            : "Raporty wysłane do Ciebie przez system. Wszystkie przeczytane."
-        }
-      />
-      <Card data-demo="inbox">
-        <QueryState
-          isPending={inbox.isPending}
-          error={inbox.error}
-          empty={false}
-          emptyText=""
-        />
-        {inbox.data && (
-          <ReportList
-            items={inbox.data.items}
-            basePath={basePath}
-            emptyText="Skrzynka jest pusta."
           />
         )}
       </Card>

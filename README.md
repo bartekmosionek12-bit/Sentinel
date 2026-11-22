@@ -42,10 +42,12 @@ Bez trybu demo (pusty zakres, brak kont): `cp .env.example .env`, ustaw hasła i
 Lokalny DefectDojo (oddzielny profil Compose, bez połączenia z obcą instancją):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml --profile defectdojo up -d
-./scripts/defectdojo_token.sh        # token do eksportu z discovery
-./scripts/bootstrap_defectdojo.sh    # product, engagement i test do eksportu z /admin/skany
+./scripts/defectdojo_local.sh   # start profilu, token i product/engagement/test w .env, odtworzenie api
 ```
+
+Jeden token (`DEFECTDOJO_TOKEN` i `DEFECTDOJO_API_TOKEN`) obsługuje eksport z discovery i z
+`/admin/skany`. Nie ma atrapy: gdy Docker Hub odrzuci pobranie obrazów (limit 429 dla
+anonimowych pobrań), skrypt mówi o tym wprost, a pomaga `docker login`.
 
 DefectDojo jest pod `http://localhost:8081`. Identyfikatory i token trafiają tylko do
 ignorowanego `.env`. Konsola wysyła zaznaczone obserwacje jako findingi `Info`, a powtórny
@@ -90,7 +92,7 @@ wtedy w widoku Skany jako „Czeka na zgodę”.
 
 ### Raporty i scenariusz zero-day
 
-Po `seed_demo` w Skrzynce (`/admin/skrzynka`) czeka raport o stanie z czerwonym światłem.
+Po `seed_demo` w Raportach (`/admin/raporty`) czeka raport o stanie z czerwonym światłem.
 Warstwa „W skrócie” odpowiada na pięć pytań (Co się stało? Czy jesteśmy zagrożeni? Co
 najgorszego może się stać? Co trzeba zrobić? Kto i do kiedy?) prostym językiem, z podpowiedzią
 przy każdym terminie ze słownika; „Szczegóły techniczne” są zwinięte. Światło i fakty liczy

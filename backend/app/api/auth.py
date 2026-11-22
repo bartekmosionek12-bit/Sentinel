@@ -52,11 +52,25 @@ def me(principal: CurrentPrincipal) -> MeOut:
 @router.get(
     "/console/admin",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require("console:admin"))],
 )
-def admin_console_access() -> None:
+def admin_console_access(
+    session: SessionDep, principal: Annotated[Principal, Depends(require("console:admin"))]
+) -> None:
     """Wejście do konsoli zespołu IT. Interfejs pyta o to przy starcie; odmowa (np. konto bez
-    roli albo bez TOTP) to 403 z wpisem `access_denied` w dzienniku audytu."""
+    roli albo bez TOTP) to 403 z wpisem `access_denied` w dzienniku audytu, a wejście to wpis
+    `console_login` (Sentek odpowiada z niego na „kto ostatnio się logował?”)."""
+    audit.record(
+        session,
+        audit.AuditEvent(
+            actor=principal.actor,
+            action="console_login",
+            reason="Wejście do konsoli zespołu IT",
+            inputs={"client": principal.client_id, "mfa": principal.mfa},
+            object_type="user",
+            object_id=principal.subject,
+        ),
+    )
+    session.commit()
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
