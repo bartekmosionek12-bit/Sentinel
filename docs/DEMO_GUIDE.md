@@ -1,8 +1,8 @@
 # Przewodnik demo
 
 Pokaz na żywo na scenariuszach z [DEMO.md](DEMO.md). Film demo z lektorem usunęliśmy przy
-zmianie kierunku (21.11.2026); scenariusz prezentacji pod brief AGH powstaje w P12
-([ROADMAP.md](ROADMAP.md)).
+zmianie kierunku (21.11.2026); nowy scenariusz filmu 2–3 min pod brief AGH:
+[SCENARIUSZ_FILMU.md](SCENARIUSZ_FILMU.md).
 
 ## Pokaz na żywo
 

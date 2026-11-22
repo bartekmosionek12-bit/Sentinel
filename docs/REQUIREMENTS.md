@@ -89,8 +89,8 @@ Częściowo zostaje tylko N11 (źródła pasywne): podłączymy je, gdy organiza
 | ID | Wymaganie | Status | Uwagi |
 |---|---|---|---|
 | F1 | Repozytorium | ✅ | GitHub, CI |
-| F2 | Dokumentacja techniczna | ✅ | ARCHITECTURE, ROLES, DATA_PROTECTION, PERFORMANCE, TESTOWANIE, LAB_TEST |
-| F3 | Prezentacja do 10 slajdów | 🟡 | Do przygotowania przez zespół |
+| F2 | Dokumentacja techniczna | ✅ | [DOKUMENTACJA.md](DOKUMENTACJA.md) (punkt wejścia), szczegóły w OPIS_SYSTEMU, ROLES, WARSTWY, DATA_PROTECTION, PERFORMANCE, TESTOWANIE, LAB_TEST |
+| F3 | Prezentacja do 10 slajdów | 🟡 | Slajdy w przygotowaniu; scenariusz filmu demo: [SCENARIUSZ_FILMU.md](SCENARIUSZ_FILMU.md) |
 | F4 | Demo lokalnie | ✅ | `./start.sh` (demo) i `./start.sh --bez-demo` (lab mentorów) |
 | T1 | Technologie open source | ✅ | Orkiestracja w Pythonie, praca sieciowa w nmapie (C); pomiar w PERFORMANCE.md |
 
