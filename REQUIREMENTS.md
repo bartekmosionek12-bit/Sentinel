@@ -38,4 +38,4 @@ lokalną usługę; niezaliczone pomiary są oznaczone osobno.
 4. Modułu organizacji i dashboardu menedżera nie ma w tej wersji (usunięte w c1299e6 jako
    spoza briefu).
 
-Test na laboratorium od mentorów i instrukcja odtworzenia: [docs/LAB_TEST.md](docs/LAB_TEST.md).
+Test na laboratorium od mentorów: [docs/LAB_TEST.md](docs/LAB_TEST.md). Pełna instrukcja testów, tryb bez demo i dane mentorów w konsoli: [docs/TESTOWANIE.md](docs/TESTOWANIE.md).

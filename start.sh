@@ -57,4 +57,9 @@ for net in $(docker network ls -q 2>/dev/null); do
   docker network ls -q --filter "label=com.docker.compose.project=$other" | xargs -r docker network rm >/dev/null
 done
 
+# ./start.sh --bez-demo [--czysta-baza]: własne cele (np. lab mentorów) zamiast demo-lab.
+if [ "${1:-}" = "--bez-demo" ]; then
+  shift
+  exec bash ./scripts/start_live.sh "$@"
+fi
 bash ./scripts/seed_demo.sh

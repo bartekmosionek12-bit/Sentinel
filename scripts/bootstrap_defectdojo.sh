@@ -44,5 +44,8 @@ path.chmod(0o600)
 print("Lokalny profil DefectDojo skonfigurowany")
 PY
 # Nowe zmienne z .env trafiają do kontenerów dopiero po ich odtworzeniu (sam restart nie wystarczy).
-docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml up -d --no-deps --no-build \
-  api worker-core worker-scans >/dev/null
+# DD_NO_RESTART=1: wywołanie ze start.sh przed startem aplikacji, więc nie ma czego odtwarzać.
+if [ -z "${DD_NO_RESTART:-}" ]; then
+  docker compose -f docker-compose.yml -f docker-compose.defectdojo.yml up -d --no-deps --no-build \
+    api worker-core worker-scans >/dev/null
+fi

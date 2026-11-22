@@ -134,24 +134,32 @@ export function SentekAssistant() {
 
   if (!open)
     return (
-      <div className="group fixed right-4 bottom-4 z-40 flex items-end">
-        {/* Biała chmurka pojawia się po najechaniu (albo fokusie) na Sentka. */}
+      <div className="fixed right-4 bottom-4 z-40 flex flex-row-reverse items-end">
+        {/* Sama postać, bez ramki i tła. Chmurka i powiększenie tylko po najechaniu
+            (albo fokusie klawiaturą) na Sentka. Przycisk jest pierwszy w DOM (peer),
+            a flex-row-reverse stawia chmurkę po jego lewej stronie. */}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="peer group cursor-pointer appearance-none border-0 bg-transparent p-0 outline-none [-webkit-tap-highlight-color:transparent]"
+          aria-label="Zapytaj Sentka"
+          data-demo="sentek-button"
+        >
+          <span className="sentek-float block">
+            <Sentek
+              pose="wave"
+              size={128}
+              className="shrink-0 origin-bottom drop-shadow-lg transition-transform duration-300 ease-out group-hover:scale-115 group-focus-visible:scale-115"
+            />
+          </span>
+        </button>
         <div
           aria-hidden
-          className="pointer-events-none relative mr-1 mb-16 max-w-56 translate-x-3 scale-90 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 opacity-0 shadow-lg transition-all duration-300 ease-out group-focus-within:translate-x-0 group-focus-within:scale-100 group-focus-within:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100"
+          className="pointer-events-none relative mr-1 mb-20 max-w-56 translate-x-3 scale-90 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 opacity-0 shadow-lg transition-all duration-300 ease-out peer-hover:translate-x-0 peer-hover:scale-100 peer-hover:opacity-100 peer-focus-visible:translate-x-0 peer-focus-visible:scale-100 peer-focus-visible:opacity-100"
         >
           Cześć! Mogę Ci pomóc. Kliknij i zapytaj o zagrożenia, hosty albo stan systemu.
           <span className="absolute -right-1.5 bottom-3 size-3 rotate-45 bg-white" />
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="sentek-float rounded-full transition-transform duration-300 hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary"
-          aria-label="Zapytaj Sentka"
-          data-demo="sentek-button"
-        >
-          <Sentek pose="wave" size={120} className="shrink-0 drop-shadow-lg" />
-        </button>
       </div>
     );
 

@@ -4,6 +4,10 @@
 #
 #   ./scripts/defectdojo_local.sh
 #
+# start.sh woła go sam przy każdym uruchomieniu (z DD_NO_RESTART=1, przed startem aplikacji),
+# więc DefectDojo wstaje razem z resztą. Ponowne uruchomienie jest bezpieczne: product,
+# engagement, test i token są te same (get_or_create).
+#
 # Interfejs DefectDojo: http://localhost:8081 (DD_ADMIN_USER / DD_ADMIN_PASSWORD z .env).
 # Nie ma atrapy: jeśli obrazów nie da się pobrać, DefectDojo po prostu nie działa, a w
 # aplikacji zostaje eksport nmap XML (Skany → „Pobierz nmap XML”).
@@ -37,4 +41,4 @@ fi
 
 echo "==> Token API i product/engagement/test w .env"
 bash ./scripts/bootstrap_defectdojo.sh
-echo "Gotowe. DefectDojo: http://localhost:8081. W konsoli: Skany i Discovery pokażą „Lokalne API DefectDojo gotowe”."
+echo "DefectDojo działa: http://localhost:8081 (login: DD_ADMIN_USER / DD_ADMIN_PASSWORD z .env)."
