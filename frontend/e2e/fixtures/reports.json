@@ -1,0 +1,12 @@
+[
+  {
+    "id": "bc79e788-91a9-4445-acbd-45b5c0751b53",
+    "kind": "assessment",
+    "title": "Ocena stanu bezpieczeństwa (2026-11-21)",
+    "light": "red",
+    "light_reason": "Aktywnie wykorzystywana podatność na zasobie dostępnym z internetu",
+    "summary_source": "template",
+    "created_at": "2026-11-21T07:01:51.773194",
+    "read": false
+  }
+]

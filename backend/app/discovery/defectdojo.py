@@ -30,7 +30,7 @@ class DojoConfig:
     def from_env(cls) -> DojoConfig:
         return cls(
             url=os.environ.get("DEFECTDOJO_URL", "").rstrip("/"),
-            token=os.environ.get("DEFECTDOJO_TOKEN", ""),
+            token=os.environ.get("DEFECTDOJO_TOKEN") or os.environ.get("DEFECTDOJO_API_TOKEN", ""),
             product=os.environ.get("DEFECTDOJO_PRODUCT", "Sentinel ASI"),
             product_type=os.environ.get("DEFECTDOJO_PRODUCT_TYPE", "Research and Development"),
             engagement=os.environ.get("DEFECTDOJO_ENGAGEMENT", "Discovery"),
@@ -96,7 +96,7 @@ class DojoClient:
             return {
                 "configured": False,
                 "ok": False,
-                "detail": "Brak DEFECTDOJO_URL lub DEFECTDOJO_TOKEN w .env",
+                "detail": "Lokalne DefectDojo nie działa: uruchom scripts/defectdojo_local.sh",
             }
         try:
             response = self._client.get(
@@ -106,12 +106,12 @@ class DojoClient:
             return {
                 "configured": True,
                 "ok": False,
-                "detail": f"Brak połączenia ({error.__class__.__name__})",
+                "detail": f"Lokalne DefectDojo nie odpowiada ({error.__class__.__name__})",
             }
         return {
             "configured": True,
             "ok": response.status_code == 200,
-            "detail": "Połączono"
+            "detail": "Lokalne API DefectDojo gotowe"
             if response.status_code == 200
             else f"HTTP {response.status_code}",
             "url": self._config.url,

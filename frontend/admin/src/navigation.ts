@@ -4,10 +4,8 @@ import {
   GitCompareArrows,
   FileText,
   FlaskConical,
-  Inbox,
   LayoutDashboard,
   ListChecks,
-  Network,
   Radar,
   Rss,
   ScrollText,
@@ -24,21 +22,12 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Przegląd",
     items: [
       { path: "/", label: "Pulpit", icon: LayoutDashboard },
-      { path: "/skrzynka", label: "Skrzynka", icon: Inbox, permission: "reports:read" },
       {
         path: "/raporty",
         label: "Raporty",
         icon: FileText,
         permission: "reports:read",
         summary: "Raporty dwuwarstwowe: „W skrócie” dla kierownictwa i szczegóły techniczne dla zespołu IT.",
-      },
-      {
-        path: "/mapa",
-        label: "Mapa powierzchni ataku",
-        icon: Network,
-        stage: 10,
-        summary:
-          "Widok sieci i segmentów: zasoby pogrupowane według podsieci, kolorowane poziomem ryzyka.",
       },
     ],
   },

@@ -6,12 +6,13 @@ same wyszukiwarki co słowa kluczowe, więc model nie wprowadzi nazwy, której n
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from app.assistant.text import Named, best_match, find_cve, has_stem, words
+from app.assistant.text import Named, best_match, find_cve, has_stem, normalize, words
 from app.explainer.prompts import Prompt, load_template
 from app.explainer.providers import LLMProvider, ProviderError
 
@@ -24,8 +25,15 @@ INTENTS = (
     "deadlines",
     "scan_request",
     "tour",
+    "kev_list",
+    "port_search",
+    "system_status",
+    "audit_logins",
     "out_of_scope",
 )
+# Intencje rozpoznawane tylko słowami kluczowymi (pytania o konkretne dane z bazy):
+# model lokalny ich nie zna, więc przy nich wynik słów kluczowych ma pierwszeństwo.
+KEYWORD_ONLY = frozenset({"kev_list", "port_search", "system_status", "audit_logins"})
 SOURCE_MODEL = "model"
 SOURCE_KEYWORDS = "keywords"
 
@@ -61,6 +69,8 @@ class Intent:
     product: Named | None = None
     term: Named | None = None
     unknown: bool = False
+    port: int | None = None
+    critical: bool = False
     # Dla out_of_scope: "action" (prośba o zmianę albo skan poza zakresem) lub "unknown".
     reason: str = ""
     # Czas pracy modelu, gdy go pytaliśmy (także gdy ostatecznie wygrały słowa kluczowe).
@@ -78,6 +88,10 @@ class Intent:
             out["cve"] = self.cve
         if self.unknown:
             out["unknown"] = True
+        if self.port is not None:
+            out["port"] = self.port
+        if self.critical:
+            out["critical"] = True
         if self.reason:
             out["reason"] = self.reason
         return out
@@ -98,6 +112,29 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
         "instrukcj",
         "przewodnik",
     ),
+    "audit_logins": (
+        "logowal",
+        "zalogowa",
+        "logowan",
+        "kto ostatnio",
+        "kto byl",
+        "kto wchodzil",
+    ),
+    "system_status": (
+        "ostatni skan",
+        "ostatnio skan",
+        "kiedy byl",
+        "feed",
+        "stan systemu",
+        "system",
+        "czy dziala",
+        "dzialaj",
+        "synchroniz",
+        "baza danych",
+        "kolejk",
+    ),
+    "kev_list": ("kev", "cisa", "aktywnie wykorzyst", "wykorzystywan"),
+    "port_search": ("port",),
     "scan_request": (
         "skan",
         "przeskan",
@@ -140,7 +177,16 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
         "kiedy naprawic",
         "kiedy trzeba",
     ),
-    "device_story": ("opowiedz", "historia", "co z ", "co sie dzieje z", "karta", "szczegol"),
+    "device_story": (
+        "opowiedz",
+        "historia",
+        "co z ",
+        "co sie dzieje z",
+        "karta",
+        "szczegol",
+        "co wiemy",
+        "co wiesz",
+    ),
     "devices": (
         "urzadzen",
         "komputer",
@@ -170,6 +216,9 @@ KEYWORDS: dict[str, tuple[str, ...]] = {
         "martwic",
         "co jest zle",
         "podsumuj",
+        "risk score",
+        "najwyzsz",
+        "cve",
     ),
 }
 # Prośby o zmianę, których Sentek nie wykonuje (ustawienia, inwentarz, zakres, role).
@@ -199,6 +248,7 @@ ACTION_WORDS = frozenset(
 )
 # „Uruchom” jest w porządku tylko przy skanie (wtedy i tak tylko prośba) i samouczku.
 SOFT_ACTION_WORDS = frozenset({"uruchom", "uruchomcie", "uruchomic", "odpal", "odpalcie"})
+_PORT_RE = re.compile(r"\bport\w*\s*(?:nr\.?\s*)?(\d{1,5})\b|\b(\d{1,5})\s*/\s*(?:tcp|udp)\b")
 # Słowa o urządzeniach nieznanych (shadow IT).
 UNKNOWN_STEMS = ("nieznan", "shadow", "obce", "niezgloszon", "nieautoryz")
 
@@ -211,7 +261,17 @@ def find_params(text: str, catalog: Catalog) -> dict[str, Any]:
         "product": best_match(text, catalog.products, threshold=92),
         "term": term,
         "unknown": has_stem(words(text), UNKNOWN_STEMS) > 0,
+        "port": find_port(text),
+        "critical": has_stem(words(text), ("krytyczn",)) > 0,
     }
+
+
+def find_port(text: str) -> int | None:
+    match = _PORT_RE.search(normalize(text))
+    if not match:
+        return None
+    port = int(match[1] or match[2])
+    return port if 0 < port <= 65535 else None
 
 
 def classify_keywords(text: str, catalog: Catalog) -> Intent:
@@ -227,9 +287,17 @@ def classify_keywords(text: str, catalog: Catalog) -> Intent:
         scores["explain"] += 1
     if params["unknown"]:
         scores["devices"] += 1
+    if params["port"] is not None:
+        scores["port_search"] += 1
     # Prośba o skan wygrywa z pytaniem o urządzenia, gdy pada słowo o skanowaniu.
     if scores["scan_request"]:
         scores["scan_request"] += 1
+    # „Kiedy był ostatni skan?” to pytanie o stan, nie prośba o skan.
+    if scores["system_status"] and not has_stem(tokens, ("przeskan", "zeskan", "zaproponuj")):
+        scores["scan_request"] = 0
+    # „Które podatności są w CISA KEV?” to lista, a „co to jest KEV?” to wyjaśnienie.
+    if scores["kev_list"] and scores["explain"] and has_stem(tokens, ("co to", "co znaczy")):
+        scores["kev_list"] = 0
     best = max(scores, key=lambda name: scores[name])
     if ACTION_WORDS & set(tokens) or (
         SOFT_ACTION_WORDS & set(tokens) and not scores["scan_request"] and not scores["tour"]
@@ -249,6 +317,8 @@ def _resolve(intent: Intent, params: dict[str, Any]) -> Intent:
         product=params.get("product"),
         term=params.get("term"),
         unknown=bool(params.get("unknown")),
+        port=params.get("port"),
+        critical=bool(params.get("critical")),
     )
     if intent.name == "device_story" and intent.device is None:
         return replace(intent, name="devices")
@@ -256,6 +326,8 @@ def _resolve(intent: Intent, params: dict[str, Any]) -> Intent:
         return replace(intent, name="out_of_scope", reason="unknown")
     if intent.name == "exposure_check" and intent.cve is None and intent.product is None:
         return replace(intent, name="top_risks")
+    if intent.name == "port_search" and intent.port is None:
+        return replace(intent, name="devices")
     return intent
 
 
@@ -291,7 +363,7 @@ class ModelClassifier:
 
     def classify(self, text: str, catalog: Catalog) -> Intent:
         fallback = classify_keywords(text, catalog)
-        if self._provider is None:
+        if self._provider is None or fallback.name in KEYWORD_ONLY:
             return fallback
         started = time.monotonic()
         try:

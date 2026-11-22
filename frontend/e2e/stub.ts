@@ -14,6 +14,7 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/health/, "health"],
   [/^\/api\/stats/, "stats"],
   [/^\/api\/inbox/, "inbox"],
+  [/^\/api\/reports$/, "reports"],
   [/^\/api\/findings\?.*asset_id/, "asset_findings"],
   [/^\/api\/findings/, "findings"],
   [/^\/api\/assets\/[^/]+\/details/, "asset_detail"],

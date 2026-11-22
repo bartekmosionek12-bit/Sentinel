@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { NAV_GROUPS } from "@/navigation";
 import { Agent } from "@/pages/Agent";
@@ -23,11 +23,15 @@ import { AppShell } from "@shared/components/AppShell";
 import { DemoStage } from "@shared/components/DemoStage";
 import { SentekAssistant, SentekToggle } from "@shared/components/assistant";
 import { Planned } from "@shared/components/Planned";
-import { InboxPage, ReportPage } from "@shared/components/ReportPages";
 import { ZeroDayBanner } from "@shared/components/reports";
 import { api, ApiError } from "@shared/lib/api";
 import { AccessDenied } from "@shared/lib/auth";
 import { useAuth } from "@shared/lib/auth-context";
+
+function RedirectReport() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/raporty/${id}`} replace />;
+}
 
 const planned = NAV_GROUPS.flatMap((group) => group.items).filter((item) => item.stage);
 
@@ -74,15 +78,17 @@ export function App() {
       navGroups={NAV_GROUPS}
       subtitle="Konsola zespołu IT"
       footer=""
-      banner={<ZeroDayBanner basePath="/skrzynka" />}
+      banner={<ZeroDayBanner basePath="/raporty" />}
       headerExtra={<SentekToggle />}
     >
       <DemoStage />
       <SentekAssistant />
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/skrzynka" element={<InboxPage basePath="/skrzynka" />} />
-        <Route path="/skrzynka/:id" element={<ReportPage backTo="/skrzynka" />} />
+        {/* Skrzynka połączona z Raportami, a mapa wycofana: stare linki prowadzą dalej. */}
+        <Route path="/skrzynka" element={<Navigate to="/raporty" replace />} />
+        <Route path="/skrzynka/:id" element={<RedirectReport />} />
+        <Route path="/mapa" element={<Navigate to="/zasoby" replace />} />
         <Route path="/raporty" element={<Reports />} />
         <Route path="/raporty/:id" element={<ReportDetail />} />
         <Route path="/zasoby" element={<Assets />} />

@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.assistant import live
 from app.assistant.classify import Intent
 from app.explainer.service import KIND as EXPLANATION_KIND
 from app.iam.tokens import Principal
@@ -32,9 +33,11 @@ SOURCE_LABELS = {"scan": "skan sieci", "csv": "import CSV", "dns": "DNS", "dhcp"
 SUGGESTIONS = (
     "Co jest teraz najgroźniejsze?",
     "Ile mamy nowych hostów?",
+    "Które podatności są w CISA KEV?",
+    "Kiedy był ostatni skan?",
+    "Pokaż urządzenia z otwartym portem 80",
     "Do kiedy trzeba naprawić zagrożenia?",
     "Co to jest KEV?",
-    "Przeskanuj ponownie zakres",
 )
 # Uprawnienie potrzebne do odpowiedzi (poza samym `assistant:use`).
 NEEDS: dict[str, str | None] = {
@@ -46,6 +49,10 @@ NEEDS: dict[str, str | None] = {
     "scan_request": "agent:task",
     "explain": None,
     "tour": None,
+    "kev_list": "findings:read",
+    "port_search": "inventory:read",
+    "system_status": None,
+    "audit_logins": "audit:read",
     "out_of_scope": None,
 }
 TYPE_LABELS = {
@@ -132,8 +139,9 @@ def out_of_scope(intent: Intent) -> Answer:
     else:
         text = [
             "Nie umiem jeszcze odpowiedzieć na to pytanie.",
-            "Znam się na zagrożeniach, urządzeniach i działach, terminach naprawy, "
-            "znaczeniu skrótów i prośbach o nowe skanowanie. Spróbuj na przykład:",
+            "Znam się na zagrożeniach i katalogu KEV, hostach i otwartych portach, stanie "
+            "skanów i feedów, logowaniach z dziennika audytu, terminach naprawy, znaczeniu "
+            "skrótów i prośbach o nowe skanowanie. Spróbuj na przykład:",
         ]
     return Answer(
         intent.name, intent.source, text, suggestions=list(SUGGESTIONS[:4]), pose="surprised"
@@ -142,6 +150,8 @@ def out_of_scope(intent: Intent) -> Answer:
 
 def top_risks(session: Session, intent: Intent, config: ReportsConfig, today: date) -> Answer:
     items = open_items(session)
+    if intent.critical and any(i.finding.risk_level == "krytyczny" for i in items):
+        items = [i for i in items if i.finding.risk_level == "krytyczny"]
     fresh = _fresh(session, config)
     if not items:
         return Answer(
@@ -180,6 +190,7 @@ def top_risks(session: Session, intent: Intent, config: ReportsConfig, today: da
             f"{index}. {item.asset.name}: {_label(item)}, ryzyko: {item.finding.risk_level}, "
             f"{item.finding.risk_score:.0f}/100, naprawić do {due.strftime('%d.%m.%Y')}."
         )
+    lines.append("[Szczegóły luk](/zagrozenia)")
     return Answer(
         intent.name,
         intent.source,
@@ -211,6 +222,7 @@ def devices(session: Session, intent: Intent, config: ReportsConfig) -> Answer:
                 f"Widzę {count(len(unknown), *UNKNOWN)}: {names}.",
                 "Odpowiadają w sieci, a nie było ich w inwentarzu ani w imporcie. "
                 "Warto sprawdzić, czyje są, i oznaczyć je w karcie hosta.",
+                "[Zobacz w zasobach](/zasoby)",
             ]
             pose = "surprised"
         return Answer(
@@ -270,6 +282,24 @@ def device_story(session: Session, intent: Intent, config: ReportsConfig, today:
             "To nowy host: widać go w sieci (" + ", ".join(sources) + "), "
             "a nie było go w inwentarzu."
         )
+    ip = (asset.attributes or {}).get("ip")
+    services = session.execute(
+        select(Software.port, Software.protocol, Software.product, Software.version)
+        .where(Software.asset_id == asset.id, Software.port.is_not(None))
+        .order_by(Software.port)
+    ).all()
+    if ip and ip != asset.name:
+        text.append(f"Adres IP: {ip}. Ostatnio widziany {asset.last_seen.strftime('%d.%m.%Y')}.")
+    else:
+        text.append(f"Ostatnio widziany {asset.last_seen.strftime('%d.%m.%Y')}.")
+    if services:
+        listed = ", ".join(
+            f"{s.port}/{s.protocol or 'tcp'}"
+            + (f" {s.product}" if s.product and s.product != "unknown" else "")
+            + (f" {s.version}" if s.version else "")
+            for s in services[:6]
+        )
+        text.append(f"Otwarte usługi: {listed}.")
     items = [i for i in open_items(session) if i.asset.id == asset.id]
     if items:
         worst = items[0]
@@ -282,6 +312,7 @@ def device_story(session: Session, intent: Intent, config: ReportsConfig, today:
     else:
         text.append("Nie ma otwartych zagrożeń.")
         pose = "thumbs_up"
+    text.append(f"[Karta hosta {asset.name}](/zasoby/{asset.id})")
     return Answer(
         intent.name,
         intent.source,
@@ -566,4 +597,12 @@ def build(
         return scan_request(session, intent, config)
     if intent.name == "tour":
         return tour(intent)
+    if intent.name == "kev_list":
+        return live.kev_list(session, intent, config)
+    if intent.name == "port_search":
+        return live.port_search(session, intent, config)
+    if intent.name == "system_status":
+        return live.system_status(session, intent, config)
+    if intent.name == "audit_logins":
+        return live.audit_logins(session, intent)
     return out_of_scope(intent)
