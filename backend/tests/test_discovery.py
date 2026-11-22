@@ -85,6 +85,25 @@ def test_discovery_end_to_end(
     assert [h["ip"] for h in diff["new_hosts"]] == ["10.10.0.9"]
     assert [h["ip"] for h in diff["gone_hosts"]] == ["10.10.0.7"]
 
+    # Raport z przebiegu: zmiany od poprzedniego, priorytet i te same dane w JSON/CSV/HTML.
+    report = client.get(f"/api/discovery/runs/{second}/report").json()
+    assert report["changes"]["compared_with"]["id"] == first
+    assert report["changes"]["counts"]["new_hosts"] == 1
+    # Oba hosty WWW mają panel i staging; nowy host dostaje dodatkowe punkty i jest wyżej.
+    top, second_host = report["priority"]["hosts"][:2]
+    assert (top["ip"], second_host["ip"]) == ("10.10.0.9", "10.10.0.5")
+    assert "nowy host (+2)" in top["reasons"]
+    assert top["score"] > second_host["score"]
+    assert report["summary"]["hosts"] == 2
+    csv_body = client.get(f"/api/discovery/runs/{second}/report", params={"format": "csv"})
+    assert csv_body.headers["content-type"].startswith("text/csv")
+    assert "zmiany,10.10.0.9" in csv_body.text
+    page = client.get(f"/api/discovery/runs/{second}/report", params={"format": "html"})
+    assert "<h2>Najważniejsze zmiany</h2>" in page.text
+    assert "10.10.0.9" in page.text
+    first_report = client.get(f"/api/discovery/runs/{first}/report").json()
+    assert first_report["changes"] is None
+
     edit = client.put("/api/discovery/overrides/10.10.0.5", json={"field": "note", "value": "DMZ"})
     assert edit.status_code == 200, edit.text
     tagged = client.put(
@@ -175,3 +194,75 @@ def test_viewer_cannot_change_signatures(anon_client: TestClient, tokens: Any) -
     assert anon_client.get("/api/discovery/signatures").status_code == 200
     put = anon_client.put("/api/discovery/signatures/x1", json={"yaml": SIGNATURE})
     assert put.status_code == 403
+
+
+def test_signature_test_on_stored_run(
+    client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    """Test sygnatury bez ruchu sieciowego: dopasowanie do zapisanych wyników przebiegu."""
+    lab = FakeLab(
+        {"10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http", product="nginx")]}
+    )
+    run_id = _run(client, session_factory, lab)
+    yaml_text = (
+        "id: admin-nginx\nname: Panel za nginx\nkind: panel\nmatch:\n"
+        "  - {type: header, name: server, pattern: nginx}\n"
+        "  - {type: path, path: /admin, status: [200], pattern: Zaloguj}\n"
+        "  - {type: html, pattern: 'login-form'}\n"
+    )
+    response = client.post("/api/discovery/signatures/test", json={"yaml": yaml_text})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["id"] == run_id
+    assert body["services_checked"] >= 1
+    assert body["hits"], body
+    evidence = body["hits"][0]["evidence"]
+    assert "nagłówek server" in evidence
+    assert "/admin → 200" in evidence
+    assert body["live_only"] == ["html", "path (wzorzec treści)"]
+
+    miss = client.post(
+        "/api/discovery/signatures/test",
+        json={"id": "gitea", "run_id": run_id},
+    ).json()
+    assert miss["hits"] == []
+    assert miss["signature"]["id"] == "gitea"
+    assert client.post("/api/discovery/signatures/test", json={"id": "brak"}).status_code == 404
+    assert client.post("/api/discovery/signatures/test", json={}).status_code == 422
+    bad = client.post(
+        "/api/discovery/signatures/test", json={"yaml": "id: x1\nkind: zly\nmatch: []"}
+    )
+    assert bad.status_code == 422
+
+
+def test_signature_inspection(client: TestClient, session_factory: sessionmaker[Session]) -> None:
+    """Inspekcja: reguły po ludzku, trafienia w historii przebiegów i reguła po regule."""
+    yaml_text = (
+        "id: admin-nginx\nname: Panel za nginx\nkind: panel\nmatch:\n"
+        "  - {type: header, name: server, pattern: nginx}\n"
+        "  - {type: path, path: /admin, status: [200], pattern: Zaloguj}\n"
+        "  - {type: html, pattern: 'login-form'}\n"
+    )
+    assert client.put("/api/discovery/signatures/admin-nginx", json={"yaml": yaml_text}).is_success
+    lab = FakeLab(
+        {"10.10.0.5": [ServiceInfo(port=80, protocol="tcp", name="http", product="nginx")]}
+    )
+    _run(client, session_factory, lab)
+    body = client.get("/api/discovery/signatures/admin-nginx/inspect").json()
+    assert body["source"] == "custom"
+    assert [r["text"] for r in body["rules"]] == [
+        "nagłówek server pasujący do „nginx”",
+        "GET /admin zwraca 200, treść pasująca do „Zaloguj”",
+        "fragment HTML pasujący do „login-form”",
+    ]
+    header, path, html_rule = body["rules"]
+    assert header["latest_run_hits"] >= 1
+    assert path["sends_request"] is True
+    assert path["offline_note"]
+    assert html_rule["offline"] is False
+    assert html_rule["latest_run_hits"] is None
+    assert len(body["history"]) == 1
+    builtin = client.get("/api/discovery/signatures/gitea/inspect").json()
+    assert builtin["source"] == "builtin"
+    assert builtin["history"][0]["hosts"] == 0
+    assert client.get("/api/discovery/signatures/brak/inspect").status_code == 404

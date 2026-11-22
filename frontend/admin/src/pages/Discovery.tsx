@@ -117,6 +117,7 @@ function TargetForm() {
   });
   const [text, setText] = useState("");
   const [name, setName] = useState("");
+  const [endAt, setEndAt] = useState("");
   const [settings, setSettings] = useState<Partial<DiscoverySettings>>({});
   const [fileError, setFileError] = useState<string | null>(null);
   useEffect(() => {
@@ -133,6 +134,7 @@ function TargetForm() {
           max_rate: settings.max_rate,
           timing: settings.timing,
         },
+        end_at: endAt ? new Date(endAt).toISOString() : null,
       }),
     onSuccess: (run) => {
       void queryClient.invalidateQueries({ queryKey: ["discovery-runs"] });
@@ -190,6 +192,20 @@ function TargetForm() {
                 maxLength={200}
                 onChange={(e) => setName(e.target.value)}
               />
+            </label>
+            <label className="block text-sm font-medium">
+              Zakończ najpóźniej (opcjonalnie)
+              <Input
+                type="datetime-local"
+                aria-label="Koniec przebiegu"
+                className="mt-1"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+              />
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Po tej chwili skan kończy rozpoczęte paczki, zapisuje resztę celów i czeka na
+                „Wznów”.
+              </span>
             </label>
             <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border p-3 text-sm hover:bg-muted">
               <FileUp className="size-5 text-primary" aria-hidden />

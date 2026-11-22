@@ -47,6 +47,18 @@ function frequencyLabel(minutes: number): string {
   );
 }
 
+/** ISO → wartość pola datetime-local (czas lokalny przeglądarki). */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(value: string): string | null {
+  return value ? new Date(value).toISOString() : null;
+}
+
 function daysLabel(days: number[]): string {
   if (days.length === 7) return "codziennie";
   if (days.join() === "0,1,2,3,4") return "pon–pt";
@@ -64,8 +76,19 @@ function ScheduleForm({
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(initial);
+  const [once, setOnce] = useState(Boolean(initial.start_at));
+  const [startAt, setStartAt] = useState(toLocalInput(initial.start_at));
+  const [endAt, setEndAt] = useState(toLocalInput(initial.end_at));
   const save = useMutation({
-    mutationFn: () => api.saveDiscoverySchedule(form, editingId ?? undefined),
+    mutationFn: () =>
+      api.saveDiscoverySchedule(
+        {
+          ...form,
+          start_at: once ? fromLocalInput(startAt) : null,
+          end_at: once ? fromLocalInput(endAt) : null,
+        },
+        editingId ?? undefined,
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["discovery-schedules"] });
       onDone();
@@ -80,10 +103,22 @@ function ScheduleForm({
         <CardTitle>{editingId ? "Zmiana harmonogramu" : "Nowy harmonogram"}</CardTitle>
         <CardDescription>
           Przebieg startuje tylko w oknie czasowym. Jeśli nie zdąży przed końcem okna, kończy
-          rozpoczęte paczki, zapisuje resztę celów i wznawia ją w kolejnym oknie.
+          rozpoczęte paczki, zapisuje resztę celów i wznawia ją w kolejnym oknie. Skan jednorazowy
+          startuje i kończy się o podanej godzinie; resztę wznawiasz przyciskiem „Wznów” na stronie
+          przebiegu.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <fieldset className="flex gap-4 text-sm" aria-label="Rodzaj harmonogramu">
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={!once} onChange={() => setOnce(false)} />
+            cyklicznie, w oknie czasowym
+          </label>
+          <label className="flex items-center gap-1">
+            <input type="radio" checked={once} onChange={() => setOnce(true)} />
+            jednorazowo: start i koniec o zadanej godzinie
+          </label>
+        </fieldset>
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <label className="text-sm font-medium">
             Cele
@@ -106,76 +141,107 @@ function ScheduleForm({
                 onChange={(e) => set("name", e.target.value)}
               />
             </label>
-            <label className="block text-sm font-medium">
-              Częstotliwość
-              <select
-                aria-label="Częstotliwość"
-                className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
-                value={form.interval_minutes}
-                onChange={(e) => set("interval_minutes", Number(e.target.value))}
-              >
-                {FREQUENCIES.map((f) => (
-                  <option key={f.minutes} value={f.minutes}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!once && (
+              <label className="block text-sm font-medium">
+                Częstotliwość
+                <select
+                  aria-label="Częstotliwość"
+                  className="mt-1 h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                  value={form.interval_minutes}
+                  onChange={(e) => set("interval_minutes", Number(e.target.value))}
+                >
+                  {FREQUENCIES.map((f) => (
+                    <option key={f.minutes} value={f.minutes}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="text-sm font-medium">
-            Okno od
-            <Input
-              type="time"
-              aria-label="Początek okna"
-              className="mt-1"
-              value={form.window_start}
-              onChange={(e) => set("window_start", e.target.value)}
-            />
-          </label>
-          <label className="text-sm font-medium">
-            Okno do
-            <Input
-              type="time"
-              aria-label="Koniec okna"
-              className="mt-1"
-              value={form.window_end}
-              onChange={(e) => set("window_end", e.target.value)}
-            />
-          </label>
-          <label className="text-sm font-medium">
-            Strefa czasowa
-            <Input
-              className="mt-1"
-              value={form.timezone}
-              onChange={(e) => set("timezone", e.target.value)}
-            />
-          </label>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Koniec wcześniejszy niż początek oznacza okno przez północ (np. 22:00–06:00).
-        </p>
-        <fieldset className="flex flex-wrap items-center gap-3 text-sm">
-          <legend className="mb-1 text-sm font-medium">Dni rozpoczęcia okna</legend>
-          {DAYS.map((label, day) => (
-            <label key={label} className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={form.days.includes(day)}
-                onChange={(e) =>
-                  set(
-                    "days",
-                    e.target.checked
-                      ? [...form.days, day].sort()
-                      : form.days.filter((d) => d !== day),
-                  )
-                }
+        {once ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-medium">
+              Start skanu
+              <Input
+                type="datetime-local"
+                aria-label="Start skanu"
+                className="mt-1"
+                value={startAt}
+                onChange={(e) => setStartAt(e.target.value)}
               />
-              {label}
             </label>
-          ))}
-          <label className="ml-4 flex items-center gap-1">
+            <label className="text-sm font-medium">
+              Koniec skanu
+              <Input
+                type="datetime-local"
+                aria-label="Koniec skanu"
+                className="mt-1"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+              />
+            </label>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="text-sm font-medium">
+                Okno od
+                <Input
+                  type="time"
+                  aria-label="Początek okna"
+                  className="mt-1"
+                  value={form.window_start}
+                  onChange={(e) => set("window_start", e.target.value)}
+                />
+              </label>
+              <label className="text-sm font-medium">
+                Okno do
+                <Input
+                  type="time"
+                  aria-label="Koniec okna"
+                  className="mt-1"
+                  value={form.window_end}
+                  onChange={(e) => set("window_end", e.target.value)}
+                />
+              </label>
+              <label className="text-sm font-medium">
+                Strefa czasowa
+                <Input
+                  className="mt-1"
+                  value={form.timezone}
+                  onChange={(e) => set("timezone", e.target.value)}
+                />
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Koniec wcześniejszy niż początek oznacza okno przez północ (np. 22:00–06:00).
+            </p>
+            <fieldset className="flex flex-wrap items-center gap-3 text-sm">
+              <legend className="mb-1 text-sm font-medium">Dni rozpoczęcia okna</legend>
+              {DAYS.map((label, day) => (
+                <label key={label} className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={form.days.includes(day)}
+                    onChange={(e) =>
+                      set(
+                        "days",
+                        e.target.checked
+                          ? [...form.days, day].sort()
+                          : form.days.filter((d) => d !== day),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          </>
+        )}
+        <fieldset className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="flex items-center gap-1">
             <input
               type="checkbox"
               checked={form.enabled}
@@ -187,7 +253,12 @@ function ScheduleForm({
         <div className="flex gap-2">
           <Button
             onClick={() => save.mutate()}
-            disabled={!form.name.trim() || !form.text.trim() || save.isPending}
+            disabled={
+              !form.name.trim() ||
+              !form.text.trim() ||
+              save.isPending ||
+              (once && (!startAt || !endAt))
+            }
           >
             {editingId ? "Zapisz zmiany" : "Dodaj harmonogram"}
           </Button>
@@ -205,9 +276,10 @@ function ScheduleForm({
 
 function nextLabel(s: DiscoverySchedule): string {
   if (!s.enabled) return "wyłączony";
+  if (s.once && s.resume_pending) return "czeka na „Wznów”";
+  if (s.once && !s.next_start_at && !s.in_window) return "wykonany";
   if (s.resume_pending && s.in_window) return "wznowienie w tej chwili";
-  if (s.resume_pending && s.next_window_at)
-    return `wznowienie ${formatDateTime(s.next_window_at)}`;
+  if (s.resume_pending && s.next_window_at) return `wznowienie ${formatDateTime(s.next_window_at)}`;
   if (s.next_start_at) return formatDateTime(s.next_start_at);
   return "brak terminu";
 }
@@ -242,12 +314,7 @@ export function Schedules() {
         description="Cykliczne przebiegi w oknach czasowych, z wznowieniem po przekroczeniu okna."
       />
       {editable && (
-        <ScheduleForm
-          key={formKey}
-          initial={editing.input}
-          editingId={editing.id}
-          onDone={reset}
-        />
+        <ScheduleForm key={formKey} initial={editing.input} editingId={editing.id} onDone={reset} />
       )}
       <Card>
         <CardHeader>
@@ -295,21 +362,42 @@ export function Schedules() {
                         {s.targets_count > 3 && ` +${s.targets_count - 3}`}
                       </Td>
                       <Td className="text-sm">
-                        {frequencyLabel(s.interval_minutes)}, {s.window_start}–{s.window_end}
-                        <div className="text-xs text-muted-foreground">
-                          {daysLabel(s.days)} · {s.timezone}
-                        </div>
+                        {s.once && s.start_at && s.end_at ? (
+                          <>
+                            jednorazowo, {formatDateTime(s.start_at)} – {formatDateTime(s.end_at)}
+                          </>
+                        ) : (
+                          <>
+                            {frequencyLabel(s.interval_minutes)}, {s.window_start}–{s.window_end}
+                            <div className="text-xs text-muted-foreground">
+                              {daysLabel(s.days)} · {s.timezone}
+                            </div>
+                          </>
+                        )}
                       </Td>
                       <Td className="text-sm">{nextLabel(s)}</Td>
                       <Td className="text-sm">
                         {s.last_run ? (
                           <>
-                            <Link className="text-primary underline" to={`/discovery/${s.last_run.id}`}>
+                            <Link
+                              className="text-primary underline"
+                              to={`/discovery/${s.last_run.id}`}
+                            >
                               {formatDateTime(s.last_run.created_at)}
                             </Link>{" "}
                             <Badge variant={status?.variant ?? "neutral"}>
                               {status?.label ?? s.last_run.status}
                             </Badge>
+                            {s.once && s.resume_run_id && (
+                              <div>
+                                <Link
+                                  className="text-xs text-primary underline"
+                                  to={`/discovery/${s.resume_run_id}`}
+                                >
+                                  Wznów z zapisanego stanu
+                                </Link>
+                              </div>
+                            )}
                           </>
                         ) : (
                           "jeszcze nie było"
@@ -333,6 +421,8 @@ export function Schedules() {
                                   timezone: s.timezone,
                                   enabled: s.enabled,
                                   settings: s.settings,
+                                  start_at: s.start_at ?? null,
+                                  end_at: s.end_at ?? null,
                                 },
                               });
                               setFormKey((k) => k + 1);

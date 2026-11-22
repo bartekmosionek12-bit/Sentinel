@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, PencilLine, Send } from "lucide-react";
+import { Download, FileText, PencilLine, Send } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { PageHeader, QueryState } from "@shared/components/page";
 import { Badge } from "@shared/components/ui/badge";
@@ -15,8 +15,9 @@ import {
 } from "@shared/components/ui/card";
 import { Input } from "@shared/components/ui/input";
 import { Table, Td, Th } from "@shared/components/ui/table";
-import { api, type DiscoveryHost, type HttpFingerprint } from "@shared/lib/api";
+import { api, type DiscoveryHost, type DiscoveryRun, type HttpFingerprint } from "@shared/lib/api";
 import { useAuth } from "@shared/lib/auth-context";
+import { formatDateTime } from "@shared/lib/utils";
 
 import { CONFIDENCE_VARIANT, formatSeconds, HOST_STATE } from "@/labels";
 import { Progress, RunStatus } from "@/pages/Discovery";
@@ -160,7 +161,14 @@ function fieldValue(host: DiscoveryHost, field: string): string {
 
 function toValue(field: string, value: string): unknown {
   if (field === "tags") {
-    const tags = [...new Set(value.split(",").map((t) => t.trim()).filter(Boolean))];
+    const tags = [
+      ...new Set(
+        value
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+      ),
+    ];
     return tags.length ? tags : null;
   }
   return value.trim() || null;
@@ -268,10 +276,77 @@ function HostCard({ host }: { host: DiscoveryHost }) {
   );
 }
 
+/** Wstrzymany przebieg: ile zostało, kiedy wznowi harmonogram, ręczne „Wznów”. */
+function ResumePanel({
+  run,
+  canResume,
+  onResumed,
+}: {
+  run: DiscoveryRun;
+  canResume: boolean;
+  onResumed: (id: string) => void;
+}) {
+  const [endAt, setEndAt] = useState("");
+  const resume = useMutation({
+    mutationFn: () => api.resumeDiscovery(run.id, endAt ? new Date(endAt).toISOString() : null),
+    onSuccess: (next) => onResumed(next.id),
+  });
+  const left = run.remaining;
+  return (
+    <div
+      className="mt-2 space-y-2 rounded-md border border-border p-3 text-sm"
+      data-demo="run-paused"
+    >
+      <p>
+        Przebieg doszedł do zadanego końca
+        {run.deadline ? ` (${formatDateTime(run.deadline)})` : ""}. Rozpoczęte paczki zostały
+        dokończone, a stan zapisany: zostało{" "}
+        {Number(run.summary?.remaining_addresses ?? 0).toLocaleString("pl-PL")} adresów
+        {left ? ` (${left.networks} zakresów, ${left.hosts} hostów bez skanu usług)` : ""}.
+        {run.schedule_id && " Harmonogram cykliczny wznowi go sam w kolejnym oknie. "}
+        {run.schedule_id && (
+          <Link className="text-primary underline" to="/discovery/harmonogram">
+            Harmonogram
+          </Link>
+        )}
+      </p>
+      {run.resumed_by ? (
+        <p>
+          Już wznowiony:{" "}
+          <Link className="text-primary underline" to={`/discovery/${run.resumed_by}`}>
+            przebieg wznowienia
+          </Link>
+        </p>
+      ) : (
+        canResume && (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs">
+              Nowy koniec (opcjonalnie)
+              <Input
+                type="datetime-local"
+                aria-label="Koniec wznowienia"
+                className="mt-1 h-8"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+              />
+            </label>
+            <Button size="sm" onClick={() => resume.mutate()} disabled={resume.isPending}>
+              Wznów
+            </Button>
+          </div>
+        )
+      )}
+      {resume.error && <p className="text-red-700">{resume.error.message}</p>}
+    </div>
+  );
+}
+
 export function DiscoveryRunPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const { can } = useAuth();
-  const [open, setOpen] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [open, setOpen] = useState<string | null>(params.get("host"));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const run = useQuery({
     queryKey: ["discovery-run", id],
@@ -343,20 +418,16 @@ export function DiscoveryRunPage() {
             </p>
             {r.error && <p className="text-sm text-red-700">{r.error}</p>}
             {r.status === "paused" && (
-              <p className="text-sm" data-demo="run-paused">
-                Przebieg przekroczył okno czasowe z harmonogramu. Rozpoczęte paczki zostały
-                dokończone, a pozostałe{" "}
-                {Number(r.summary?.remaining_addresses ?? 0).toLocaleString("pl-PL")} adresów
-                zostanie zeskanowanych w kolejnym oknie.{" "}
-                <Link className="text-primary underline" to="/discovery/harmonogram">
-                  Harmonogram
-                </Link>
-              </p>
+              <ResumePanel
+                run={r}
+                canResume={can("scan:run")}
+                onResumed={(next) => navigate(`/discovery/${next}`)}
+              />
             )}
             {Number(r.summary?.retried ?? 0) > 0 && (
               <p className="text-xs text-muted-foreground">
-                Ponowna próba dla {String(r.summary?.retried)} hostów, które odpowiadały
-                poprzednio; odpowiedziało {String(r.summary?.recovered_on_retry ?? 0)}.
+                Ponowna próba dla {String(r.summary?.retried)} hostów, które odpowiadały poprzednio;
+                odpowiedziało {String(r.summary?.recovered_on_retry ?? 0)}.
               </p>
             )}
           </div>
@@ -428,6 +499,17 @@ export function DiscoveryRunPage() {
               >
                 <Download className="size-3.5" aria-hidden />
                 {f === "nmap" ? "nmap XML" : f.toUpperCase()}
+              </Button>
+            ))}
+            {(["html", "json", "csv"] as const).map((f) => (
+              <Button
+                key={`report-${f}`}
+                size="sm"
+                variant="outline"
+                onClick={() => void api.discoveryReport(id, f)}
+              >
+                <FileText className="size-3.5" aria-hidden />
+                Raport {f.toUpperCase()}
               </Button>
             ))}
             {can("defectdojo:export") && (
@@ -623,7 +705,10 @@ function ServiceGroups({ hosts }: { hosts: DiscoveryHost[] }) {
     }
     for (const tech of host.technologies) {
       const key = `tech|${tech}`;
-      const group = groups.get(key) ?? { label: `technologia: ${tech}`, hosts: [] };
+      const group = groups.get(key) ?? {
+        label: `technologia: ${tech}`,
+        hosts: [],
+      };
       group.hosts.push(host.hostname ? `${host.hostname} (${host.ip})` : host.ip);
       groups.set(key, group);
     }
@@ -637,8 +722,8 @@ function ServiceGroups({ hosts }: { hosts: DiscoveryHost[] }) {
       <CardHeader>
         <CardTitle>Grupy podobnych usług</CardTitle>
         <CardDescription>
-          Ten sam port, usługa i wersja albo ta sama technologia na wielu hostach: łatwiej
-          ocenić skalę i zrobić jedną poprawkę dla całej grupy.
+          Ten sam port, usługa i wersja albo ta sama technologia na wielu hostach: łatwiej ocenić
+          skalę i zrobić jedną poprawkę dla całej grupy.
         </CardDescription>
       </CardHeader>
       <CardContent className="max-h-80 overflow-y-auto">

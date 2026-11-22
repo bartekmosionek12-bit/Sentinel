@@ -302,11 +302,17 @@ export interface ScanChange {
 export interface SprintDashboard {
   changes: ScanChange[];
   change_count: number;
-  flags: {host: string; kind: string; confidence: number}[];
+  flags: { host: string; kind: string; confidence: number }[];
   new_admin_panels: number;
   staging: number;
   unstable_hosts: number;
-  recent_runs: {id: string; started_at: string; status: string; duration_seconds: number | null; eta_seconds: number | null}[];
+  recent_runs: {
+    id: string;
+    started_at: string;
+    status: string;
+    duration_seconds: number | null;
+    eta_seconds: number | null;
+  }[];
   defectdojo: string;
 }
 
@@ -448,6 +454,9 @@ export interface DiscoveryRun {
   schedule_id?: string | null;
   resume_of?: string | null;
   deadline?: string | null;
+  /** Tylko w szczegółach przebiegu: ile celów czeka na wznowienie i kto je wznowił. */
+  remaining?: { networks: number; hosts: number };
+  resumed_by?: string | null;
 }
 
 export interface DiscoveryScheduleInput {
@@ -460,6 +469,9 @@ export interface DiscoveryScheduleInput {
   timezone: string;
   enabled: boolean;
   settings?: Partial<DiscoverySettings>;
+  /** Skan jednorazowy: początek i koniec (ISO). Bez nich harmonogram jest cykliczny. */
+  start_at?: string | null;
+  end_at?: string | null;
 }
 
 export interface DiscoverySchedule {
@@ -482,6 +494,10 @@ export interface DiscoverySchedule {
   next_window_at: string | null;
   next_start_at: string | null;
   resume_pending: boolean;
+  resume_run_id?: string | null;
+  once?: boolean;
+  start_at?: string | null;
+  end_at?: string | null;
   last_run: DiscoveryRun | null;
 }
 
@@ -622,6 +638,52 @@ export interface SignatureList {
     updated_at: string;
   }[];
   rules: { kinds: string[]; match_types: string[]; max_paths: number };
+}
+
+/** Wynik testu jednej sygnatury na zapisanych wynikach przebiegu (bez ruchu sieciowego). */
+export interface SignatureTestResult {
+  signature: { id: string; name: string; kind: string };
+  run: { id: string; name: string; created_at: string };
+  services_checked: number;
+  hits: {
+    ip: string;
+    port: number | null;
+    url: string | null;
+    title: string | null;
+    evidence: string[];
+    already_flagged: boolean;
+  }[];
+  live_only: string[];
+}
+
+/** Inspekcja sygnatury: reguły po ludzku, trafienia w historii i dowody z ostatniego przebiegu. */
+export interface SignatureInspection {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  source: "builtin" | "custom";
+  updated_by: string | null;
+  updated_at: string | null;
+  definition: SignatureDefinition;
+  rules: {
+    type: string;
+    text: string;
+    sends_request: boolean;
+    offline: boolean;
+    offline_note: string | null;
+    latest_run_hits: number | null;
+  }[];
+  latest_run: { id: string; name: string; created_at: string } | null;
+  services_checked: number;
+  hosts: {
+    ip: string;
+    port: number | null;
+    url: string | null;
+    title: string | null;
+    evidence: string[];
+  }[];
+  history: { run_id: string; name: string; created_at: string; services: number; hosts: number }[];
 }
 
 export class ApiError extends Error {
@@ -1129,18 +1191,59 @@ export const api = {
     }),
   scans: () => request<ScanRun[]>("/scans?limit=5"),
   sprintDashboard: () => request<SprintDashboard>("/sprint/dashboard"),
-  scanDiff: (from: string, to: string) => request<ScanChange[]>(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`),
-  downloadScanDiff: (from: string, to: string, format: "json" | "csv") => download(`/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`, `scan-diff.${format}`),
-  previewScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]}>("/scan-targets/preview", {method: "POST", body: JSON.stringify({text, format})}),
-  saveScanTargets: (text: string, format: "manual" | "csv" | "json") => request<{targets: {target: string; kind: string}[]; errors: string[]; added: number}>("/scan-targets", {method: "POST", body: JSON.stringify({text, format})}),
-  scanTargets: () => request<{target: string; kind: string}[]>("/scan-targets"),
-  importScanResults: (text: string, format: "json" | "csv" | "xml") => request<{run_id: string; hosts: number}>("/scan-results/import", {method: "POST", body: JSON.stringify({text, format})}),
-  scanResults: (id: string) => request<{run_id: string; hosts: Record<string, {name: string; note?: string; state: string; manually_changed?: boolean; flags?: {kind: string; evidence: string[]; confidence: number}[]}>}>(`/scan-results/${id}`),
-  overrideScanResult: (host: string, field: "name" | "note" | "state", value: string) => request<{host: string; field: string; manually_changed: boolean}>("/scan-results/override", {method: "POST", body: JSON.stringify({host, field, value})}),
-  downloadScanResults: (id: string, format: "json" | "csv") => download(`/scan-results/${id}/export?format=${format}`, `scan-results.${format}`),
+  scanDiff: (from: string, to: string) =>
+    request<ScanChange[]>(
+      `/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}`,
+    ),
+  downloadScanDiff: (from: string, to: string, format: "json" | "csv") =>
+    download(
+      `/scan-diff?from_run=${encodeURIComponent(from)}&to_run=${encodeURIComponent(to)}&format=${format}`,
+      `scan-diff.${format}`,
+    ),
+  previewScanTargets: (text: string, format: "manual" | "csv" | "json") =>
+    request<{ targets: { target: string; kind: string }[]; errors: string[] }>(
+      "/scan-targets/preview",
+      { method: "POST", body: JSON.stringify({ text, format }) },
+    ),
+  saveScanTargets: (text: string, format: "manual" | "csv" | "json") =>
+    request<{ targets: { target: string; kind: string }[]; errors: string[]; added: number }>(
+      "/scan-targets",
+      { method: "POST", body: JSON.stringify({ text, format }) },
+    ),
+  scanTargets: () => request<{ target: string; kind: string }[]>("/scan-targets"),
+  importScanResults: (text: string, format: "json" | "csv" | "xml") =>
+    request<{ run_id: string; hosts: number }>("/scan-results/import", {
+      method: "POST",
+      body: JSON.stringify({ text, format }),
+    }),
+  scanResults: (id: string) =>
+    request<{
+      run_id: string;
+      hosts: Record<
+        string,
+        {
+          name: string;
+          note?: string;
+          state: string;
+          manually_changed?: boolean;
+          flags?: { kind: string; evidence: string[]; confidence: number }[];
+        }
+      >;
+    }>(`/scan-results/${id}`),
+  overrideScanResult: (host: string, field: "name" | "note" | "state", value: string) =>
+    request<{ host: string; field: string; manually_changed: boolean }>("/scan-results/override", {
+      method: "POST",
+      body: JSON.stringify({ host, field, value }),
+    }),
+  downloadScanResults: (id: string, format: "json" | "csv") =>
+    download(`/scan-results/${id}/export?format=${format}`, `scan-results.${format}`),
   downloadNmapXml: (id: string) => download(`/scan-results/${id}/nmap.xml`, "sentinel-nmap.xml"),
-  defectdojoStatus: () => request<{connected: boolean; detail: string}>("/defectdojo/status"),
-  exportDefectdojo: (run_id: string, selected: {host: string; kind: string}[]) => request<{created: number; duplicates: number}>("/defectdojo/export", {method: "POST", body: JSON.stringify({run_id, selected})}),
+  defectdojoStatus: () => request<{ connected: boolean; detail: string }>("/defectdojo/status"),
+  exportDefectdojo: (run_id: string, selected: { host: string; kind: string }[]) =>
+    request<{ created: number; duplicates: number }>("/defectdojo/export", {
+      method: "POST",
+      body: JSON.stringify({ run_id, selected }),
+    }),
   triggerScan: () => request<Task>("/scans", { method: "POST" }),
   scanActions: (status: string) => request<ScanAction[]>(`/scan-actions?status=${status}`),
   approveAction: (id: string, reason: string) =>
@@ -1223,7 +1326,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
-  startDiscovery: (input: { text: string; name: string; settings: Partial<DiscoverySettings> }) =>
+  startDiscovery: (input: {
+    text: string;
+    name: string;
+    settings: Partial<DiscoverySettings>;
+    end_at?: string | null;
+  }) =>
     request<DiscoveryRun>("/discovery/runs", {
       method: "POST",
       body: JSON.stringify(input),
@@ -1231,9 +1339,16 @@ export const api = {
   discoveryRuns: () => request<DiscoveryRun[]>("/discovery/runs?limit=50"),
   discoveryRun: (id: string) =>
     request<DiscoveryRun & { batches: DiscoveryBatch[] }>(`/discovery/runs/${id}`),
+  resumeDiscovery: (id: string, endAt?: string | null) =>
+    request<DiscoveryRun>(`/discovery/runs/${id}/resume`, {
+      method: "POST",
+      body: JSON.stringify({ end_at: endAt ?? null }),
+    }),
   stopDiscovery: (id: string) =>
     request<DiscoveryRun>(`/discovery/runs/${id}/stop`, { method: "POST" }),
   discoveryHosts: (id: string) => request<DiscoveryHost[]>(`/discovery/runs/${id}/hosts`),
+  discoveryReport: (id: string, format: "html" | "json" | "csv") =>
+    download(`/discovery/runs/${id}/report?format=${format}`, `sentinel-raport.${format}`),
   exportDiscovery: (id: string, format: "json" | "csv" | "nmap") =>
     download(`/discovery/runs/${id}/export?format=${format}`, `sentinel.${format}`),
   compareRuns: (older: string, newer: string) =>
@@ -1277,6 +1392,13 @@ export const api = {
       `/discovery/signatures/${encodeURIComponent(id)}`,
       { method: "PUT", body: JSON.stringify({ yaml }) },
     ),
+  testSignature: (input: { yaml?: string; id?: string; run_id?: string }) =>
+    request<SignatureTestResult>("/discovery/signatures/test", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  inspectSignature: (id: string) =>
+    request<SignatureInspection>(`/discovery/signatures/${encodeURIComponent(id)}/inspect`),
   deleteSignature: (id: string) =>
     request<void>(`/discovery/signatures/${encodeURIComponent(id)}`, { method: "DELETE" }),
   dojoStatus: () => request<DojoStatus>("/discovery/defectdojo/status"),

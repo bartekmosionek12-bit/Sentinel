@@ -17,31 +17,50 @@ import { isDemoRecording } from "@shared/lib/demo";
 import { asPose, setSentekEnabled, useSentekEnabled } from "@shared/lib/sentek";
 import { cn } from "@shared/lib/utils";
 
-const DISCLAIMER = "Odpowiada z danych w systemie. Nie skanuje sieci i nie zmienia ustawień.";
+const DISCLAIMER =
+  "Techniczny asystent skanowania: odpowiada z danych w systemie i z wiedzy o skanach. Nie skanuje sieci i nie zmienia ustawień.";
 /** Szybkie akcje: zawsze pod ręką nad polem pytania. */
 const QUICK = [
   "Podsumuj krytyczne zagrożenia",
-  "Wskaż hosty Shadow IT",
-  "Sprawdź stan feedów i systemu",
-  "Zaproponuj bezpieczny skan L1",
   "Co się zmieniło od ostatniego skanu?",
   "Gdzie są panele administracyjne?",
+  "Jak ustawić skan sieci /16 w nocy?",
+  "Jakie flagi nmap uruchamia Sentinel?",
+  "Dlaczego host nie pojawia się w wynikach?",
 ];
 
-/** Linki w Markdownie z odpowiedzi ([etykieta](/ścieżka)) jako linki do widoków konsoli.
- *  Tylko ścieżki wewnętrzne (zaczynające się od „/”); reszta zostaje zwykłym tekstem. */
+/** Odpowiedź w prostym Markdownie: linki do widoków ([etykieta](/ścieżka), tylko ścieżki
+ *  wewnętrzne), **pogrubienie**, `kod` i blok ```kodu``` (np. przykładowa sygnatura YAML). */
 function RichLine({ text }: { text: string }) {
+  if (text.startsWith("```")) {
+    const code = text.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
+    return (
+      <pre className="overflow-x-auto rounded-sm border border-border bg-background p-2 font-mono text-xs">
+        {code}
+      </pre>
+    );
+  }
   const parts: ReactNode[] = [];
-  const pattern = /\[([^\]]+)\]\((\/[^)\s]*)\)/g;
+  const pattern = /\[([^\]]+)\]\((\/[^)\s]*)\)|\*\*([^*]+)\*\*|`([^`]+)`/g;
   let last = 0;
   for (const match of text.matchAll(pattern)) {
     const index = match.index ?? 0;
     if (index > last) parts.push(text.slice(last, index));
-    parts.push(
-      <Link key={index} className="font-medium text-primary underline" to={match[2] ?? "/"}>
-        {match[1]}
-      </Link>,
-    );
+    if (match[1] !== undefined) {
+      parts.push(
+        <Link key={index} className="font-medium text-primary underline" to={match[2] ?? "/"}>
+          {match[1]}
+        </Link>,
+      );
+    } else if (match[3] !== undefined) {
+      parts.push(<strong key={index}>{match[3]}</strong>);
+    } else {
+      parts.push(
+        <code key={index} className="rounded-sm bg-background px-1 font-mono text-xs">
+          {match[4]}
+        </code>,
+      );
+    }
     last = index + match[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -150,16 +169,16 @@ export function SentekAssistant() {
           <span className="sentek-float block">
             <Sentek
               pose="wave"
-              size={128}
+              size={168}
               className="shrink-0 origin-bottom drop-shadow-lg transition-transform duration-300 ease-out group-hover:scale-115 group-focus-visible:scale-115"
             />
           </span>
         </button>
         <div
           aria-hidden
-          className="pointer-events-none relative mr-1 mb-20 max-w-56 translate-x-3 scale-90 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 opacity-0 shadow-lg transition-all duration-300 ease-out peer-hover:translate-x-0 peer-hover:scale-100 peer-hover:opacity-100 peer-focus-visible:translate-x-0 peer-focus-visible:scale-100 peer-focus-visible:opacity-100"
+          className="pointer-events-none relative mr-1 mb-28 max-w-64 translate-x-3 scale-90 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 opacity-0 shadow-lg transition-all duration-300 ease-out peer-hover:translate-x-0 peer-hover:scale-100 peer-hover:opacity-100 peer-focus-visible:translate-x-0 peer-focus-visible:scale-100 peer-focus-visible:opacity-100"
         >
-          Cześć! Mogę Ci pomóc. Kliknij i zapytaj o zagrożenia, hosty albo stan systemu.
+          Cześć! Pytaj o skany: ustawienia, flagi nmap, porty, sygnatury, zmiany i wyniki.
           <span className="absolute -right-1.5 bottom-3 size-3 rotate-45 bg-white" />
         </div>
       </div>
@@ -167,12 +186,12 @@ export function SentekAssistant() {
 
   return (
     <section
-      className="fixed right-4 bottom-4 z-40 flex max-h-[min(640px,85vh)] w-[min(400px,calc(100vw-2rem))] flex-col rounded-sm border border-border bg-card"
+      className="fixed right-4 bottom-4 z-40 flex max-h-[min(780px,88vh)] w-[min(520px,calc(100vw-2rem))] flex-col rounded-sm border border-border bg-card"
       aria-label="Asystent Sentek"
       data-demo="sentek-panel"
     >
       <header className="flex items-center gap-3 border-b border-border p-3">
-        <Sentek pose={pose} size={96} className="shrink-0" />
+        <Sentek pose={pose} size={120} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold">Sentek</h2>
           <p className="text-xs text-muted-foreground">{DISCLAIMER}</p>
@@ -189,8 +208,10 @@ export function SentekAssistant() {
       <div className="flex-1 space-y-3 overflow-y-auto p-3" aria-live="polite">
         {messages.length === 0 && (
           <p className="text-sm">
-            Cześć! Pytaj o zagrożenia i katalog KEV, hosty i otwarte porty, stan skanów i
-            feedów albo terminy napraw. Szybkie akcje masz pod spodem.
+            Cześć! Odpowiadam na pytania techniczne: jak ustawić skan dużej sieci, co robią
+            flagi nmap, do czego służy port, dlaczego host nie odpowiada, jak napisać sygnaturę,
+            co się zmieniło między przebiegami i co jest najgroźniejsze. Szybkie akcje masz pod
+            spodem.
           </p>
         )}
         {messages.map((message) =>
@@ -243,7 +264,7 @@ export function SentekAssistant() {
         <Input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Zapytaj o stan bezpieczeństwa"
+          placeholder="Zapytaj o skan, port, nmap albo wyniki"
           aria-label="Pytanie do Sentka"
           maxLength={500}
           data-demo="sentek-input"

@@ -30,6 +30,7 @@ const ROUTES: [RegExp, string][] = [
   [/^\/api\/discovery\/defectdojo\/status/, "dojo_status"],
   [/^\/api\/discovery\/settings/, "discovery_config"],
   [/^\/api\/discovery\/signatures$/, "signatures"],
+  [/^\/api\/discovery\/signatures\/[^/]+\/inspect$/, "signature_inspect"],
   [/^\/api\/discovery\/schedules$/, "discovery_schedules"],
   [/^\/api\/discovery\/targets\/preview/, "discovery_preview"],
 ];
@@ -112,6 +113,7 @@ export async function stubApi(
       if (request.method() === "DELETE") return route.fulfill({ status: 204 });
       const definition = { id: "moja-aplikacja", kind: "technology", match: [] };
       if (url.pathname.endsWith("/check")) return route.fulfill({ json: { ok: true, definition } });
+      if (url.pathname.endsWith("/test")) return route.fulfill({ json: fixture("signature_test") });
       return route.fulfill({ json: { id: definition.id, definition } });
     }
     if (url.pathname.startsWith("/api/discovery/schedules") && request.method() !== "GET") {

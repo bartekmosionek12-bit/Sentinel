@@ -1,4 +1,6 @@
 /** Konsola zespołu IT: menu zależne od roli, role i użytkownicy, karta hosta (P1, #30). */
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import { stubApi } from "./stub";
@@ -127,9 +129,9 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
     page.getByRole("heading", { name: "Sygnatury detekcyjne" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: "wordpress-login" }),
+    page.getByRole("cell", { name: "wordpress-login", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("cell", { name: "intranet-demo" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "intranet-demo", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sprawdź" }).click();
   await expect(
     page.getByText("Sygnatura „moja-aplikacja” jest poprawna."),
@@ -139,6 +141,31 @@ test("własne sygnatury: sprawdzenie i zapis z konsoli, wbudowane tylko do odczy
   const put = sent.find((s) => s.method === "PUT");
   expect(put?.path).toBe("/api/discovery/signatures/moja-aplikacja");
   expect((put?.body as { yaml: string }).yaml).toContain("kind: technology");
+});
+
+test("test sygnatury na zapisanym przebiegu, bez ruchu w sieci", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/sygnatury");
+  await page.getByRole("button", { name: "Testuj wordpress-login" }).click();
+  const card = page.locator("[data-demo=signature-test]");
+  await expect(card).toContainText("Sprawdzono 12 usług WWW, trafienia: 1");
+  await expect(card).toContainText("10.20.4.17");
+  await expect(card).toContainText("/wp-login.php → 200");
+  await expect(card).toContainText("Sprawdzi je kolejny przebieg");
+  const post = sent.find((s) => s.path === "/api/discovery/signatures/test");
+  expect(post?.body).toEqual({ id: "wordpress-login" });
+});
+
+test("inspekcja sygnatury: reguły, historia trafień i dowody", async ({ page }) => {
+  await stubApi(page);
+  await page.goto("/admin/discovery/sygnatury");
+  await page.getByRole("button", { name: "Inspekcja wordpress-login" }).click();
+  const card = page.locator("[data-demo=signature-inspect]");
+  await expect(card).toContainText("GET /wp-login.php zwraca 200");
+  await expect(card).toContainText("dodatkowe GET przy skanie");
+  await expect(card).toContainText("1 z 12 usług");
+  await expect(card.locator("[data-demo=signature-history] a")).toHaveCount(2);
+  await expect(card).toContainText("10.20.4.17");
 });
 
 test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async ({ page }) => {
@@ -163,6 +190,53 @@ test("harmonogram discovery: okno czasowe, częstotliwość i wznowienie", async
     window_start: "01:00",
     window_end: "05:00",
   });
+});
+
+test("skan jednorazowy: start i koniec o zadanej godzinie", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.goto("/admin/discovery/harmonogram");
+  await page.getByLabel("jednorazowo: start i koniec o zadanej godzinie").check();
+  await expect(page.getByLabel("Częstotliwość")).toHaveCount(0);
+  await page.getByPlaceholder("np. Nocny skan kampusu").fill("Audyt sobota");
+  await page.getByLabel("Cele harmonogramu").fill("10.20.0.0/18");
+  await page.getByLabel("Start skanu").fill("2026-11-28T01:00");
+  await page.getByLabel("Koniec skanu").fill("2026-11-28T05:00");
+  await page.getByRole("button", { name: "Dodaj harmonogram" }).click();
+  await expect
+    .poll(() => {
+      const body = sent.find((s) => s.method === "POST")?.body as Record<string, string>;
+      return body && [body.name, Boolean(body.start_at), Boolean(body.end_at)];
+    })
+    .toEqual(["Audyt sobota", true, true]);
+});
+
+test("przebieg: raport HTML/JSON/CSV i panel wznowienia po końcu okna", async ({ page }) => {
+  const sent = await stubApi(page);
+  await page.route("**/api/discovery/runs/44444444-4444-4444-4444-444444444444", (route) =>
+    route.fulfill({
+      json: {
+        ...JSON.parse(
+          readFileSync(new URL("./fixtures/discovery_run.json", import.meta.url), "utf-8"),
+        ),
+        status: "paused",
+        deadline: "2026-11-28T05:00:00Z",
+        summary: { remaining_addresses: 8192 },
+        remaining: { networks: 2, hosts: 5 },
+        resumed_by: null,
+      },
+    }),
+  );
+  await page.route("**/api/discovery/runs/*/report?format=*", (route) =>
+    route.fulfill({ body: "<html></html>", contentType: "text/html" }),
+  );
+  await page.goto("/admin/discovery/44444444-4444-4444-4444-444444444444");
+  const paused = page.locator("[data-demo=run-paused]");
+  await expect(paused).toContainText("8192 adresów (2 zakresów, 5 hostów bez skanu usług)");
+  await expect(page.getByRole("button", { name: "Raport HTML" })).toBeVisible();
+  await page.getByRole("button", { name: "Wznów" }).click();
+  await expect
+    .poll(() => sent.find((s) => s.path.endsWith("/resume"))?.method)
+    .toBe("POST");
 });
 
 test("porównanie: wykres zmian w czasie dla zakończonych przebiegów", async ({ page }) => {
@@ -203,7 +277,7 @@ test("pulpit: wskaźniki na górze, bez zdublowanych kafelków; Sentek z szybkim
 
   const sentek = page.getByRole("button", { name: "Zapytaj Sentka" });
   await sentek.hover();
-  await expect(page.getByText(/Mogę Ci pomóc/)).toBeVisible();
+  await expect(page.getByText(/Pytaj o skany/)).toBeVisible();
   await sentek.click();
   await page
     .getByRole("button", { name: "Podsumuj krytyczne zagrożenia" })

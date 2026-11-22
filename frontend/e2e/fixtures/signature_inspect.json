@@ -1,0 +1,20 @@
+{
+  "id": "wordpress-login",
+  "name": "WordPress – panel logowania",
+  "kind": "panel",
+  "description": "Strona logowania WordPressa dostępna z sieci.",
+  "source": "builtin",
+  "updated_by": null,
+  "updated_at": null,
+  "definition": {"id": "wordpress-login", "kind": "panel", "match": [{"type": "path", "path": "/wp-login.php", "status": [200], "pattern": "wp-submit"}]},
+  "rules": [
+    {"type": "path", "text": "GET /wp-login.php zwraca 200, treść pasująca do „wp-submit”", "sends_request": true, "offline": true, "offline_note": "tylko kod odpowiedzi; treść sprawdza skan", "latest_run_hits": 1}
+  ],
+  "latest_run": {"id": "44444444-4444-4444-4444-444444444444", "name": "Demo", "created_at": "2026-11-21T22:00:00"},
+  "services_checked": 12,
+  "hosts": [{"ip": "10.20.4.17", "port": 80, "url": "http://10.20.4.17:80/", "title": "Blog demo", "evidence": ["/wp-login.php → 200"]}],
+  "history": [
+    {"run_id": "44444444-4444-4444-4444-444444444444", "name": "Demo", "created_at": "2026-11-21T22:00:00", "services": 1, "hosts": 1},
+    {"run_id": "33333333-3333-4333-8333-333333333333", "name": "Demo wcześniej", "created_at": "2026-11-20T22:00:00", "services": 0, "hosts": 0}
+  ]
+}
