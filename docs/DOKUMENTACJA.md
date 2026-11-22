@@ -640,7 +640,8 @@ minut.
 | Mailpit | <http://localhost:8025> | bez logowania |
 
 Konta demo (fikcyjne): `admin`, `editor`, `modifier`, `viewer` (cztery role z briefu) oraz
-`analityk` (editor) i `operator` (modifier) do pokazu delegacji. Lab mentorów: cel
+`analityk` (editor) i `operator` (modifier) do pokazu delegacji, a także `redaktor` (editor) i
+`obserwator` (viewer). Lab mentorów: cel
 `host.docker.internal` w trybie `--bez-demo`, instrukcja w [TESTOWANIE.md](TESTOWANIE.md),
 rozdział 3.
 
